@@ -1,17 +1,18 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   Loader2,
-  Plus,
   Type,
   Pencil,
   ArrowLeft,
   Send,
-  Trash2,
+  Calendar,
+  CheckSquare,
+  Save,
 } from "lucide-react";
 import { Worker, Viewer, Plugin } from "@react-pdf-viewer/core";
 import { defaultLayoutPlugin } from "@react-pdf-viewer/default-layout";
@@ -23,7 +24,7 @@ import "@react-pdf-viewer/default-layout/lib/styles/index.css";
 
 interface Field {
   id: string;
-  type: "signature" | "text";
+  type: "signature" | "text" | "date" | "checkbox";
   page: number;
   x: number;
   y: number;
@@ -37,15 +38,26 @@ export default function DocumentSetup() {
   const [doc, setDoc] = useState<any>(null);
   const [fields, setFields] = useState<Field[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedType, setSelectedType] = useState<"signature" | "text">(
-    "signature",
-  );
+  const [selectedType, setSelectedType] = useState<Field["type"]>("signature");
 
   const defaultLayoutPluginInstance = defaultLayoutPlugin();
 
   const handlePageClick = async (pageIndex: number, x: number, y: number) => {
-    const width = selectedType === "signature" ? 200 : 150;
-    const height = selectedType === "signature" ? 60 : 30;
+    let width = 200;
+    let height = 60;
+
+    if (selectedType === "text") {
+      width = 150;
+      height = 30;
+    }
+    if (selectedType === "date") {
+      width = 120;
+      height = 30;
+    }
+    if (selectedType === "checkbox") {
+      width = 30;
+      height = 30;
+    }
 
     const res = await fetch(`/api/documents/${id}`, {
       method: "POST",
@@ -63,6 +75,7 @@ export default function DocumentSetup() {
       ...fields,
       { id: fieldId, type: selectedType, page: pageIndex, x, y, width, height },
     ]);
+    toast.success(`${selectedType} field added`);
   };
 
   const updateField = async (fieldId: string, updates: Partial<Field>) => {
@@ -89,6 +102,18 @@ export default function DocumentSetup() {
       body: JSON.stringify({ fieldId }),
     });
     setFields(fields.filter((f) => f.id !== fieldId));
+    toast.error("Field removed");
+  };
+
+  const saveAsTemplate = async () => {
+    await fetch(`/api/documents/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        name: doc.name + " (Template)",
+        isTemplate: true,
+      }),
+    });
+    toast.success("Saved as template!");
   };
 
   const clickPlugin = (): any => {
@@ -126,7 +151,17 @@ export default function DocumentSetup() {
                   onClick={(e: any) => e.stopPropagation()}
                   className="border-2 border-primary bg-primary/10 flex items-center justify-center group z-20"
                 >
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-primary pointer-events-none select-none">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-primary pointer-events-none select-none flex items-center">
+                    {field.type === "signature" && (
+                      <Pencil className="w-3 h-3 mr-1" />
+                    )}
+                    {field.type === "text" && <Type className="w-3 h-3 mr-1" />}
+                    {field.type === "date" && (
+                      <Calendar className="w-3 h-3 mr-1" />
+                    )}
+                    {field.type === "checkbox" && (
+                      <CheckSquare className="w-3 h-3 mr-1" />
+                    )}
                     {field.type}
                   </span>
                   <button
@@ -163,7 +198,7 @@ export default function DocumentSetup() {
       method: "POST",
       body: JSON.stringify({
         documentId: id,
-        signerName: "Staff Member", // V1 default
+        signerName: "Staff Member",
       }),
     });
     const { sessionId } = await res.json();
@@ -210,10 +245,33 @@ export default function DocumentSetup() {
             >
               <Type className="mr-2 w-3 h-3" /> Text
             </Button>
+            <Button
+              variant={selectedType === "date" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setSelectedType("date")}
+              className="font-bold uppercase tracking-widest text-xs"
+            >
+              <Calendar className="mr-2 w-3 h-3" /> Date
+            </Button>
+            <Button
+              variant={selectedType === "checkbox" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setSelectedType("checkbox")}
+              className="font-bold uppercase tracking-widest text-xs"
+            >
+              <CheckSquare className="mr-2 w-3 h-3" /> Checkbox
+            </Button>
           </div>
           <Button
+            variant="outline"
+            onClick={saveAsTemplate}
+            className="font-bold uppercase tracking-widest text-xs h-9"
+          >
+            <Save className="mr-2 w-4 h-4" /> Save Template
+          </Button>
+          <Button
             onClick={createSession}
-            className="font-bold uppercase tracking-widest text-xs px-8"
+            className="font-bold uppercase tracking-widest text-xs px-8 h-9"
           >
             <Send className="mr-2 w-4 h-4" /> Share Link
           </Button>
@@ -226,7 +284,13 @@ export default function DocumentSetup() {
             Instructions
           </h2>
           <p className="text-sm font-medium">
-            Click to place, drag to move, and use handles to resize.
+            1. Select a tool above.
+            <br />
+            2. Click on PDF to place.
+            <br />
+            3. Drag to move.
+            <br />
+            4. Resize with handles.
           </p>
           <div className="space-y-4 pt-4 border-t border-border">
             <h2 className="font-bold uppercase tracking-widest text-xs text-muted-foreground">

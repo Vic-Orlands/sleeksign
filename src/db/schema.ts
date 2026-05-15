@@ -5,6 +5,9 @@ export const documents = sqliteTable("documents", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   fileUrl: text("file_url").notNull(),
+  isTemplate: integer("is_template", { mode: "boolean" })
+    .notNull()
+    .default(false),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(new Date()),
@@ -20,7 +23,9 @@ export const fields = sqliteTable("fields", {
   documentId: text("document_id")
     .notNull()
     .references(() => documents.id, { onDelete: "cascade" }),
-  type: text("type", { enum: ["signature", "text"] }).notNull(),
+  type: text("type", {
+    enum: ["signature", "text", "date", "checkbox"],
+  }).notNull(),
   page: integer("page").notNull(),
   x: integer("x").notNull(),
   y: integer("y").notNull(),
@@ -46,6 +51,8 @@ export const sessions = sqliteTable("sessions", {
     .default("pending"),
   signerName: text("signer_name"),
   signerEmail: text("signer_email"),
+  signerIp: text("signer_ip"),
+  signerUserAgent: text("signer_user_agent"),
   completedAt: integer("completed_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

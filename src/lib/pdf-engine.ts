@@ -4,6 +4,7 @@ import { documents, fields, signatures, sessions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
+import { format } from "date-fns";
 
 export async function finalizeDocument(sessionId: string) {
   const session = await db.query.sessions.findFirst({
@@ -41,10 +42,6 @@ export async function finalizeDocument(sessionId: string) {
     const page = pdfDoc.getPage(field.page);
     const { width, height } = page.getSize();
 
-    // The web UI (react-pdf-viewer) and pdf-lib have different coordinate origins
-    // pdf-lib: (0,0) is Bottom-Left
-    // web UI: (0,0) is Top-Left
-
     const x = field.x;
     const y = height - field.y - field.height;
 
@@ -76,7 +73,7 @@ export async function finalizeDocument(sessionId: string) {
           },
         );
       }
-    } else if (field.type === "text") {
+    } else if (field.type === "text" || field.type === "date") {
       const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       page.drawText(signature.value, {
         x: x + 5,
@@ -85,8 +82,105 @@ export async function finalizeDocument(sessionId: string) {
         font: helveticaFont,
         color: rgb(0, 0, 0),
       });
+    } else if (field.type === "checkbox") {
+      const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      if (signature.value === "true") {
+        page.drawText("X", {
+          x: x + field.width / 2 - 5,
+          y: y + field.height / 2 - 5,
+          size: 14,
+          font: helveticaFont,
+          color: rgb(0, 0, 0),
+        });
+      }
+      // Draw a box for the checkbox
+      page.drawRectangle({
+        x,
+        y,
+        width: field.width,
+        height: field.height,
+        borderColor: rgb(0, 0, 0),
+        borderWidth: 1,
+      });
     }
   }
+
+  // --- ADD CERTIFICATE OF COMPLETION ---
+  const certPage = pdfDoc.addPage([600, 800]);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+  certPage.drawRectangle({
+    x: 0,
+    y: 0,
+    width: 600,
+    height: 800,
+    color: rgb(0.98, 0.98, 0.98),
+  });
+
+  certPage.drawText("CERTIFICATE OF COMPLETION", {
+    x: 50,
+    y: 730,
+    size: 24,
+    font: fontBold,
+    color: rgb(0, 0, 0),
+  });
+
+  certPage.drawText("SleekSign Audit Trail", {
+    x: 50,
+    y: 705,
+    size: 10,
+    font: fontRegular,
+    color: rgb(0.4, 0.4, 0.4),
+  });
+
+  certPage.drawLine({
+    start: { x: 50, y: 690 },
+    end: { x: 550, y: 690 },
+    thickness: 1,
+    color: rgb(0.8, 0.8, 0.8),
+  });
+
+  const details = [
+    { label: "Document Name", value: docData.name },
+    { label: "Document ID", value: docData.id },
+    { label: "Session ID", value: session.id },
+    { label: "Signer Name", value: session.signerName || "Anonymous" },
+    { label: "Signer Email", value: session.signerEmail || "N/A" },
+    { label: "Signer IP", value: session.signerIp || "N/A" },
+    { label: "Completed At", value: format(new Date(), "PPpp") },
+    { label: "Status", value: "LEGALLY SIGNED" },
+  ];
+
+  let currentY = 650;
+  details.forEach((item) => {
+    certPage.drawText(item.label, {
+      x: 50,
+      y: currentY,
+      size: 10,
+      font: fontBold,
+    });
+    certPage.drawText(item.value, {
+      x: 180,
+      y: currentY,
+      size: 10,
+      font: fontRegular,
+    });
+    currentY -= 25;
+  });
+
+  certPage.drawText(
+    "This document was electronically signed via SleekSign. The signatures and metadata above provide a secure and verifiable audit trail of the agreement.",
+    {
+      x: 50,
+      y: currentY - 50,
+      size: 9,
+      font: fontRegular,
+      color: rgb(0.3, 0.3, 0.3),
+      maxWidth: 500,
+      lineHeight: 14,
+    },
+  );
 
   const finalizedPdfBytes = await pdfDoc.save();
   const finalizedFileName = `finalized_${session.id}.pdf`;
