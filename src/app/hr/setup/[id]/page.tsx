@@ -1,13 +1,22 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Loader2, Type, Pencil, ArrowLeft, Send } from "lucide-react";
-import { Worker, Viewer, RenderPageLayerProps } from "@react-pdf-viewer/core";
+import {
+  Loader2,
+  Plus,
+  Type,
+  Pencil,
+  ArrowLeft,
+  Send,
+  Trash2,
+} from "lucide-react";
+import { Worker, Viewer, Plugin } from "@react-pdf-viewer/core";
 import { defaultLayoutPlugin } from "@react-pdf-viewer/default-layout";
 import { Rnd } from "react-rnd";
+import { toast } from "sonner";
 
 import "@react-pdf-viewer/core/lib/styles/index.css";
 import "@react-pdf-viewer/default-layout/lib/styles/index.css";
@@ -59,7 +68,6 @@ export default function DocumentSetup() {
   const updateField = async (fieldId: string, updates: Partial<Field>) => {
     setFields(fields.map((f) => (f.id === fieldId ? { ...f, ...updates } : f)));
 
-    // Only send coordinate updates to API
     const field = fields.find((f) => f.id === fieldId);
     if (!field) return;
 
@@ -85,12 +93,12 @@ export default function DocumentSetup() {
 
   const clickPlugin = (): any => {
     return {
-      renderPageLayer: (props: RenderPageLayerProps) => {
+      renderPageLayer: (props: any) => {
         return (
           <div
             className="absolute inset-0 z-10 cursor-crosshair"
             onClick={(e) => {
-              if (e.target !== e.currentTarget) return; // Only trigger if clicking background
+              if (e.target !== e.currentTarget) return;
               const rect = e.currentTarget.getBoundingClientRect();
               const x = e.clientX - rect.left;
               const y = e.clientY - rect.top;
@@ -115,14 +123,14 @@ export default function DocumentSetup() {
                     });
                   }}
                   bounds="parent"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e: any) => e.stopPropagation()}
                   className="border-2 border-primary bg-primary/10 flex items-center justify-center group z-20"
                 >
                   <span className="text-[10px] font-bold uppercase tracking-widest text-primary pointer-events-none select-none">
                     {field.type}
                   </span>
                   <button
-                    onClick={(e) => {
+                    onClick={(e: any) => {
                       e.stopPropagation();
                       deleteField(field.id);
                     }}
@@ -153,7 +161,10 @@ export default function DocumentSetup() {
   const createSession = async () => {
     const res = await fetch("/api/sessions", {
       method: "POST",
-      body: JSON.stringify({ documentId: id }),
+      body: JSON.stringify({
+        documentId: id,
+        signerName: "Staff Member", // V1 default
+      }),
     });
     const { sessionId } = await res.json();
     router.push(`/hr/share/${sessionId}`);
@@ -172,10 +183,10 @@ export default function DocumentSetup() {
         <div className="flex items-center space-x-6">
           <Button
             variant="ghost"
-            onClick={() => router.back()}
+            onClick={() => router.push("/hr")}
             className="font-bold uppercase tracking-widest text-xs"
           >
-            <ArrowLeft className="mr-2 w-4 h-4" /> Back
+            <ArrowLeft className="mr-2 w-4 h-4" /> Dashboard
           </Button>
           <h1 className="text-2xl font-black tracking-tighter uppercase italic">
             Setup: {doc.name}
@@ -204,7 +215,7 @@ export default function DocumentSetup() {
             onClick={createSession}
             className="font-bold uppercase tracking-widest text-xs px-8"
           >
-            <Send className="mr-2 w-4 h-4" /> Finalize & Share
+            <Send className="mr-2 w-4 h-4" /> Share Link
           </Button>
         </div>
       </header>
