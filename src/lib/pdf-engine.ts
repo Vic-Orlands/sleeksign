@@ -35,7 +35,6 @@ export async function finalizeDocument(sessionId: string) {
     where: eq(signatures.sessionId, sessionId),
   });
 
-  // Load the sleek font for the PDF
   const fontPath = path.join(process.cwd(), "public/fonts/signature.ttf");
   const fontBytes = await fs.readFile(fontPath);
   const sleekFont = await pdfDoc.embedFont(fontBytes);
@@ -45,10 +44,18 @@ export async function finalizeDocument(sessionId: string) {
     if (!signature) continue;
 
     const page = pdfDoc.getPage(field.page);
-    const { height } = page.getSize();
+    const { width: pageWidth, height: pageHeight } = page.getSize();
 
-    const x = field.x;
-    const y = height - field.y - field.height;
+    // Coordinates are stored as percentages (0-100)
+    // Percentage to Points conversion: (percent / 100) * totalPoints
+    const x = (field.x / 100) * pageWidth;
+    const y =
+      pageHeight -
+      (field.y / 100) * pageHeight -
+      (field.height / 100) * pageHeight;
+
+    const width = (field.width / 100) * pageWidth;
+    const height = (field.height / 100) * pageHeight;
 
     if (field.type === "signature") {
       if (signature.value.startsWith("data:image")) {
@@ -60,15 +67,14 @@ export async function finalizeDocument(sessionId: string) {
         page.drawImage(image, {
           x,
           y,
-          width: field.width,
-          height: field.height,
+          width,
+          height,
         });
       } else {
-        // Use the SLEEK font for typed signatures!
         page.drawText(signature.value, {
-          x: x + 10,
-          y: y + 10,
-          size: 32,
+          x: x + 5,
+          y: y + height / 4,
+          size: Math.min(height, 32),
           font: sleekFont,
           color: rgb(0, 0, 0),
         });
@@ -76,9 +82,9 @@ export async function finalizeDocument(sessionId: string) {
     } else if (field.type === "text" || field.type === "date") {
       const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       page.drawText(signature.value, {
-        x: x + 5,
-        y: y + 10,
-        size: 11,
+        x: x + 2,
+        y: y + height / 3,
+        size: Math.min(height * 0.8, 11),
         font: helveticaFont,
         color: rgb(0, 0, 0),
       });
@@ -86,9 +92,9 @@ export async function finalizeDocument(sessionId: string) {
       const helveticaFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       if (signature.value === "true") {
         page.drawText("X", {
-          x: x + field.width / 2 - 5,
-          y: y + field.height / 2 - 5,
-          size: 14,
+          x: x + width / 2 - 4,
+          y: y + height / 2 - 4,
+          size: Math.min(width, height) * 0.7,
           font: helveticaFont,
           color: rgb(0, 0, 0),
         });
@@ -96,8 +102,8 @@ export async function finalizeDocument(sessionId: string) {
       page.drawRectangle({
         x,
         y,
-        width: field.width,
-        height: field.height,
+        width,
+        height,
         borderColor: rgb(0, 0, 0),
         borderWidth: 1.5,
       });
@@ -193,6 +199,7 @@ export async function finalizeDocument(sessionId: string) {
   await fs.mkdir(path.dirname(finalizedPath), { recursive: true });
   await fs.writeFile(finalizedPath, finalizedPdfBytes);
 
+  // CRITICAL: Update status to completed!
   await db
     .update(sessions)
     .set({ status: "completed", completedAt: new Date() })

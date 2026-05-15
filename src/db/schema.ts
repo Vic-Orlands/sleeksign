@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 
 export const documents = sqliteTable("documents", {
@@ -27,10 +27,11 @@ export const fields = sqliteTable("fields", {
     enum: ["signature", "text", "date", "checkbox"],
   }).notNull(),
   page: integer("page").notNull(),
-  x: integer("x").notNull(),
-  y: integer("y").notNull(),
-  width: integer("width").notNull().default(200),
-  height: integer("height").notNull().default(50),
+  // Storing as percentages (0-100) for responsive scaling
+  x: real("x").notNull(),
+  y: real("y").notNull(),
+  width: real("width").notNull().default(20),
+  height: real("height").notNull().default(5),
 });
 
 export const fieldsRelations = relations(fields, ({ one, many }) => ({

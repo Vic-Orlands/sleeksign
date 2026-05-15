@@ -12,6 +12,7 @@ import {
   Calendar,
   CheckSquare,
   ChevronDown,
+  AlertCircle,
 } from "lucide-react";
 import { Worker, Viewer } from "@react-pdf-viewer/core";
 import { SignatureMaker } from "@/components/signature/SignatureMaker";
@@ -26,12 +27,14 @@ export default function SignerPortal() {
   const [session, setSession] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const [selectedField, setSelectedField] = useState<string | null>(null);
+  const [selectedField, setSelectedField] = useState<any>(null);
   const [signatures, setSignatures] = useState<Record<string, string>>({});
   const [isMakerOpen, setIsMakerOpen] = useState(false);
   const [finalPdfUrl, setFinalPdfUrl] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
+    setIsLoading(true);
     fetch(`/api/sessions?sessionId=${id}`)
       .then((res) => res.json())
       .then((data) => {
@@ -46,7 +49,7 @@ export default function SignerPortal() {
       })
       .catch((err) => {
         console.error("Failed to load session:", err);
-        toast.error("Error loading signing session");
+        setLoadError(err.message || "Failed to load document");
         setIsLoading(false);
       });
   }, [id]);
@@ -66,7 +69,7 @@ export default function SignerPortal() {
       return;
     }
 
-    setSelectedField(field.id);
+    setSelectedField(field);
     setIsMakerOpen(true);
   };
 
@@ -85,7 +88,7 @@ export default function SignerPortal() {
 
   const handleSignatureConfirm = async (value: string) => {
     if (!selectedField) return;
-    await updateSignature(selectedField, value);
+    await updateSignature(selectedField.id, value);
     setIsMakerOpen(false);
   };
 
@@ -123,6 +126,74 @@ export default function SignerPortal() {
     }
   };
 
+  const FieldOverlay = ({
+    field,
+    pageProps,
+  }: {
+    field: any;
+    pageProps: any;
+  }) => {
+    const value = signatures[field.id];
+    const isCompleted = value && value !== "false";
+
+    // Scaling percentage to current rendered points
+    const left = (field.x / 100) * pageProps.canvasLayer.width;
+    const top = (field.y / 100) * pageProps.canvasLayer.height;
+    const width = (field.width / 100) * pageProps.canvasLayer.width;
+    const height = (field.height / 100) * pageProps.canvasLayer.height;
+
+    return (
+      <div
+        key={field.id}
+        data-field-id={field.id}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleFieldClick(field);
+        }}
+        style={{
+          position: "absolute",
+          left: `${left}px`,
+          top: `${top}px`,
+          width: `${width}px`,
+          height: `${height}px`,
+          pointerEvents: "auto",
+        }}
+        className={`border-2 cursor-pointer flex items-center justify-center transition-all shadow-md group ${
+          isCompleted
+            ? "border-green-600 bg-green-500/10"
+            : "border-primary border-dashed bg-primary/5 hover:bg-primary/20 animate-pulse"
+        }`}
+      >
+        {isCompleted ? (
+          field.type === "signature" && value.startsWith("data:image") ? (
+            <img
+              src={value}
+              alt="Signature"
+              className="max-h-full pointer-events-none object-contain p-1"
+            />
+          ) : (
+            <span className="font-bold italic text-primary pointer-events-none truncate px-2 text-center text-sm">
+              {field.type === "checkbox" ? "✓" : value}
+            </span>
+          )
+        ) : (
+          <span className="text-[9px] font-black uppercase tracking-widest text-primary pointer-events-none flex flex-col items-center">
+            {field.type === "signature" && (
+              <PencilIcon className="w-3 h-3 mb-1" />
+            )}
+            {field.type === "text" && <TypeIcon className="w-3 h-3 mb-1" />}
+            {field.type === "date" && <Calendar className="w-3 h-3 mb-1" />}
+            {field.type === "checkbox" && (
+              <CheckSquare className="w-3 h-3 mb-1" />
+            )}
+            {field.type}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   const clickPluginInstance = useMemo(() => {
     return {
       renderPageLayer: (props: any) => {
@@ -130,66 +201,9 @@ export default function SignerPortal() {
           <div className="absolute inset-0 z-[200] pointer-events-none">
             {session?.document?.fields
               ?.filter((f: any) => f.page === props.pageIndex)
-              .map((field: any) => {
-                const value = signatures[field.id];
-                const isCompleted = value && value !== "false";
-
-                return (
-                  <div
-                    key={field.id}
-                    data-field-id={field.id}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleFieldClick(field);
-                    }}
-                    style={{
-                      position: "absolute",
-                      left: `${field.x}px`,
-                      top: `${field.y}px`,
-                      width: `${field.width}px`,
-                      height: `${field.height}px`,
-                      pointerEvents: "auto",
-                    }}
-                    className={`border-2 cursor-pointer flex items-center justify-center transition-all shadow-md group ${
-                      isCompleted
-                        ? "border-green-600 bg-green-500/10"
-                        : "border-primary border-dashed bg-primary/5 hover:bg-primary/20 animate-pulse"
-                    }`}
-                  >
-                    {isCompleted ? (
-                      field.type === "signature" &&
-                      value.startsWith("data:image") ? (
-                        <img
-                          src={value}
-                          alt="Signature"
-                          className="max-h-full pointer-events-none object-contain p-1"
-                        />
-                      ) : (
-                        <span className="font-bold italic text-primary pointer-events-none truncate px-2 text-center text-sm">
-                          {field.type === "checkbox" ? "✓" : value}
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-[9px] font-black uppercase tracking-widest text-primary pointer-events-none flex flex-col items-center">
-                        {field.type === "signature" && (
-                          <PencilIcon className="w-3 h-3 mb-1" />
-                        )}
-                        {field.type === "text" && (
-                          <TypeIcon className="w-3 h-3 mb-1" />
-                        )}
-                        {field.type === "date" && (
-                          <Calendar className="w-3 h-3 mb-1" />
-                        )}
-                        {field.type === "checkbox" && (
-                          <CheckSquare className="w-3 h-3 mb-1" />
-                        )}
-                        {field.type}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
+              .map((field: any) => (
+                <FieldOverlay key={field.id} field={field} pageProps={props} />
+              ))}
           </div>
         );
       },
@@ -203,12 +217,28 @@ export default function SignerPortal() {
       </div>
     );
 
-  if (!session)
+  if (loadError || !session) {
     return (
-      <div className="h-screen flex items-center justify-center">
-        Session not found
+      <div className="h-screen flex flex-col items-center justify-center bg-muted/10 p-8 space-y-6">
+        <AlertCircle className="w-16 h-16 text-destructive" />
+        <div className="text-center space-y-2">
+          <h2 className="text-2xl font-black uppercase tracking-tighter italic">
+            Load Error
+          </h2>
+          <p className="text-muted-foreground font-mono text-xs uppercase">
+            {loadError || "Session not found"}
+          </p>
+        </div>
+        <Button
+          onClick={() => window.location.reload()}
+          variant="outline"
+          className="border-2 font-bold uppercase tracking-widest text-[10px]"
+        >
+          Retry Connection
+        </Button>
       </div>
     );
+  }
 
   if (session.status === "completed" && finalPdfUrl) {
     return (
@@ -236,7 +266,7 @@ export default function SignerPortal() {
     );
   }
 
-  const allSigned =
+  const allFieldsSigned =
     session.document?.fields?.every(
       (f: any) => signatures[f.id] || f.type === "checkbox",
     ) || false;
@@ -245,8 +275,8 @@ export default function SignerPortal() {
   ).length;
 
   return (
-    <div className="min-h-screen bg-muted/20 flex flex-col">
-      <header className="h-20 bg-background border-b-4 border-primary px-8 flex items-center justify-between sticky top-0 z-[300] shadow-md">
+    <div className="min-h-screen bg-muted/20 flex flex-col h-screen overflow-hidden">
+      <header className="h-20 bg-background border-b-4 border-primary px-8 flex items-center justify-between shadow-md z-[300] shrink-0">
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
             <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none">
@@ -265,38 +295,47 @@ export default function SignerPortal() {
         </div>
 
         <div className="flex items-center space-x-4">
-          {!allSigned && (
+          {!allFieldsSigned && (
             <Button
               variant="outline"
               onClick={scrollToNextField}
-              className="font-bold uppercase tracking-widest text-[10px] h-10 border-2 border-primary hover:bg-primary hover:text-primary-foreground transition-all"
+              className="font-bold uppercase tracking-widest text-[10px] h-10 border-2 border-primary hover:bg-primary hover:text-primary-foreground transition-all hidden md:flex"
             >
               Next Field <ChevronDown className="ml-2 w-4 h-4" />
             </Button>
           )}
           <Button
-            disabled={!allSigned || isFinalizing}
+            disabled={!allFieldsSigned || isFinalizing}
             onClick={finalize}
             className="font-black uppercase tracking-widest text-xs px-10 h-12 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all bg-primary text-primary-foreground disabled:opacity-30 disabled:shadow-none"
           >
             {isFinalizing ? <Loader2 className="animate-spin mr-2" /> : null}
-            {allSigned
+            {allFieldsSigned
               ? "Complete & Finalize"
               : `${signedCount}/${session.document?.fields?.length || 0} Signed`}
           </Button>
         </div>
       </header>
 
-      <main className="flex-1 p-4 md:p-8 flex justify-center overflow-auto bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px]">
-        <div className="relative mb-20">
-          <Card className="w-full max-w-[900px] shadow-[24px_24px_0px_0px_rgba(0,0,0,0.05)] border-none overflow-hidden">
-            <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
-              <Viewer
-                fileUrl={session.document?.fileUrl}
-                plugins={[clickPluginInstance]}
-              />
-            </Worker>
-          </Card>
+      <main className="flex-1 overflow-auto bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px] p-4 md:p-12 flex justify-center">
+        <div className="w-[800px]">
+          {session.document?.fileUrl ? (
+            <Card className="shadow-[24px_24px_0px_0px_rgba(0,0,0,0.05)] border-none overflow-hidden min-h-[800px] bg-white relative">
+              <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
+                <Viewer
+                  fileUrl={session.document.fileUrl}
+                  plugins={[clickPluginInstance]}
+                />
+              </Worker>
+            </Card>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full p-20 border-4 border-dashed border-border bg-background/50">
+              <AlertCircle className="w-12 h-12 text-muted-foreground mb-4" />
+              <p className="font-mono uppercase tracking-widest text-xs text-muted-foreground">
+                Document path missing or inaccessible
+              </p>
+            </div>
+          )}
         </div>
       </main>
 
@@ -304,6 +343,8 @@ export default function SignerPortal() {
         isOpen={isMakerOpen}
         onClose={() => setIsMakerOpen(false)}
         onConfirm={handleSignatureConfirm}
+        type={selectedField?.type === "text" ? "text" : "signature"}
+        defaultValue={signatures[selectedField?.id] || ""}
       />
     </div>
   );
