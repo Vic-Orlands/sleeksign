@@ -35,12 +35,17 @@ export async function finalizeDocument(sessionId: string) {
     where: eq(signatures.sessionId, sessionId),
   });
 
+  // Load the sleek font for the PDF
+  const fontPath = path.join(process.cwd(), "public/fonts/signature.ttf");
+  const fontBytes = await fs.readFile(fontPath);
+  const sleekFont = await pdfDoc.embedFont(fontBytes);
+
   for (const field of docFields) {
     const signature = sessionSignatures.find((s) => s.fieldId === field.id);
     if (!signature) continue;
 
     const page = pdfDoc.getPage(field.page);
-    const { width, height } = page.getSize();
+    const { height } = page.getSize();
 
     const x = field.x;
     const y = height - field.y - field.height;
@@ -59,26 +64,21 @@ export async function finalizeDocument(sessionId: string) {
           height: field.height,
         });
       } else {
-        const helveticaFont = await pdfDoc.embedFont(
-          StandardFonts.HelveticaBold,
-        );
-        page.drawText(
-          signature.value.length > 20 ? "Signed" : signature.value,
-          {
-            x: x + 5,
-            y: y + 15,
-            size: 20,
-            font: helveticaFont,
-            color: rgb(0, 0, 0),
-          },
-        );
+        // Use the SLEEK font for typed signatures!
+        page.drawText(signature.value, {
+          x: x + 10,
+          y: y + 10,
+          size: 32,
+          font: sleekFont,
+          color: rgb(0, 0, 0),
+        });
       }
     } else if (field.type === "text" || field.type === "date") {
       const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
       page.drawText(signature.value, {
         x: x + 5,
-        y: y + 15,
-        size: 12,
+        y: y + 10,
+        size: 11,
         font: helveticaFont,
         color: rgb(0, 0, 0),
       });
@@ -93,14 +93,13 @@ export async function finalizeDocument(sessionId: string) {
           color: rgb(0, 0, 0),
         });
       }
-      // Draw a box for the checkbox
       page.drawRectangle({
         x,
         y,
         width: field.width,
         height: field.height,
         borderColor: rgb(0, 0, 0),
-        borderWidth: 1,
+        borderWidth: 1.5,
       });
     }
   }

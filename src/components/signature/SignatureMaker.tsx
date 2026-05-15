@@ -183,25 +183,32 @@ export function SignatureMaker({
             </TabsContent>
 
             <TabsContent value="draw" className="mt-0">
-              <div className="border-4 border-primary bg-white overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+              <div className="border-4 border-primary bg-white overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative">
                 <SignatureCanvas
                   ref={sigCanvas}
                   penColor="black"
+                  velocityFilterWeight={0.7}
+                  minWidth={1.5}
+                  maxWidth={4}
                   canvasProps={{
-                    className: "w-full h-[250px] cursor-crosshair",
+                    className: "w-full h-[300px] cursor-crosshair touch-none",
                   }}
                 />
               </div>
-              <Button
-                variant="link"
-                size="sm"
-                onClick={() => sigCanvas.current?.clear()}
-                className="mt-4 p-0 text-[10px] uppercase tracking-widest font-black"
-              >
-                Clear Canvas
-              </Button>
+              <div className="flex justify-between items-center mt-4">
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => sigCanvas.current?.clear()}
+                  className="p-0 text-[10px] uppercase tracking-widest font-black"
+                >
+                  Clear Canvas
+                </Button>
+                <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest">
+                  Pressure Sensitive Active
+                </p>
+              </div>
             </TabsContent>
-
             <TabsContent value="upload" className="mt-0 text-center space-y-4">
               <div
                 onClick={() => fileInputRef.current?.click()}
