@@ -214,6 +214,19 @@ export default function HRDashboard() {
 
                         <div className="flex items-center space-x-2">
                           <Button
+                            variant="outline"
+                            size="sm"
+                            className="font-black uppercase text-[10px] h-8 border-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-all"
+                            onClick={() => {
+                              const url = `${window.location.origin}/sign/p/${doc.id}`;
+                              navigator.clipboard.writeText(url);
+                              toast.success("Public Link copied to clipboard!");
+                            }}
+                          >
+                            <Copy className="w-3 h-3 mr-1" /> Public Link
+                          </Button>
+
+                          <Button
                             variant="ghost"
                             size="sm"
                             className="font-black uppercase text-[10px] hover:bg-primary hover:text-primary-foreground transition-all h-8"
