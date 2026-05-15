@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import {
   CheckSquare,
   Save,
 } from "lucide-react";
-import { Worker, Viewer, Plugin } from "@react-pdf-viewer/core";
+import { Worker, Viewer } from "@react-pdf-viewer/core";
 import { defaultLayoutPlugin } from "@react-pdf-viewer/default-layout";
 import { Rnd } from "react-rnd";
 import { toast } from "sonner";
@@ -79,19 +79,22 @@ export default function DocumentSetup() {
   };
 
   const updateField = async (fieldId: string, updates: Partial<Field>) => {
-    setFields(fields.map((f) => (f.id === fieldId ? { ...f, ...updates } : f)));
+    const updatedFields = fields.map((f) =>
+      f.id === fieldId ? { ...f, ...updates } : f,
+    );
+    setFields(updatedFields);
 
-    const field = fields.find((f) => f.id === fieldId);
+    const field = updatedFields.find((f) => f.id === fieldId);
     if (!field) return;
 
     await fetch(`/api/documents/${id}`, {
       method: "PATCH",
       body: JSON.stringify({
         fieldId,
-        x: updates.x ?? field.x,
-        y: updates.y ?? field.y,
-        width: updates.width ?? field.width,
-        height: updates.height ?? field.height,
+        x: field.x,
+        y: field.y,
+        width: field.width,
+        height: field.height,
       }),
     });
   };
@@ -116,12 +119,12 @@ export default function DocumentSetup() {
     toast.success("Saved as template!");
   };
 
-  const clickPlugin = (): any => {
+  const clickPluginInstance = useMemo(() => {
     return {
       renderPageLayer: (props: any) => {
         return (
           <div
-            className="absolute inset-0 z-10 cursor-crosshair"
+            className="absolute inset-0 z-[100] cursor-crosshair"
             onClick={(e) => {
               if (e.target !== e.currentTarget) return;
               const rect = e.currentTarget.getBoundingClientRect();
@@ -152,16 +155,6 @@ export default function DocumentSetup() {
                   className="border-2 border-primary bg-primary/10 flex items-center justify-center group z-20"
                 >
                   <span className="text-[10px] font-bold uppercase tracking-widest text-primary pointer-events-none select-none flex items-center">
-                    {field.type === "signature" && (
-                      <Pencil className="w-3 h-3 mr-1" />
-                    )}
-                    {field.type === "text" && <Type className="w-3 h-3 mr-1" />}
-                    {field.type === "date" && (
-                      <Calendar className="w-3 h-3 mr-1" />
-                    )}
-                    {field.type === "checkbox" && (
-                      <CheckSquare className="w-3 h-3 mr-1" />
-                    )}
                     {field.type}
                   </span>
                   <button
@@ -179,9 +172,7 @@ export default function DocumentSetup() {
         );
       },
     };
-  };
-
-  const clickPluginInstance = clickPlugin();
+  }, [fields, selectedType]);
 
   useEffect(() => {
     fetch(`/api/documents/${id}`)
@@ -214,7 +205,7 @@ export default function DocumentSetup() {
 
   return (
     <div className="h-screen flex flex-col bg-muted/20">
-      <header className="h-20 bg-background border-b border-border px-8 flex items-center justify-between">
+      <header className="h-20 bg-background border-b border-border px-8 flex items-center justify-between shadow-sm sticky top-0 z-50">
         <div className="flex items-center space-x-6">
           <Button
             variant="ghost"
@@ -228,52 +219,52 @@ export default function DocumentSetup() {
           </h1>
         </div>
         <div className="flex items-center space-x-4">
-          <div className="bg-muted p-1 flex">
+          <div className="bg-muted p-1 flex shadow-inner">
             <Button
               variant={selectedType === "signature" ? "default" : "ghost"}
               size="sm"
               onClick={() => setSelectedType("signature")}
-              className="font-bold uppercase tracking-widest text-xs"
+              className="font-bold uppercase tracking-widest text-[10px] h-8"
             >
-              <Pencil className="mr-2 w-3 h-3" /> Signature
+              Signature
             </Button>
             <Button
               variant={selectedType === "text" ? "default" : "ghost"}
               size="sm"
               onClick={() => setSelectedType("text")}
-              className="font-bold uppercase tracking-widest text-xs"
+              className="font-bold uppercase tracking-widest text-[10px] h-8"
             >
-              <Type className="mr-2 w-3 h-3" /> Text
+              Text
             </Button>
             <Button
               variant={selectedType === "date" ? "default" : "ghost"}
               size="sm"
               onClick={() => setSelectedType("date")}
-              className="font-bold uppercase tracking-widest text-xs"
+              className="font-bold uppercase tracking-widest text-[10px] h-8"
             >
-              <Calendar className="mr-2 w-3 h-3" /> Date
+              Date
             </Button>
             <Button
               variant={selectedType === "checkbox" ? "default" : "ghost"}
               size="sm"
               onClick={() => setSelectedType("checkbox")}
-              className="font-bold uppercase tracking-widest text-xs"
+              className="font-bold uppercase tracking-widest text-[10px] h-8"
             >
-              <CheckSquare className="mr-2 w-3 h-3" /> Checkbox
+              Checkbox
             </Button>
           </div>
           <Button
             variant="outline"
             onClick={saveAsTemplate}
-            className="font-bold uppercase tracking-widest text-xs h-9"
+            className="font-bold uppercase tracking-widest text-[10px] h-8 border-2"
           >
-            <Save className="mr-2 w-4 h-4" /> Save Template
+            Save Template
           </Button>
           <Button
             onClick={createSession}
-            className="font-bold uppercase tracking-widest text-xs px-8 h-9"
+            className="font-bold uppercase tracking-widest text-[10px] px-8 h-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all"
           >
-            <Send className="mr-2 w-4 h-4" /> Share Link
+            Generate Link
           </Button>
         </div>
       </header>
@@ -283,32 +274,43 @@ export default function DocumentSetup() {
           <h2 className="font-bold uppercase tracking-widest text-xs text-muted-foreground">
             Instructions
           </h2>
-          <p className="text-sm font-medium">
-            1. Select a tool above.
-            <br />
-            2. Click on PDF to place.
-            <br />
-            3. Drag to move.
-            <br />
-            4. Resize with handles.
-          </p>
+          <div className="space-y-2 text-sm font-medium">
+            <p className="flex items-center">
+              <span className="w-4 h-4 bg-muted flex items-center justify-center text-[10px] mr-2">
+                1
+              </span>{" "}
+              Select a tool above
+            </p>
+            <p className="flex items-center">
+              <span className="w-4 h-4 bg-muted flex items-center justify-center text-[10px] mr-2">
+                2
+              </span>{" "}
+              Click on PDF to place
+            </p>
+            <p className="flex items-center">
+              <span className="w-4 h-4 bg-muted flex items-center justify-center text-[10px] mr-2">
+                3
+              </span>{" "}
+              Drag/Resize boxes
+            </p>
+          </div>
           <div className="space-y-4 pt-4 border-t border-border">
             <h2 className="font-bold uppercase tracking-widest text-xs text-muted-foreground">
-              Placed Fields ({fields.length})
+              Fields ({fields.length})
             </h2>
-            <div className="space-y-2 overflow-auto max-h-[400px]">
+            <div className="space-y-2 overflow-auto max-h-[400px] pr-2">
               {fields.map((f, i) => (
                 <div
                   key={f.id}
-                  className="p-3 bg-muted/30 border border-border flex items-center justify-between"
+                  className="p-3 bg-muted/30 border border-border flex items-center justify-between group hover:bg-muted transition-colors"
                 >
-                  <span className="text-xs font-bold uppercase tracking-tight">
+                  <span className="text-[10px] font-black uppercase tracking-tight">
                     #{i + 1} {f.type} (P{f.page + 1})
                   </span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 w-6 p-0 text-destructive"
+                    className="h-6 w-6 p-0 text-destructive opacity-0 group-hover:opacity-100"
                     onClick={() => deleteField(f.id)}
                   >
                     ×
@@ -320,7 +322,7 @@ export default function DocumentSetup() {
         </aside>
 
         <section className="flex-1 bg-muted/50 p-8 overflow-auto flex justify-center">
-          <Card className="w-[850px] shadow-2xl border-none relative">
+          <Card className="w-[850px] shadow-2xl border-none relative overflow-hidden">
             <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
               <Viewer
                 fileUrl={doc.fileUrl}
