@@ -136,11 +136,14 @@ export default function SignerPortal() {
     const value = signatures[field.id];
     const isCompleted = value && value !== "false";
 
-    // Scaling percentage to current rendered points
-    const left = (field.x / 100) * pageProps.canvasLayer.width;
-    const top = (field.y / 100) * pageProps.canvasLayer.height;
-    const width = (field.width / 100) * pageProps.canvasLayer.width;
-    const height = (field.height / 100) * pageProps.canvasLayer.height;
+    // Scale percentage to current rendered page dimensions
+    const pWidth = pageProps.pageWidth;
+    const pHeight = pageProps.pageHeight;
+
+    const left = (field.x / 100) * pWidth;
+    const top = (field.y / 100) * pHeight;
+    const width = (field.width / 100) * pWidth;
+    const height = (field.height / 100) * pHeight;
 
     return (
       <div

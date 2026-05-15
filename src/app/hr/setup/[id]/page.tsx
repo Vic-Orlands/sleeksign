@@ -47,8 +47,8 @@ export default function DocumentSetup() {
     xPercent: number,
     yPercent: number,
   ) => {
-    let width = 20; // Default % width
-    let height = 5; // Default % height
+    let width = 20;
+    let height = 5;
 
     if (selectedType === "checkbox") {
       width = 4;
@@ -115,13 +115,16 @@ export default function DocumentSetup() {
   const clickPluginInstance = useMemo(() => {
     return {
       renderPageLayer: (props: any) => {
+        // Fallback dimensions if canvasLayer is not ready
+        const pWidth = props.pageWidth;
+        const pHeight = props.pageHeight;
+
         return (
           <div
             className="absolute inset-0 z-[100] cursor-crosshair"
             onClick={(e) => {
               if (e.target !== e.currentTarget) return;
               const rect = e.currentTarget.getBoundingClientRect();
-              // Calculate percentages based on the actual rendered page size
               const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
               const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
               handlePageClick(props.pageIndex, xPercent, yPercent);
@@ -137,26 +140,21 @@ export default function DocumentSetup() {
                     height: `${field.height}%`,
                   }}
                   position={{
-                    x: (field.x / 100) * props.canvasLayer.width,
-                    y: (field.y / 100) * props.canvasLayer.height,
+                    x: (field.x / 100) * pWidth,
+                    y: (field.y / 100) * pHeight,
                   }}
                   onDragStop={(e, d) => {
-                    const xPercent = (d.x / props.canvasLayer.width) * 100;
-                    const yPercent = (d.y / props.canvasLayer.height) * 100;
+                    const xPercent = (d.x / pWidth) * 100;
+                    const yPercent = (d.y / pHeight) * 100;
                     updateField(field.id, { x: xPercent, y: yPercent });
                   }}
                   onResizeStop={(e, direction, ref, delta, position) => {
                     const wPercent =
-                      (parseFloat(ref.style.width) / props.canvasLayer.width) *
-                      100;
+                      (parseFloat(ref.style.width) / pWidth) * 100;
                     const hPercent =
-                      (parseFloat(ref.style.height) /
-                        props.canvasLayer.height) *
-                      100;
-                    const xPercent =
-                      (position.x / props.canvasLayer.width) * 100;
-                    const yPercent =
-                      (position.y / props.canvasLayer.height) * 100;
+                      (parseFloat(ref.style.height) / pHeight) * 100;
+                    const xPercent = (position.x / pWidth) * 100;
+                    const yPercent = (position.y / pHeight) * 100;
                     updateField(field.id, {
                       width: wPercent,
                       height: hPercent,
@@ -166,7 +164,7 @@ export default function DocumentSetup() {
                   }}
                   bounds="parent"
                   onClick={(e: any) => e.stopPropagation()}
-                  className="border-2 border-primary bg-primary/10 flex items-center justify-center group z-20"
+                  className="border-2 border-primary bg-primary/10 flex items-center justify-center group z-20 shadow-sm"
                 >
                   <span className="text-[9px] font-black uppercase tracking-tighter text-primary pointer-events-none select-none">
                     {field.type}
