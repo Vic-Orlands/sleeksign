@@ -31,21 +31,11 @@ export default function SignerPortal() {
   const [isMakerOpen, setIsMakerOpen] = useState(false);
   const [finalPdfUrl, setFinalPdfUrl] = useState<string | null>(null);
 
-  const signaturesRef = useRef(signatures);
-  const sessionRef = useRef(session);
-
-  useEffect(() => {
-    signaturesRef.current = signatures;
-  }, [signatures]);
-
-  useEffect(() => {
-    sessionRef.current = session;
-  }, [session]);
-
   useEffect(() => {
     fetch(`/api/sessions?sessionId=${id}`)
       .then((res) => res.json())
       .then((data) => {
+        if (data.error) throw new Error(data.error);
         setSession(data);
         const initialSigs: any = {};
         data.signatures?.forEach(
@@ -57,11 +47,12 @@ export default function SignerPortal() {
       .catch((err) => {
         console.error("Failed to load session:", err);
         toast.error("Error loading signing session");
+        setIsLoading(false);
       });
   }, [id]);
 
   const handleFieldClick = async (field: any) => {
-    if (sessionRef.current?.status === "completed") return;
+    if (session?.status === "completed") return;
 
     if (field.type === "date") {
       const today = format(new Date(), "yyyy-MM-dd");
@@ -70,8 +61,7 @@ export default function SignerPortal() {
     }
 
     if (field.type === "checkbox") {
-      const newValue =
-        signaturesRef.current[field.id] === "true" ? "false" : "true";
+      const newValue = signatures[field.id] === "true" ? "false" : "true";
       await updateSignature(field.id, newValue);
       return;
     }
@@ -109,7 +99,6 @@ export default function SignerPortal() {
       const data = await res.json();
       setFinalPdfUrl(data.url);
       setSession((prev: any) => ({ ...prev, status: "completed" }));
-
       toast.success("Document finalized successfully!");
     } catch (err) {
       toast.error("Failed to finalize document");
@@ -127,70 +116,11 @@ export default function SignerPortal() {
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         (el as HTMLElement).style.outline = "4px solid black";
-        (el as HTMLElement).style.backgroundColor = "rgba(0,0,0,0.1)";
         setTimeout(() => {
           (el as HTMLElement).style.outline = "";
-          (el as HTMLElement).style.backgroundColor = "";
         }, 1500);
-      } else {
-        toast.info(`The next field is on Page ${nextField.page + 1}`);
       }
     }
-  };
-
-  const FieldOverlay = ({ field }: { field: any }) => {
-    const value = signatures[field.id];
-    const isCompleted = value && value !== "false";
-
-    return (
-      <div
-        data-field-id={field.id}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          handleFieldClick(field);
-        }}
-        style={{
-          position: "absolute",
-          left: `${field.x}px`,
-          top: `${field.y}px`,
-          width: `${field.width}px`,
-          height: `${field.height}px`,
-          pointerEvents: "auto",
-        }}
-        className={`border-2 cursor-pointer flex items-center justify-center transition-all shadow-md group ${
-          isCompleted
-            ? "border-green-600 bg-green-500/10"
-            : "border-primary border-dashed bg-primary/5 hover:bg-primary/20 animate-pulse"
-        }`}
-      >
-        {isCompleted ? (
-          field.type === "signature" && value.startsWith("data:image") ? (
-            <img
-              src={value}
-              alt="Signature"
-              className="max-h-full pointer-events-none object-contain p-1"
-            />
-          ) : (
-            <span className="font-bold italic text-primary pointer-events-none truncate px-2 text-center text-sm">
-              {field.type === "checkbox" ? "✓" : value}
-            </span>
-          )
-        ) : (
-          <span className="text-[9px] font-black uppercase tracking-widest text-primary pointer-events-none flex flex-col items-center">
-            {field.type === "signature" && (
-              <PencilIcon className="w-3 h-3 mb-1" />
-            )}
-            {field.type === "text" && <TypeIcon className="w-3 h-3 mb-1" />}
-            {field.type === "date" && <Calendar className="w-3 h-3 mb-1" />}
-            {field.type === "checkbox" && (
-              <CheckSquare className="w-3 h-3 mb-1" />
-            )}
-            {field.type}
-          </span>
-        )}
-      </div>
-    );
   };
 
   const clickPluginInstance = useMemo(() => {
@@ -198,21 +128,85 @@ export default function SignerPortal() {
       renderPageLayer: (props: any) => {
         return (
           <div className="absolute inset-0 z-[200] pointer-events-none">
-            {sessionRef.current?.document?.fields
+            {session?.document?.fields
               ?.filter((f: any) => f.page === props.pageIndex)
-              .map((field: any) => (
-                <FieldOverlay key={field.id} field={field} />
-              ))}
+              .map((field: any) => {
+                const value = signatures[field.id];
+                const isCompleted = value && value !== "false";
+
+                return (
+                  <div
+                    key={field.id}
+                    data-field-id={field.id}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleFieldClick(field);
+                    }}
+                    style={{
+                      position: "absolute",
+                      left: `${field.x}px`,
+                      top: `${field.y}px`,
+                      width: `${field.width}px`,
+                      height: `${field.height}px`,
+                      pointerEvents: "auto",
+                    }}
+                    className={`border-2 cursor-pointer flex items-center justify-center transition-all shadow-md group ${
+                      isCompleted
+                        ? "border-green-600 bg-green-500/10"
+                        : "border-primary border-dashed bg-primary/5 hover:bg-primary/20 animate-pulse"
+                    }`}
+                  >
+                    {isCompleted ? (
+                      field.type === "signature" &&
+                      value.startsWith("data:image") ? (
+                        <img
+                          src={value}
+                          alt="Signature"
+                          className="max-h-full pointer-events-none object-contain p-1"
+                        />
+                      ) : (
+                        <span className="font-bold italic text-primary pointer-events-none truncate px-2 text-center text-sm">
+                          {field.type === "checkbox" ? "✓" : value}
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-[9px] font-black uppercase tracking-widest text-primary pointer-events-none flex flex-col items-center">
+                        {field.type === "signature" && (
+                          <PencilIcon className="w-3 h-3 mb-1" />
+                        )}
+                        {field.type === "text" && (
+                          <TypeIcon className="w-3 h-3 mb-1" />
+                        )}
+                        {field.type === "date" && (
+                          <Calendar className="w-3 h-3 mb-1" />
+                        )}
+                        {field.type === "checkbox" && (
+                          <CheckSquare className="w-3 h-3 mb-1" />
+                        )}
+                        {field.type}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         );
       },
     };
-  }, []);
+  }, [session, signatures]);
 
   if (isLoading)
     return (
       <div className="h-screen flex items-center justify-center bg-muted/10">
         <Loader2 className="animate-spin text-primary w-10 h-10" />
+      </div>
+    );
+
+  if (!session)
+    return (
+      <div className="h-screen flex items-center justify-center">
+        Session not found
       </div>
     );
 
@@ -242,9 +236,10 @@ export default function SignerPortal() {
     );
   }
 
-  const allSigned = session.document.fields.every(
-    (f: any) => signatures[f.id] || f.type === "checkbox",
-  );
+  const allSigned =
+    session.document?.fields?.every(
+      (f: any) => signatures[f.id] || f.type === "checkbox",
+    ) || false;
   const signedCount = Object.keys(signatures).filter(
     (k) => signatures[k] && signatures[k] !== "false",
   ).length;
@@ -265,7 +260,7 @@ export default function SignerPortal() {
             </Badge>
           </div>
           <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest truncate max-w-[200px]">
-            Doc: {session.document.name}
+            Doc: {session.document?.name}
           </p>
         </div>
 
@@ -287,7 +282,7 @@ export default function SignerPortal() {
             {isFinalizing ? <Loader2 className="animate-spin mr-2" /> : null}
             {allSigned
               ? "Complete & Finalize"
-              : `${signedCount}/${session.document.fields.length} Signed`}
+              : `${signedCount}/${session.document?.fields?.length || 0} Signed`}
           </Button>
         </div>
       </header>
@@ -297,7 +292,7 @@ export default function SignerPortal() {
           <Card className="w-full max-w-[900px] shadow-[24px_24px_0px_0px_rgba(0,0,0,0.05)] border-none overflow-hidden">
             <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
               <Viewer
-                fileUrl={session.document.fileUrl}
+                fileUrl={session.document?.fileUrl}
                 plugins={[clickPluginInstance]}
               />
             </Worker>
