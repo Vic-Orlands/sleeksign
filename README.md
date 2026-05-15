@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SleekSign 🖊️
 
-## Getting Started
+SleekSign is a beautiful, self-hosted document signing application designed for internal company use. It eliminates the friction of downloading, signing, and returning documents by providing a seamless, web-based signing experience.
 
-First, run the development server:
+## ✨ Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Sleek Signature Maker:** 
+  - **Type:** Generates an animated SVG of your name using elegant script fonts.
+  - **Draw:** Smooth, pressure-sensitive signature canvas.
+  - **Upload:** Support for existing signature images.
+- **HR Dashboard:** 
+  - Easy PDF document uploads.
+  - **Interactive Setup:** Click-to-place signature and text fields.
+  - **Drag & Resize:** Full control over field positioning and dimensions.
+  - **Shareable Links:** Secure, unique signing links for recipients.
+- **Signer Portal:** 
+  - Minimalist, account-free signing experience.
+  - Real-time field validation.
+  - One-click finalization and PDF generation.
+- **Privacy & Sovereignty:** 
+  - Self-hosted: You own your data.
+  - SQLite backend: No complex database setup required.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🛠️ Tech Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Framework:** Next.js (App Router)
+- **Database:** SQLite with Drizzle ORM
+- **Styling:** Tailwind CSS + Customized Shadcn UI (Sharp/Brutalist theme)
+- **PDF Processing:** `pdf-lib`
+- **Signature Engine:** `opentype.js` (Name-to-SVG)
+- **Interactive UI:** `react-pdf-viewer` & `react-rnd` (Drag & Resize)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🚀 Getting Started
 
-## Learn More
+### Prerequisites
 
-To learn more about Next.js, take a look at the following resources:
+- Node.js 18.x or later
+- npm / pnpm / yarn
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Installation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Clone the repository.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Initialize the database:
+   ```bash
+   npx drizzle-kit generate
+   npx drizzle-kit migrate
+   ```
+4. Start the development server:
+   ```bash
+   npm run dev
+   ```
 
-## Deploy on Vercel
+## 📐 Design Philosophy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+SleekSign follows a **Sharp/Brutalist** aesthetic:
+- **Zero Border Radiuses:** Everything is crisp and structural.
+- **Layered Depth:** Using shadows instead of borders for elevation.
+- **Distinctive Typography:** Striking display fonts paired with clean body text.
+- **Fluid Motion:** Interruptible CSS transitions and staggered reveal animations.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📄 License
+
+MIT
