@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { documents, fields } from "@/db/schema";
+import { documents, sessions, fields } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -13,6 +13,7 @@ export async function GET(
     where: eq(documents.id, id),
     with: {
       fields: true,
+      sessions: true,
     },
   });
 
@@ -80,4 +81,17 @@ export async function DELETE(
       { status: 500 },
     );
   }
+}
+
+// Add a "Save as Template" method (Simplified: using sessions table or a new templates table)
+// For V2, we can just use doc.isTemplate = true
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const { name } = await req.json();
+
+  await db.update(documents).set({ name }).where(eq(documents.id, id));
+  return NextResponse.json({ success: true });
 }

@@ -1,66 +1,52 @@
-# SleekSign 🖊️
+# SleekSign 🖊️ v2.0
 
-SleekSign is a beautiful, self-hosted document signing application designed for internal company use. It eliminates the friction of downloading, signing, and returning documents by providing a seamless, web-based signing experience.
+SleekSign is a professional, self-hosted document signing application. Version 2.0 adds enterprise-grade features including legal audit trails, multi-signer support, and field templates.
 
 ## ✨ Features
 
 - **Sleek Signature Maker:** 
-  - **Type:** Generates an animated SVG of your name using elegant script fonts.
+  - **Variety:** 4 beautiful script fonts with a live picker.
+  - **Type:** Animated SVG tracing of your name.
   - **Draw:** Smooth, pressure-sensitive signature canvas.
-  - **Upload:** Support for existing signature images.
-- **HR Dashboard:** 
-  - Easy PDF document uploads.
-  - **Interactive Setup:** Click-to-place signature and text fields.
-  - **Drag & Resize:** Full control over field positioning and dimensions.
-  - **Shareable Links:** Secure, unique signing links for recipients.
-- **Signer Portal:** 
-  - Minimalist, account-free signing experience.
-  - Real-time field validation.
-  - One-click finalization and PDF generation.
+  - **Upload:** Image support (PNG/JPG).
+- **HR Power Tools:** 
+  - **Interactive Setup:** Click-to-place, drag-to-move, and resize boxes.
+  - **Field Templates:** Save document layouts and reuse them instantly.
+  - **Dashboard:** Real-time tracking of signer activity and session status.
+- **Advanced Field Types:** 
+  - **Date:** Auto-fill current date.
+  - **Checkbox:** Interactive "I agree" toggles.
+- **Legal & Compliance:** 
+  - **Audit Trail:** Professional "Certificate of Completion" appended to every PDF.
+  - **Metadata:** Captures signer IP addresses, user agents, and completion timestamps.
+- **Multi-Signer Support:** 
+  - **Concurrent Signing:** Multiple staff can sign the same document independently via unique secure links.
 - **Privacy & Sovereignty:** 
-  - Self-hosted: You own your data.
-  - SQLite backend: No complex database setup required.
+  - Full data ownership. Self-hosted on SQLite with zero external dependencies.
 
 ## 🛠️ Tech Stack
 
-- **Framework:** Next.js (App Router)
-- **Database:** SQLite with Drizzle ORM
-- **Styling:** Tailwind CSS + Customized Shadcn UI (Sharp/Brutalist theme)
-- **PDF Processing:** `pdf-lib`
-- **Signature Engine:** `opentype.js` (Name-to-SVG)
-- **Interactive UI:** `react-pdf-viewer` & `react-rnd` (Drag & Resize)
+- **Next.js 16** (App Router, Webpack mode for PDF processing)
+- **Drizzle ORM** & **SQLite**
+- **Tailwind CSS** + **Custom Shadcn UI** (Zero border-radius theme)
+- **pdf-lib** (PDF merging & certificate generation)
+- **opentype.js** (Name-to-SVG engine)
+- **react-rnd** (Interactive field manipulation)
+- **react-pdf-viewer** (Sophisticated document rendering)
 
 ## 🚀 Getting Started
 
-### Prerequisites
-
-- Node.js 18.x or later
-- npm / pnpm / yarn
-
-### Installation
-
-1. Clone the repository.
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Initialize the database:
-   ```bash
-   npx drizzle-kit generate
-   npx drizzle-kit migrate
-   ```
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
+1. `npm install`
+2. `npx drizzle-kit push` (Sync database)
+3. `npm run dev`
+4. Access HR dashboard at `/hr`
 
 ## 📐 Design Philosophy
 
 SleekSign follows a **Sharp/Brutalist** aesthetic:
-- **Zero Border Radiuses:** Everything is crisp and structural.
-- **Layered Depth:** Using shadows instead of borders for elevation.
-- **Distinctive Typography:** Striking display fonts paired with clean body text.
-- **Fluid Motion:** Interruptible CSS transitions and staggered reveal animations.
+- No rounded corners.
+- Layered shadows for depth.
+- High-contrast, monochromatic palette with sharp accents.
 
 ## 📄 License
 

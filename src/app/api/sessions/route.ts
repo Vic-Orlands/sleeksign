@@ -46,6 +46,18 @@ export async function GET(req: NextRequest) {
 
   if (!session)
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
+
+  // Update session with metadata if not already completed
+  if (session.status !== "completed") {
+    const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
+    const ua = req.headers.get("user-agent") || "Unknown";
+
+    await db
+      .update(sessions)
+      .set({ signerIp: ip, signerUserAgent: ua })
+      .where(eq(sessions.id, sessionId));
+  }
+
   return NextResponse.json(session);
 }
 

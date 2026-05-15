@@ -4,10 +4,17 @@ import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, CheckCircle2, Download } from "lucide-react";
+import {
+  Loader2,
+  CheckCircle2,
+  Download,
+  Calendar,
+  CheckSquare,
+} from "lucide-react";
 import { Worker, Viewer } from "@react-pdf-viewer/core";
 import { SignatureMaker } from "@/components/signature/SignatureMaker";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 import "@react-pdf-viewer/core/lib/styles/index.css";
 
@@ -36,27 +43,42 @@ export default function SignerPortal() {
       });
   }, [id]);
 
-  const handleFieldClick = (fieldId: string) => {
+  const handleFieldClick = async (field: any) => {
     if (session.status === "completed") return;
-    setSelectedField(fieldId);
+
+    if (field.type === "date") {
+      const today = format(new Date(), "yyyy-MM-dd");
+      await updateSignature(field.id, today);
+      return;
+    }
+
+    if (field.type === "checkbox") {
+      const newValue = signatures[field.id] === "true" ? "false" : "true";
+      await updateSignature(field.id, newValue);
+      return;
+    }
+
+    setSelectedField(field.id);
     setIsMakerOpen(true);
   };
 
-  const handleSignatureConfirm = async (value: string) => {
-    if (!selectedField) return;
-
-    setSignatures({ ...signatures, [selectedField]: value });
-
+  const updateSignature = async (fieldId: string, value: string) => {
+    setSignatures((prev) => ({ ...prev, [fieldId]: value }));
     await fetch("/api/sessions", {
       method: "PATCH",
       body: JSON.stringify({
         sessionId: id,
-        fieldId: selectedField,
+        fieldId,
         value,
       }),
     });
-
     toast.success("Field updated");
+  };
+
+  const handleSignatureConfirm = async (value: string) => {
+    if (!selectedField) return;
+    await updateSignature(selectedField, value);
+    setIsMakerOpen(false);
   };
 
   const finalize = async () => {
@@ -110,7 +132,9 @@ export default function SignerPortal() {
     );
   }
 
-  const allSigned = session.document.fields.every((f: any) => signatures[f.id]);
+  const allSigned = session.document.fields.every(
+    (f: any) => signatures[f.id] || f.type === "checkbox",
+  ); // Checkbox can be false
 
   const clickPlugin = (): any => {
     return {
@@ -124,7 +148,7 @@ export default function SignerPortal() {
                   key={field.id}
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleFieldClick(field.id);
+                    handleFieldClick(field);
                   }}
                   style={{
                     position: "absolute",
@@ -135,12 +159,13 @@ export default function SignerPortal() {
                     pointerEvents: "auto",
                   }}
                   className={`border-2 cursor-pointer flex items-center justify-center transition-all ${
-                    signatures[field.id]
+                    signatures[field.id] && signatures[field.id] !== "false"
                       ? "border-green-500 bg-green-500/10"
                       : "border-primary border-dashed bg-primary/5 hover:bg-primary/10 animate-pulse"
                   }`}
                 >
-                  {signatures[field.id] ? (
+                  {signatures[field.id] && signatures[field.id] !== "false" ? (
+                    field.type === "signature" &&
                     signatures[field.id].startsWith("data:image") ? (
                       <img
                         src={signatures[field.id]}
@@ -149,12 +174,24 @@ export default function SignerPortal() {
                       />
                     ) : (
                       <span className="font-bold italic text-primary pointer-events-none">
-                        {signatures[field.id]}
+                        {field.type === "checkbox" ? "✓" : signatures[field.id]}
                       </span>
                     )
                   ) : (
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-primary pointer-events-none">
-                      Click to {field.type}
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-primary pointer-events-none flex flex-col items-center">
+                      {field.type === "signature" && (
+                        <Pencil className="w-3 h-3 mb-1" />
+                      )}
+                      {field.type === "text" && (
+                        <Type className="w-3 h-3 mb-1" />
+                      )}
+                      {field.type === "date" && (
+                        <Calendar className="w-3 h-3 mb-1" />
+                      )}
+                      {field.type === "checkbox" && (
+                        <CheckSquare className="w-3 h-3 mb-1" />
+                      )}
+                      {field.type}
                     </span>
                   )}
                 </div>
@@ -170,9 +207,14 @@ export default function SignerPortal() {
   return (
     <div className="min-h-screen bg-muted/20 flex flex-col">
       <header className="h-20 bg-background border-b border-border px-8 flex items-center justify-between sticky top-0 z-50">
-        <h1 className="text-2xl font-black tracking-tighter uppercase italic">
-          Sign: {session.document.name}
-        </h1>
+        <div className="space-y-1">
+          <h1 className="text-xl font-black tracking-tighter uppercase italic leading-none">
+            Sign: {session.document.name}
+          </h1>
+          <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest">
+            ID: {session.id}
+          </p>
+        </div>
         <Button
           disabled={!allSigned || isFinalizing}
           onClick={finalize}
@@ -180,8 +222,8 @@ export default function SignerPortal() {
         >
           {isFinalizing ? <Loader2 className="animate-spin mr-2" /> : null}
           {allSigned
-            ? "Complete & Submit"
-            : `${Object.keys(signatures).length}/${session.document.fields.length} Fields Completed`}
+            ? "Finalize Signature"
+            : `${Object.keys(signatures).filter((k) => signatures[k] !== "false").length}/${session.document.fields.length} Fields Completed`}
         </Button>
       </header>
 
@@ -206,3 +248,40 @@ export default function SignerPortal() {
     </div>
   );
 }
+
+const Type = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M4 7V4h16v3" />
+    <path d="M9 20h6" />
+    <path d="M12 4v16" />
+  </svg>
+);
+
+const Pencil = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    <path d="m15 5 4 4" />
+  </svg>
+);
