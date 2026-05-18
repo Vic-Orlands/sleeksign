@@ -1,391 +1,317 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useMemo, useState } from "react";
+import { format } from "date-fns";
 import {
-  Loader2,
-  CheckCircle2,
-  Download,
+  AlertCircle,
   Calendar,
+  Check,
+  CheckCircle2,
   CheckSquare,
   ChevronDown,
-  AlertCircle,
+  Download,
+  Loader2,
+  PenLine,
+  Type,
 } from "lucide-react";
-import { Worker, Viewer } from "@react-pdf-viewer/core";
-import { SignatureMaker } from "@/components/signature/SignatureMaker";
+import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { PdfCanvasViewer } from "@/components/pdf/PdfCanvasViewer";
+import { SignatureMaker } from "@/components/signature/SignatureMaker";
+import { SignatureValue } from "@/components/signature/SignatureValue";
+import { Field, valueIsComplete } from "@/lib/field-utils";
 
-import "@react-pdf-viewer/core/lib/styles/index.css";
+type SignatureRecord = {
+  fieldId: string;
+  value: string;
+};
+
+type SessionRecord = {
+  id: string;
+  status: "pending" | "completed";
+  signerName?: string | null;
+  signerEmail?: string | null;
+  document: {
+    name: string;
+    fileUrl: string;
+    fields: Field[];
+  };
+  signatures?: SignatureRecord[];
+};
+
+const fieldIcons = {
+  signature: PenLine,
+  text: Type,
+  date: Calendar,
+  checkbox: CheckSquare,
+};
 
 export default function SignerPortal() {
-  const { id } = useParams();
-  const router = useRouter();
-  const [session, setSession] = useState<any>(null);
+  const { id } = useParams<{ id: string }>();
+  const [session, setSession] = useState<SessionRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const [selectedField, setSelectedField] = useState<any>(null);
+  const [selectedField, setSelectedField] = useState<Field | null>(null);
   const [signatures, setSignatures] = useState<Record<string, string>>({});
   const [isMakerOpen, setIsMakerOpen] = useState(false);
   const [finalPdfUrl, setFinalPdfUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    setIsLoading(true);
     fetch(`/api/sessions?sessionId=${id}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setSession(data);
-        const initialSigs: any = {};
-        data.signatures?.forEach(
-          (s: any) => (initialSigs[s.fieldId] = s.value),
+        setSignatures(
+          Object.fromEntries(
+            data.signatures?.map((item: SignatureRecord) => [item.fieldId, item.value]) || [],
+          ),
         );
-        setSignatures(initialSigs);
-        setIsLoading(false);
       })
-      .catch((err) => {
-        console.error("Failed to load session:", err);
-        setLoadError(err.message || "Failed to load document");
-        setIsLoading(false);
-      });
+      .catch((error) => setLoadError(error.message || "Failed to load document"))
+      .finally(() => setIsLoading(false));
   }, [id]);
 
-  const handleFieldClick = async (field: any) => {
+  const fields: Field[] = useMemo(() => session?.document?.fields || [], [session]);
+  const requiredCount = fields.filter((field) => field.type !== "checkbox").length;
+  const completedCount = fields.filter((field) => {
+    if (field.type === "checkbox") return true;
+    return valueIsComplete(signatures[field.id]);
+  }).length;
+  const allFieldsSigned = fields.every(
+    (field) => field.type === "checkbox" || valueIsComplete(signatures[field.id]),
+  );
+
+  const nextField = useMemo(
+    () => fields.find((field) => field.type !== "checkbox" && !valueIsComplete(signatures[field.id])),
+    [fields, signatures],
+  );
+
+  async function handleFieldClick(field: Field) {
     if (session?.status === "completed") return;
 
     if (field.type === "date") {
-      const today = format(new Date(), "yyyy-MM-dd");
-      await updateSignature(field.id, today);
+      await updateSignature(field.id, format(new Date(), "yyyy-MM-dd"));
       return;
     }
 
     if (field.type === "checkbox") {
-      const newValue = signatures[field.id] === "true" ? "false" : "true";
-      await updateSignature(field.id, newValue);
+      await updateSignature(field.id, signatures[field.id] === "true" ? "false" : "true");
       return;
     }
 
     setSelectedField(field);
     setIsMakerOpen(true);
-  };
+  }
 
-  const updateSignature = async (fieldId: string, value: string) => {
-    setSignatures((prev) => ({ ...prev, [fieldId]: value }));
+  async function updateSignature(fieldId: string, value: string) {
+    setSignatures((current) => ({ ...current, [fieldId]: value }));
     await fetch("/api/sessions", {
       method: "PATCH",
-      body: JSON.stringify({
-        sessionId: id,
-        fieldId,
-        value,
-      }),
+      body: JSON.stringify({ sessionId: id, fieldId, value }),
     });
-    toast.success("Field updated");
-  };
+    toast.success("Field saved");
+  }
 
-  const handleSignatureConfirm = async (value: string) => {
-    if (!selectedField) return;
-    await updateSignature(selectedField.id, value);
-    setIsMakerOpen(false);
-  };
-
-  const finalize = async () => {
+  async function finalize() {
     setIsFinalizing(true);
     try {
       const res = await fetch("/api/finalize", {
         method: "POST",
         body: JSON.stringify({ sessionId: id }),
       });
+      if (!res.ok) throw new Error("Finalize failed");
       const data = await res.json();
       setFinalPdfUrl(data.url);
-      setSession((prev: any) => ({ ...prev, status: "completed" }));
-      toast.success("Document finalized successfully!");
-    } catch (err) {
+      setSession((current) => (current ? { ...current, status: "completed" } : current));
+      toast.success("Document finalized");
+    } catch {
       toast.error("Failed to finalize document");
     } finally {
       setIsFinalizing(false);
     }
-  };
+  }
 
-  const scrollToNextField = () => {
-    const nextField = session.document.fields.find(
-      (f: any) => !signatures[f.id] && f.type !== "checkbox",
-    );
-    if (nextField) {
-      const el = document.querySelector(`[data-field-id="${nextField.id}"]`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        (el as HTMLElement).style.outline = "4px solid black";
-        setTimeout(() => {
-          (el as HTMLElement).style.outline = "";
-        }, 1500);
-      }
-    }
-  };
+  function scrollToNextField() {
+    if (!nextField) return;
+    document
+      .querySelector(`[data-field-id="${nextField.id}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
-  const FieldOverlay = ({
-    field,
-    pageProps,
-  }: {
-    field: any;
-    pageProps: any;
-  }) => {
-    const value = signatures[field.id];
-    const isCompleted = value && value !== "false";
-
-    // Scale percentage to current rendered page dimensions
-    const pWidth = pageProps.pageWidth;
-    const pHeight = pageProps.pageHeight;
-
-    const left = (field.x / 100) * pWidth;
-    const top = (field.y / 100) * pHeight;
-    const width = (field.width / 100) * pWidth;
-    const height = (field.height / 100) * pHeight;
-
+  if (isLoading) {
     return (
-      <div
-        key={field.id}
-        data-field-id={field.id}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          handleFieldClick(field);
-        }}
-        style={{
-          position: "absolute",
-          left: `${left}px`,
-          top: `${top}px`,
-          width: `${width}px`,
-          height: `${height}px`,
-          pointerEvents: "auto",
-        }}
-        className={`border-2 cursor-pointer flex items-center justify-center transition-all shadow-md group ${
-          isCompleted
-            ? "border-green-600 bg-green-500/10"
-            : "border-primary border-dashed bg-primary/5 hover:bg-primary/20 animate-pulse"
-        }`}
-      >
-        {isCompleted ? (
-          field.type === "signature" && value.startsWith("data:image") ? (
-            <img
-              src={value}
-              alt="Signature"
-              className="max-h-full pointer-events-none object-contain p-1"
-            />
-          ) : (
-            <span className="font-bold italic text-primary pointer-events-none truncate px-2 text-center text-sm">
-              {field.type === "checkbox" ? "✓" : value}
-            </span>
-          )
-        ) : (
-          <span className="text-[9px] font-black uppercase tracking-widest text-primary pointer-events-none flex flex-col items-center">
-            {field.type === "signature" && (
-              <PencilIcon className="w-3 h-3 mb-1" />
-            )}
-            {field.type === "text" && <TypeIcon className="w-3 h-3 mb-1" />}
-            {field.type === "date" && <Calendar className="w-3 h-3 mb-1" />}
-            {field.type === "checkbox" && (
-              <CheckSquare className="w-3 h-3 mb-1" />
-            )}
-            {field.type}
-          </span>
-        )}
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Loader2 className="size-6 animate-spin text-primary" />
       </div>
     );
-  };
-
-  const clickPluginInstance = useMemo(() => {
-    return {
-      renderPageLayer: (props: any) => {
-        return (
-          <div className="absolute inset-0 z-[200] pointer-events-none">
-            {session?.document?.fields
-              ?.filter((f: any) => f.page === props.pageIndex)
-              .map((field: any) => (
-                <FieldOverlay key={field.id} field={field} pageProps={props} />
-              ))}
-          </div>
-        );
-      },
-    };
-  }, [session, signatures]);
-
-  if (isLoading)
-    return (
-      <div className="h-screen flex items-center justify-center bg-muted/10">
-        <Loader2 className="animate-spin text-primary w-10 h-10" />
-      </div>
-    );
+  }
 
   if (loadError || !session) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-muted/10 p-8 space-y-6">
-        <AlertCircle className="w-16 h-16 text-destructive" />
-        <div className="text-center space-y-2">
-          <h2 className="text-2xl font-black uppercase tracking-tighter italic">
-            Load Error
-          </h2>
-          <p className="text-muted-foreground font-mono text-xs uppercase">
-            {loadError || "Session not found"}
-          </p>
-        </div>
-        <Button
-          onClick={() => window.location.reload()}
-          variant="outline"
-          className="border-2 font-bold uppercase tracking-widest text-[10px]"
-        >
-          Retry Connection
-        </Button>
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center">
+        <AlertCircle className="size-12 text-destructive" />
+        <h1 className="text-xl font-semibold">Unable to open this document</h1>
+        <p className="max-w-md text-sm text-muted-foreground">{loadError || "Session not found"}</p>
       </div>
     );
   }
 
   if (session.status === "completed" && finalPdfUrl) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-8">
-        <Card className="max-w-xl w-full border-4 border-green-600 shadow-[16px_16px_0px_0px_rgba(22,163,74,0.2)]">
-          <CardContent className="p-12 text-center space-y-8">
-            <CheckCircle2 className="w-20 h-20 text-green-600 mx-auto" />
-            <div className="space-y-2">
-              <h1 className="text-4xl font-black tracking-tighter uppercase italic">
-                Success!
-              </h1>
-              <p className="text-muted-foreground font-mono uppercase tracking-widest text-xs">
-                Your document has been signed and finalized
-              </p>
-            </div>
-            <Button
-              className="w-full font-bold h-14 text-lg uppercase tracking-widest bg-green-600 hover:bg-green-700"
-              onClick={() => window.open(finalPdfUrl, "_blank")}
-            >
-              Download Signed PDF <Download className="ml-2 w-5 h-5" />
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="flex min-h-screen items-center justify-center bg-[var(--paper)] p-6">
+        <div className="w-full max-w-md border border-border bg-background p-8 text-center shadow-xl">
+          <CheckCircle2 className="mx-auto size-14 text-emerald-400" />
+          <h1 className="mt-5 font-mono text-xs font-semibold uppercase tracking-widest">Document completed</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your signed PDF and completion certificate are ready.
+          </p>
+          <Button className="mt-6 w-full gap-2" onClick={() => window.open(finalPdfUrl, "_blank")}>
+            <Download className="size-4" />
+            Download signed PDF
+          </Button>
+        </div>
       </div>
     );
   }
 
-  const allFieldsSigned =
-    session.document?.fields?.every(
-      (f: any) => signatures[f.id] || f.type === "checkbox",
-    ) || false;
-  const signedCount = Object.keys(signatures).filter(
-    (k) => signatures[k] && signatures[k] !== "false",
-  ).length;
-
   return (
-    <div className="min-h-screen bg-muted/20 flex flex-col h-screen overflow-hidden">
-      <header className="h-20 bg-background border-b-4 border-primary px-8 flex items-center justify-between shadow-md z-[300] shrink-0">
-        <div className="space-y-1">
-          <div className="flex items-center space-x-2">
-            <h1 className="text-2xl font-black tracking-tighter uppercase italic leading-none">
-              SleekSign.
-            </h1>
-            <Badge
-              variant="outline"
-              className="font-mono text-[8px] border-primary text-primary px-1 py-0 h-4"
-            >
-              SIGNER PORTAL
+    <div className="flex h-screen flex-col bg-[var(--paper)]">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="flex size-6 items-center justify-center bg-primary font-mono text-[10px] font-bold text-primary-foreground">S</span>
+            <h1 className="font-mono text-xs font-semibold uppercase tracking-widest">SleekSign</h1>
+            <Badge variant="outline" className="rounded-none font-mono text-[9px] uppercase tracking-widest">
+              Signing
             </Badge>
           </div>
-          <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest truncate max-w-[200px]">
-            Doc: {session.document?.name}
-          </p>
+          <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{session.document?.name}</p>
         </div>
-
-        <div className="flex items-center space-x-4">
-          {!allFieldsSigned && (
-            <Button
-              variant="outline"
-              onClick={scrollToNextField}
-              className="font-bold uppercase tracking-widest text-[10px] h-10 border-2 border-primary hover:bg-primary hover:text-primary-foreground transition-all hidden md:flex"
-            >
-              Next Field <ChevronDown className="ml-2 w-4 h-4" />
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          {!allFieldsSigned ? (
+            <Button variant="outline" onClick={scrollToNextField} className="hidden gap-2 md:flex">
+              Next field
+              <ChevronDown className="size-4" />
             </Button>
-          )}
-          <Button
-            disabled={!allFieldsSigned || isFinalizing}
-            onClick={finalize}
-            className="font-black uppercase tracking-widest text-xs px-10 h-12 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all bg-primary text-primary-foreground disabled:opacity-30 disabled:shadow-none"
-          >
-            {isFinalizing ? <Loader2 className="animate-spin mr-2" /> : null}
-            {allFieldsSigned
-              ? "Complete & Finalize"
-              : `${signedCount}/${session.document?.fields?.length || 0} Signed`}
+          ) : null}
+          <Button disabled={!allFieldsSigned || isFinalizing} onClick={finalize} className="gap-2">
+            {isFinalizing ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+            {allFieldsSigned ? "Complete" : `${completedCount}/${requiredCount} complete`}
           </Button>
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px] p-4 md:p-12 flex justify-center">
-        <div className="w-[800px]">
-          {session.document?.fileUrl ? (
-            <Card className="shadow-[24px_24px_0px_0px_rgba(0,0,0,0.05)] border-none overflow-hidden min-h-[800px] bg-white relative">
-              <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
-                <Viewer
-                  fileUrl={session.document.fileUrl}
-                  plugins={[clickPluginInstance]}
-                />
-              </Worker>
-            </Card>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full p-20 border-4 border-dashed border-border bg-background/50">
-              <AlertCircle className="w-12 h-12 text-muted-foreground mb-4" />
-              <p className="font-mono uppercase tracking-widest text-xs text-muted-foreground">
-                Document path missing or inaccessible
-              </p>
-            </div>
-          )}
-        </div>
+      <main className="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_280px]">
+        <section className="sleek-grid min-h-0 overflow-auto bg-[#121214] px-6 py-8 md:px-10">
+          <PdfCanvasViewer
+            fileUrl={session.document.fileUrl}
+            className="mx-auto w-full max-w-[840px]"
+            pageClassName="relative border-t-8 border-[#3f3f46] bg-white shadow-2xl ring-1 ring-black/10"
+            renderOverlay={(pageIndex, metrics) =>
+              fields
+                .filter((field) => field.page === pageIndex)
+                .map((field) => {
+                  const value = signatures[field.id];
+                  const isComplete = valueIsComplete(value);
+                  const Icon = fieldIcons[field.type];
+
+                  return (
+                    <button
+                      key={field.id}
+                      data-field-id={field.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleFieldClick(field);
+                      }}
+                      style={{
+                        left: `${(field.x / 100) * metrics.width}px`,
+                        top: `${(field.y / 100) * metrics.height}px`,
+                        width: `${(field.width / 100) * metrics.width}px`,
+                        height: `${(field.height / 100) * metrics.height}px`,
+                      }}
+                      className={`absolute flex items-center justify-center border text-center transition ${
+                        isComplete
+                          ? "border-emerald-500 bg-emerald-50/85 text-emerald-700"
+                          : "border-blue-500 bg-blue-500/10 text-blue-500 shadow-[0_0_0_4px_rgba(59,130,246,0.06)] hover:bg-blue-500/15"
+                      }`}
+                    >
+                      {isComplete ? (
+                        field.type === "checkbox" ? (
+                          <Check className="size-4" />
+                        ) : field.type === "signature" ? (
+                          <SignatureValue value={value} className="max-h-full max-w-full object-contain px-2" />
+                        ) : (
+                          <span className="truncate px-2 text-xs font-semibold">{value}</span>
+                        )
+                      ) : (
+                        <span className="flex items-center gap-1 px-1 font-mono text-[10px] font-semibold uppercase tracking-wider">
+                          <Icon className="size-3" />
+                          {field.type}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+            }
+          />
+        </section>
+
+        <aside className="hidden min-h-0 border-l border-border bg-card p-5 md:block">
+          <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest">Required fields</h2>
+          <div className="mt-4 space-y-2">
+            {fields.map((field, index) => {
+              const complete = field.type === "checkbox" || valueIsComplete(signatures[field.id]);
+              const Icon = fieldIcons[field.type];
+              return (
+                <button
+                  key={field.id}
+                  onClick={() =>
+                    document
+                      .querySelector(`[data-field-id="${field.id}"]`)
+                      ?.scrollIntoView({ behavior: "smooth", block: "center" })
+                  }
+                  className="flex w-full items-center justify-between border border-border bg-background px-3 py-2 text-left font-mono text-[10px] uppercase tracking-widest hover:bg-muted/50"
+                >
+                  <span className="flex items-center gap-2 capitalize">
+                    <Icon className="size-4 text-muted-foreground" />
+                    {index + 1}. {field.type}
+                  </span>
+                  {complete ? (
+                    <Check className="size-4 text-emerald-600" />
+                  ) : (
+                    <span className="size-2 bg-amber-500" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </aside>
       </main>
 
       <SignatureMaker
         isOpen={isMakerOpen}
         onClose={() => setIsMakerOpen(false)}
-        onConfirm={handleSignatureConfirm}
+        onConfirm={async (value) => {
+          if (!selectedField) return;
+          await updateSignature(selectedField.id, value);
+          setIsMakerOpen(false);
+        }}
         type={selectedField?.type === "text" ? "text" : "signature"}
-        defaultValue={signatures[selectedField?.id] || ""}
+        defaultValue={
+          signatures[selectedField?.id || ""] ||
+          (selectedField?.type === "signature" ? session.signerName || "" : "")
+        }
+        textSuggestions={[
+          ...(session.signerName ? [{ label: "Full name", value: session.signerName }] : []),
+          ...(session.signerEmail ? [{ label: "Email address", value: session.signerEmail }] : []),
+        ]}
       />
     </div>
   );
 }
-
-const TypeIcon = ({ className }: { className?: string }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="3"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M4 7V4h16v3" />
-    <path d="M9 20h6" />
-    <path d="M12 4v16" />
-  </svg>
-);
-
-const PencilIcon = ({ className }: { className?: string }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="3"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-    <path d="m15 5 4 4" />
-  </svg>
-);

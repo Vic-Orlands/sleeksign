@@ -32,7 +32,7 @@ export async function GET(
         "Content-Disposition": `attachment; filename="${fileName}"`,
       },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 }

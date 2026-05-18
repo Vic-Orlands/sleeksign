@@ -19,7 +19,9 @@ import {
   ChevronLeft,
   ChevronRight,
   AlignLeft,
+  Sparkles,
 } from "lucide-react";
+import { decodeSignatureVector, encodeSignatureVector } from "@/lib/field-utils";
 
 interface SignatureMakerProps {
   isOpen: boolean;
@@ -27,6 +29,7 @@ interface SignatureMakerProps {
   onConfirm: (value: string) => void;
   type?: "signature" | "text";
   defaultValue?: string;
+  textSuggestions?: Array<{ label: string; value: string }>;
 }
 
 export function SignatureMaker({
@@ -35,6 +38,7 @@ export function SignatureMaker({
   onConfirm,
   type = "signature",
   defaultValue = "",
+  textSuggestions = [],
 }: SignatureMakerProps) {
   const [activeTab, setActiveTab] = useState(type === "text" ? "text" : "type");
   const [name, setName] = useState(defaultValue);
@@ -50,9 +54,15 @@ export function SignatureMaker({
 
   useEffect(() => {
     if (isOpen) {
-      setActiveTab(type === "text" ? "text" : "type");
-      setTextValue(defaultValue);
-      if (type === "signature") setName(defaultValue);
+      queueMicrotask(() => {
+        const vector = decodeSignatureVector(defaultValue);
+        setActiveTab(type === "text" ? "text" : "type");
+        setTextValue(defaultValue);
+        if (type === "signature") {
+          setName(vector?.name || defaultValue);
+          if (vector) setFontIndex(vector.fontIndex);
+        }
+      });
     }
   }, [isOpen, type, defaultValue]);
 
@@ -81,7 +91,17 @@ export function SignatureMaker({
     if (activeTab === "text") {
       onConfirm(textValue);
     } else if (activeTab === "type" && svgData) {
-      onConfirm(name);
+      onConfirm(
+        encodeSignatureVector({
+          kind: "signature-vector",
+          name,
+          pathData: svgData.pathData,
+          viewBox: svgData.viewBox,
+          width: Number(svgData.viewBox.split(" ")[2] || 0),
+          height: Number(svgData.viewBox.split(" ")[3] || 0),
+          fontIndex,
+        }),
+      );
     } else if (activeTab === "draw" && sigCanvas.current) {
       if (!sigCanvas.current.isEmpty()) {
         onConfirm(sigCanvas.current.getTrimmedCanvas().toDataURL("image/png"));
@@ -104,20 +124,20 @@ export function SignatureMaker({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl border-none shadow-2xl p-0 overflow-hidden">
-        <DialogHeader className="p-6 bg-muted/30 border-b border-border">
-          <DialogTitle className="text-2xl font-black tracking-tighter uppercase italic">
+      <DialogContent className="max-w-3xl overflow-hidden rounded-none border border-border bg-background p-0 shadow-2xl">
+        <DialogHeader className="border-b border-border bg-muted/40 p-6">
+          <DialogTitle className="font-mono text-xs font-semibold uppercase tracking-widest">
             {type === "text" ? "Input Text" : "Signature Maker"}
           </DialogTitle>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="px-6 pt-4">
-            <TabsList className="grid w-full grid-cols-3 bg-muted/50 p-1">
+            <TabsList className="grid w-full grid-cols-3 bg-muted/70">
               {type === "text" ? (
                 <TabsTrigger
                   value="text"
-                  className="font-bold uppercase tracking-widest text-[10px] col-span-3"
+                  className="col-span-3 text-xs font-semibold"
                 >
                   <AlignLeft className="w-3 h-3 mr-2" /> Text Input
                 </TabsTrigger>
@@ -125,19 +145,19 @@ export function SignatureMaker({
                 <>
                   <TabsTrigger
                     value="type"
-                    className="font-bold uppercase tracking-widest text-[10px]"
+                    className="text-xs font-semibold"
                   >
                     <Type className="w-3 h-3 mr-2" /> Type
                   </TabsTrigger>
                   <TabsTrigger
                     value="draw"
-                    className="font-bold uppercase tracking-widest text-[10px]"
+                    className="text-xs font-semibold"
                   >
                     <Pencil className="w-3 h-3 mr-2" /> Draw
                   </TabsTrigger>
                   <TabsTrigger
                     value="upload"
-                    className="font-bold uppercase tracking-widest text-[10px]"
+                    className="text-xs font-semibold"
                   >
                     <Upload className="w-3 h-3 mr-2" /> Upload
                   </TabsTrigger>
@@ -146,9 +166,33 @@ export function SignatureMaker({
             </TabsList>
           </div>
 
-          <div className="p-6 h-[350px] flex flex-col justify-center">
+          <div className="flex min-h-[380px] flex-col justify-center p-6">
             {type === "text" ? (
               <TabsContent value="text" className="mt-0 space-y-4">
+                {textSuggestions.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="font-mono text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                      Use signer detail
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {textSuggestions.map((suggestion) => (
+                        <button
+                          key={`${suggestion.label}-${suggestion.value}`}
+                          type="button"
+                          className="border border-border bg-muted/30 p-3 text-left transition-colors hover:bg-muted"
+                          onClick={() => setTextValue(suggestion.value)}
+                        >
+                          <span className="block font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                            {suggestion.label}
+                          </span>
+                          <span className="mt-1 block truncate text-sm font-medium text-foreground">
+                            {suggestion.value}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                     Enter text for this field
@@ -158,7 +202,7 @@ export function SignatureMaker({
                     value={textValue}
                     onChange={(e) => setTextValue(e.target.value)}
                     autoFocus
-                    className="text-lg h-14 border-4 border-primary focus-visible:ring-0 focus-visible:border-primary shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] rounded-none font-medium"
+                    className="h-12 border-border bg-muted/40 text-base font-medium focus-visible:border-primary focus-visible:ring-primary/20"
                   />
                 </div>
               </TabsContent>
@@ -169,15 +213,15 @@ export function SignatureMaker({
                     placeholder="Type your name..."
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="text-lg h-12 border-2 focus-visible:ring-0 focus-visible:border-primary transition-all font-medium"
+                    className="h-12 border-border bg-muted/40 text-lg font-medium transition-all focus-visible:border-primary focus-visible:ring-primary/20"
                   />
 
                   <div className="relative group">
-                    <div className="h-40 flex items-center justify-center border-4 border-primary bg-background relative overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="relative flex h-44 items-center justify-center overflow-hidden border border-border bg-[linear-gradient(to_bottom,#fff_0%,#fff_62%,#f3f0e8_62%,#f3f0e8_63%,#fff_63%)] shadow-sm">
                       {isLoading ? (
                         <Loader2 className="w-8 h-8 animate-spin text-primary" />
                       ) : svgData ? (
-                        <div className="flex items-center space-x-4 w-full px-12">
+                        <div className="flex w-full items-center gap-4 px-8">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -187,17 +231,19 @@ export function SignatureMaker({
                           >
                             <ChevronLeft />
                           </Button>
-                          <div className="flex-1 flex justify-center">
+                          <div className="flex flex-1 justify-center text-foreground">
                             <svg
                               viewBox={svgData.viewBox}
                               className="max-h-full max-w-full"
-                              style={{ height: "100px" }}
+                              style={{ height: "116px" }}
                             >
                               <path
                                 d={svgData.pathData}
                                 fill="none"
                                 stroke="currentColor"
-                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2.3"
                                 className="signature-path"
                               />
                             </svg>
@@ -213,19 +259,20 @@ export function SignatureMaker({
                           </Button>
                         </div>
                       ) : (
-                        <p className="text-muted-foreground italic font-mono uppercase tracking-widest text-xs">
-                          Waiting for input...
-                        </p>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Sparkles className="size-4" />
+                          Type a legal name to preview a vector signature
+                        </div>
                       )}
                     </div>
-                    <div className="absolute -bottom-3 right-4 bg-primary text-primary-foreground px-2 py-1 text-[8px] font-black uppercase tracking-tighter italic">
-                      Font Style: {fontIndex + 1}
+                    <div className="absolute -bottom-3 right-4 border border-border bg-background px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground shadow-sm">
+                      Style {fontIndex + 1}
                     </div>
                   </div>
                 </TabsContent>
 
                 <TabsContent value="draw" className="mt-0">
-                  <div className="border-4 border-primary bg-white overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative">
+                  <div className="relative overflow-hidden border border-border bg-white shadow-sm">
                     <SignatureCanvas
                       ref={sigCanvas}
                       penColor="black"
@@ -243,12 +290,12 @@ export function SignatureMaker({
                       variant="link"
                       size="sm"
                       onClick={() => sigCanvas.current?.clear()}
-                      className="p-0 text-[10px] uppercase tracking-widest font-black"
+                      className="p-0 text-xs font-semibold"
                     >
                       Clear Canvas
                     </Button>
-                    <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-widest">
-                      Pressure Sensitive Active
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Smooth pressure-sensitive drawing
                     </p>
                   </div>
                 </TabsContent>
@@ -259,16 +306,16 @@ export function SignatureMaker({
                 >
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-4 border-dashed border-primary bg-muted/30 hover:bg-muted/50 transition-all cursor-pointer h-[250px] flex flex-col items-center justify-center space-y-4"
+                    className="flex h-[250px] cursor-pointer flex-col items-center justify-center space-y-4 border border-dashed border-border bg-muted/30 transition-all hover:bg-muted/50"
                   >
-                    <div className="bg-primary text-primary-foreground p-4">
+                    <div className="bg-primary p-4 text-primary-foreground">
                       <Upload className="w-8 h-8" />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs font-black uppercase tracking-widest">
-                        Drop signature image
+                      <p className="text-sm font-semibold">
+                        Upload a signature image
                       </p>
-                      <p className="text-[10px] text-muted-foreground font-mono uppercase">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                         PNG or JPG preferred
                       </p>
                     </div>
@@ -286,17 +333,17 @@ export function SignatureMaker({
           </div>
         </Tabs>
 
-        <div className="p-6 bg-muted/30 border-t border-border flex justify-end space-x-3">
+        <div className="flex justify-end gap-3 border-t border-border bg-muted/30 p-6">
           <Button
             variant="ghost"
             onClick={onClose}
-            className="font-black uppercase tracking-widest text-xs"
+            className="font-semibold"
           >
             Cancel
           </Button>
           <Button
             onClick={handleConfirm}
-            className="font-black uppercase tracking-widest text-xs px-12 h-12 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all"
+            className="h-10 px-8 font-semibold"
             disabled={isLoading}
           >
             Confirm {type === "text" ? "Entry" : "Signature"}
