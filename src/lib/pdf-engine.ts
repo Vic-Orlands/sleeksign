@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
 import { format } from "date-fns";
+import { decodeSignatureVector } from "@/lib/field-utils";
 
 export async function finalizeDocument(sessionId: string) {
   const session = await db.query.sessions.findFirst({
@@ -35,9 +36,7 @@ export async function finalizeDocument(sessionId: string) {
     where: eq(signatures.sessionId, sessionId),
   });
 
-  const fontPath = path.join(process.cwd(), "public/fonts/signature.ttf");
-  const fontBytes = await fs.readFile(fontPath);
-  const sleekFont = await pdfDoc.embedFont(fontBytes);
+  const fallbackSignatureFont = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
   for (const field of docFields) {
     const signature = sessionSignatures.find((s) => s.fieldId === field.id);
@@ -58,7 +57,19 @@ export async function finalizeDocument(sessionId: string) {
     const height = (field.height / 100) * pageHeight;
 
     if (field.type === "signature") {
-      if (signature.value.startsWith("data:image")) {
+      const vector = decodeSignatureVector(signature.value);
+      if (vector) {
+        const viewBox = vector.viewBox.split(" ").map(Number);
+        const [, , svgWidth, svgHeight] = viewBox;
+        const scale = Math.min(width / svgWidth, height / svgHeight) || 1;
+        page.drawSvgPath(vector.pathData, {
+          x: x + (width - svgWidth * scale) / 2 - viewBox[0] * scale,
+          y: y + (height - svgHeight * scale) / 2 - viewBox[1] * scale,
+          scale,
+          borderColor: rgb(0, 0, 0),
+          borderWidth: 1,
+        });
+      } else if (signature.value.startsWith("data:image")) {
         const imageBytes = Buffer.from(signature.value.split(",")[1], "base64");
         const image = signature.value.includes("image/png")
           ? await pdfDoc.embedPng(imageBytes)
@@ -75,7 +86,7 @@ export async function finalizeDocument(sessionId: string) {
           x: x + 5,
           y: y + height / 4,
           size: Math.min(height, 32),
-          font: sleekFont,
+          font: fallbackSignatureFont,
           color: rgb(0, 0, 0),
         });
       }

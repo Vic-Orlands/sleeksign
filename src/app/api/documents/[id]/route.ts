@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { documents, sessions, fields } from "@/db/schema";
+import { documents, fields } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -18,7 +18,11 @@ export async function GET(
   });
 
   if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(doc);
+  return NextResponse.json(doc, {
+    headers: {
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
 export async function POST(
@@ -42,15 +46,12 @@ export async function POST(
     });
 
     return NextResponse.json({ id: fieldId });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to add field" }, { status: 500 });
   }
 }
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function PATCH(req: NextRequest) {
   try {
     const { fieldId, x, y, width, height } = await req.json();
     await db
@@ -58,7 +59,7 @@ export async function PATCH(
       .set({ x, y, width, height })
       .where(eq(fields.id, fieldId));
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to update field" },
       { status: 500 },
@@ -66,16 +67,12 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function DELETE(req: NextRequest) {
   try {
-    const { id } = await params;
     const { fieldId } = await req.json();
     await db.delete(fields).where(eq(fields.id, fieldId));
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to delete field" },
       { status: 500 },
@@ -83,8 +80,6 @@ export async function DELETE(
   }
 }
 
-// Add a "Save as Template" method (Simplified: using sessions table or a new templates table)
-// For V2, we can just use doc.isTemplate = true
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },

@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ sessionId, type: "COMPLETED" }),
     }).catch(console.error);
 
-    return NextResponse.json({ url: finalUrl });
+    return NextResponse.json({ url: finalUrl, status: "completed" });
   } catch (error) {
     console.error("Finalization error:", error);
     return NextResponse.json(

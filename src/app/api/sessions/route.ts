@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ sessionId });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to create session" },
       { status: 500 },
@@ -58,7 +58,11 @@ export async function GET(req: NextRequest) {
       .where(eq(sessions.id, sessionId));
   }
 
-  return NextResponse.json(session);
+  return NextResponse.json(session, {
+    headers: {
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
 export async function PATCH(req: NextRequest) {
