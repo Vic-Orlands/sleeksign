@@ -15,7 +15,12 @@ export function SignatureValue({
 
   if (vector) {
     return (
-      <svg viewBox={vector.viewBox} className={className} aria-label={vector.name}>
+      <svg
+        viewBox={vector.viewBox}
+        preserveAspectRatio="xMidYMid meet"
+        className={cn("block h-full w-full", className)}
+        aria-label={vector.name}
+      >
         <path
           d={vector.pathData}
           fill="none"
