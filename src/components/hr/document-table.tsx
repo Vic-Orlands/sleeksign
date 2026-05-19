@@ -1,10 +1,11 @@
 "use client"
 
 import { format } from "date-fns"
-import { FileTextIcon } from "lucide-react"
+import { FileTextIcon, Trash2Icon } from "lucide-react"
 
 import { StatusBadge } from "@/components/hr/status-badge"
 import { DocumentRecord, getDocumentCounts, getDocumentSetupStatus, getDocumentType } from "@/components/hr/types"
+import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 
@@ -12,11 +13,13 @@ function DocumentTable({
   documents,
   selectedDocumentId,
   onSelectDocument,
+  onDeleteDocument,
   variant = "documents",
 }: {
   documents: DocumentRecord[]
   selectedDocumentId?: string
   onSelectDocument: (document: DocumentRecord) => void
+  onDeleteDocument?: (document: DocumentRecord) => void
   variant?: "documents" | "shared"
 }) {
   return (
@@ -29,6 +32,7 @@ function DocumentTable({
           <TableHead>Fields</TableHead>
           {variant === "shared" ? <TableHead>Signatures</TableHead> : null}
           <TableHead>Last Updated</TableHead>
+          {onDeleteDocument ? <TableHead className="w-12 text-right">Actions</TableHead> : null}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -73,6 +77,22 @@ function DocumentTable({
                   <p className="uppercase tracking-widest text-muted-foreground">by HR Admin</p>
                 </div>
               </TableCell>
+              {onDeleteDocument ? (
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:bg-red-500/10 hover:text-red-300"
+                    aria-label={`Delete ${document.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onDeleteDocument(document)
+                    }}
+                  >
+                    <Trash2Icon />
+                  </Button>
+                </TableCell>
+              ) : null}
             </TableRow>
           )
         })}

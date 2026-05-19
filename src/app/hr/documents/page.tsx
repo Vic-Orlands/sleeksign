@@ -13,7 +13,16 @@ import { StatusBadge } from "@/components/hr/status-badge"
 import type { DocumentRecord, DocumentSetupStatus, SessionRecord } from "@/components/hr/types"
 import { getDocumentSetupStatus, getDocumentStatus } from "@/components/hr/types"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useCurrentWorkspaceId } from "@/lib/workspace-store"
 
 type TableFilter = "all" | "shared" | "signers" | DocumentSetupStatus
 
@@ -22,13 +31,27 @@ export default function HRDocuments() {
   const [query, setQuery] = useState("")
   const [tableFilter, setTableFilter] = useState<TableFilter>("all")
   const [isLoading, setIsLoading] = useState(true)
+  const [documentToDelete, setDocumentToDelete] = useState<DocumentRecord | null>(null)
+  const workspaceId = useCurrentWorkspaceId()
   const router = useRouter()
 
   useEffect(() => {
-    fetchDocuments()
-    const interval = window.setInterval(() => fetchDocuments({ background: true }), 5000)
+    function loadDocuments(options?: { background?: boolean }) {
+      if (!options?.background) setIsLoading(true)
+      fetch(`/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`)
+        .then((res) => res.json())
+        .then((data: DocumentRecord[]) => {
+          setDocuments(data)
+        })
+        .finally(() => {
+          if (!options?.background) setIsLoading(false)
+        })
+    }
+
+    loadDocuments()
+    const interval = window.setInterval(() => loadDocuments({ background: true }), 5000)
     return () => window.clearInterval(interval)
-  }, [])
+  }, [workspaceId])
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -39,7 +62,7 @@ export default function HRDocuments() {
 
   function fetchDocuments(options?: { background?: boolean }) {
     if (!options?.background) setIsLoading(true)
-    fetch("/api/documents")
+    fetch(`/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`)
       .then((res) => res.json())
       .then((data: DocumentRecord[]) => {
         setDocuments(data)
@@ -83,6 +106,12 @@ export default function HRDocuments() {
   async function handleUpload(file: File) {
     const formData = new FormData()
     formData.append("file", file)
+    formData.append("workspaceId", workspaceId)
+
+    if (!workspaceId) {
+      toast.error("Select or create a workspace before uploading")
+      return
+    }
 
     try {
       const res = await fetch("/api/upload", {
@@ -99,19 +128,40 @@ export default function HRDocuments() {
     }
   }
 
+  async function deleteDocument() {
+    if (!documentToDelete) return
+
+    try {
+      const res = await fetch(`/api/documents/${documentToDelete.id}`, {
+        method: "DELETE",
+      })
+      if (!res.ok) throw new Error("Delete failed")
+      toast.success("Document deleted")
+      setDocumentToDelete(null)
+      await fetchDocuments()
+    } catch {
+      toast.error("Failed to delete document")
+    }
+  }
+
   return (
-    <HrShell
-      query={query}
-      onQueryChange={setQuery}
-      onUpload={handleUpload}
-      activeView={tableFilter === "shared" ? "shared" : tableFilter === "signers" ? "signers" : "documents"}
-      onSharedActivityClick={() => setTableFilter("shared")}
-      onSignersClick={() => setTableFilter("signers")}
-      pendingCount={pendingCount}
-      inProgressCount={inProgressCount}
-      completedCount={completedCount}
-    >
-      <section className="min-h-0 overflow-auto bg-[var(--paper)]">
+    <>
+      <HrShell
+        query={query}
+        onQueryChange={setQuery}
+        onUpload={handleUpload}
+        activeView={tableFilter === "shared" ? "shared" : tableFilter === "signers" ? "signers" : "documents"}
+        onSharedActivityClick={() => setTableFilter("shared")}
+        onSignersClick={() => setTableFilter("signers")}
+        onDocumentsClick={() => {
+          setTableFilter("all")
+          router.push("/hr/documents")
+        }}
+        pendingCount={pendingCount}
+        inProgressCount={inProgressCount}
+        completedCount={completedCount}
+      >
+        <section className="min-h-0 overflow-auto bg-[var(--paper)]">
         <div className="flex flex-col gap-4 border-b border-border bg-background px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="font-mono text-xs font-semibold uppercase tracking-widest">
@@ -120,7 +170,9 @@ export default function HRDocuments() {
             <p className="mt-1 font-mono text-[11px] text-muted-foreground">
               {tableFilter === "signers"
                 ? `${filteredSigners.length} of ${signerRows.length} signers`
-                : `${filteredDocuments.length} of ${documents.length} documents`}
+                : workspaceId
+                  ? `${filteredDocuments.length} of ${documents.length} documents`
+                  : "Select a workspace to view documents"}
             </p>
           </div>
           {tableFilter === "signers" ? (
@@ -150,6 +202,10 @@ export default function HRDocuments() {
           </div>
         ) : tableFilter === "signers" ? (
           <SignerTable sessions={filteredSigners} />
+        ) : !workspaceId ? (
+          <div className="mx-5 my-5 flex h-52 items-center justify-center border border-dashed border-border bg-card px-4 text-center font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            Select or create a workspace from the account menu.
+          </div>
         ) : filteredDocuments.length === 0 ? (
           <div className="mx-5 my-5 flex h-52 items-center justify-center border border-dashed border-border bg-card font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             No documents match this search.
@@ -160,11 +216,35 @@ export default function HRDocuments() {
               documents={filteredDocuments}
               variant={tableFilter === "shared" ? "shared" : "documents"}
               onSelectDocument={(document) => router.push(`/hr/documents/${document.id}`)}
+              onDeleteDocument={tableFilter === "shared" ? undefined : setDocumentToDelete}
             />
           </div>
         )}
-      </section>
-    </HrShell>
+        </section>
+      </HrShell>
+
+      <Dialog open={Boolean(documentToDelete)} onOpenChange={(open) => !open && setDocumentToDelete(null)}>
+        <DialogContent className="rounded-none border-border bg-popover shadow-sm">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-xs uppercase tracking-widest">Delete document?</DialogTitle>
+            <DialogDescription>
+              This will remove the document, setup fields, signer sessions, and signatures from SleekSign.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="border border-border bg-background p-3 text-sm">
+            {documentToDelete?.name}
+          </div>
+          <DialogFooter className="rounded-none border-border">
+            <Button variant="outline" onClick={() => setDocumentToDelete(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={deleteDocument}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

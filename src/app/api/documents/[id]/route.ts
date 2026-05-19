@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { documents, fields } from "@/db/schema";
+import { documents, fields, sessions, signatures } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -67,14 +67,35 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-export async function DELETE(req: NextRequest) {
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
-    const { fieldId } = await req.json();
-    await db.delete(fields).where(eq(fields.id, fieldId));
+    const { id } = await params;
+    const body = await req.json().catch(() => ({}));
+
+    if (body.fieldId) {
+      await db.delete(fields).where(eq(fields.id, body.fieldId));
+      return NextResponse.json({ success: true });
+    }
+
+    const docSessions = await db.query.sessions.findMany({
+      where: eq(sessions.documentId, id),
+    });
+
+    for (const session of docSessions) {
+      await db.delete(signatures).where(eq(signatures.sessionId, session.id));
+    }
+
+    await db.delete(sessions).where(eq(sessions.documentId, id));
+    await db.delete(fields).where(eq(fields.documentId, id));
+    await db.delete(documents).where(eq(documents.id, id));
+
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json(
-      { error: "Failed to delete field" },
+      { error: "Failed to delete" },
       { status: 500 },
     );
   }
