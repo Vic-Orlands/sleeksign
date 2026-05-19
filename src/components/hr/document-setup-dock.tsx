@@ -33,10 +33,10 @@ const fieldIconMap = {
 };
 
 const fieldToneMap = {
-  signature: "border-blue-500/60 bg-blue-50/95 text-blue-950 dark:bg-blue-500/15 dark:text-blue-200",
-  text: "border-emerald-500/60 bg-emerald-50/95 text-emerald-950 dark:bg-emerald-500/15 dark:text-emerald-200",
-  date: "border-amber-500/60 bg-amber-50/95 text-amber-950 dark:bg-amber-500/15 dark:text-amber-200",
-  checkbox: "border-violet-500/60 bg-violet-50/95 text-violet-950 dark:bg-violet-500/15 dark:text-violet-200",
+  signature: "border-blue-500/60 bg-blue-50/95 text-blue-950 dark:bg-blue-200/90 dark:text-blue-950",
+  text: "border-emerald-500/60 bg-emerald-50/95 text-emerald-950 dark:bg-emerald-200/90 dark:text-emerald-950",
+  date: "border-amber-500/60 bg-amber-50/95 text-amber-950 dark:bg-amber-200/90 dark:text-amber-950",
+  checkbox: "border-violet-500/60 bg-violet-50/95 text-violet-950 dark:bg-violet-200/90 dark:text-violet-950",
 };
 
 function DocumentSetupDock({
