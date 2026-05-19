@@ -35,7 +35,7 @@ function DocumentDetailPanel({
   const status = getDocumentStatus(document)
 
   return (
-    <aside className="grid h-full min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] bg-card">
+    <aside className="grid h-full min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-x-hidden bg-card">
       <div className="border-b border-border p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -51,8 +51,8 @@ function DocumentDetailPanel({
       </div>
 
       <div className="min-h-0 overflow-auto p-4">
-        <Tabs defaultValue="overview" className="flex flex-col gap-4">
-          <TabsList className="grid grid-cols-4">
+        <Tabs defaultValue="overview" className="min-w-0 flex flex-col gap-4">
+          <TabsList className="grid w-full min-w-0 grid-cols-2 sm:grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="link">Link</TabsTrigger>
             <TabsTrigger value="activity">Activity</TabsTrigger>
@@ -83,10 +83,11 @@ function DocumentDetailPanel({
           <TabsContent value="link" className="m-0 flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <label className="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Share Link</label>
-              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                 <Input value={publicUrl} readOnly className="min-w-0 font-mono text-xs" />
                 <Button
                   variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={() => {
                     navigator.clipboard.writeText(publicUrl)
                     toast.success("Share link copied")

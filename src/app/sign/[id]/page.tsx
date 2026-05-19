@@ -50,17 +50,17 @@ const fieldIcons = {
 };
 
 const emptyFieldTones = {
-  signature: "border-blue-500/70 bg-blue-50/95 text-blue-950 shadow-[0_0_0_4px_rgba(59,130,246,0.08)] hover:bg-blue-100/90 dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-500/20",
-  text: "border-emerald-500/70 bg-emerald-50/95 text-emerald-950 shadow-[0_0_0_4px_rgba(16,185,129,0.08)] hover:bg-emerald-100/90 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/20",
-  date: "border-amber-500/70 bg-amber-50/95 text-amber-950 shadow-[0_0_0_4px_rgba(245,158,11,0.1)] hover:bg-amber-100/90 dark:bg-amber-500/15 dark:text-amber-200 dark:hover:bg-amber-500/20",
-  checkbox: "border-violet-500/70 bg-violet-50/95 text-violet-950 shadow-[0_0_0_4px_rgba(139,92,246,0.08)] hover:bg-violet-100/90 dark:bg-violet-500/15 dark:text-violet-200 dark:hover:bg-violet-500/20",
+  signature: "border-blue-500/70 bg-blue-50/95 text-zinc-950 shadow-[0_0_0_4px_rgba(59,130,246,0.08)] hover:bg-blue-100/90 dark:bg-blue-200/90 dark:text-zinc-950 dark:hover:bg-blue-300/90",
+  text: "border-emerald-500/70 bg-emerald-50/95 text-zinc-950 shadow-[0_0_0_4px_rgba(16,185,129,0.08)] hover:bg-emerald-100/90 dark:bg-emerald-200/90 dark:text-zinc-950 dark:hover:bg-emerald-300/90",
+  date: "border-amber-500/70 bg-amber-50/95 text-zinc-950 shadow-[0_0_0_4px_rgba(245,158,11,0.1)] hover:bg-amber-100/90 dark:bg-amber-200/90 dark:text-zinc-950 dark:hover:bg-amber-300/90",
+  checkbox: "border-violet-500/70 bg-violet-50/95 text-zinc-950 shadow-[0_0_0_4px_rgba(139,92,246,0.08)] hover:bg-violet-100/90 dark:bg-violet-200/90 dark:text-zinc-950 dark:hover:bg-violet-300/90",
 };
 
 const completedFieldTones = {
-  signature: "border-blue-600 bg-blue-50/95 text-blue-950 dark:border-blue-400 dark:bg-blue-500/15 dark:text-blue-100",
-  text: "border-emerald-600 bg-emerald-50/95 text-emerald-950 dark:border-emerald-400 dark:bg-emerald-500/15 dark:text-emerald-100",
-  date: "border-amber-600 bg-amber-50/95 text-amber-950 dark:border-amber-400 dark:bg-amber-500/15 dark:text-amber-100",
-  checkbox: "border-violet-600 bg-violet-50/95 text-violet-950 dark:border-violet-400 dark:bg-violet-500/15 dark:text-violet-100",
+  signature: "border-blue-600 bg-blue-50/95 text-zinc-950 dark:border-blue-400 dark:bg-blue-200/90 dark:text-zinc-950",
+  text: "border-emerald-600 bg-emerald-50/95 text-zinc-950 dark:border-emerald-400 dark:bg-emerald-200/90 dark:text-zinc-950",
+  date: "border-amber-600 bg-amber-50/95 text-zinc-950 dark:border-amber-400 dark:bg-amber-200/90 dark:text-zinc-950",
+  checkbox: "border-violet-600 bg-violet-50/95 text-zinc-950 dark:border-violet-400 dark:bg-violet-200/90 dark:text-zinc-950",
 };
 
 export default function SignerPortal() {
@@ -257,7 +257,7 @@ export default function SignerPortal() {
                         field.type === "checkbox" ? (
                           <Check className="size-4" />
                         ) : field.type === "signature" ? (
-                          <SignatureValue value={value} className="max-h-full max-w-full object-contain px-2" />
+                          <SignatureValue value={value} className="h-full w-full px-2 py-1" />
                         ) : (
                           <span className="truncate px-2 text-xs font-semibold">{value}</span>
                         )
