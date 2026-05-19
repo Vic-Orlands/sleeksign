@@ -9,9 +9,14 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
+    const workspaceId = String(formData.get("workspaceId") || "");
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+    }
+
+    if (!workspaceId) {
+      return NextResponse.json({ error: 'No workspace selected' }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -26,6 +31,7 @@ export async function POST(req: NextRequest) {
       id: docId,
       name: file.name,
       fileUrl: `/uploads/${fileName}`,
+      workspaceId,
     });
 
     return NextResponse.json({ id: docId, name: file.name, url: `/uploads/${fileName}` });
