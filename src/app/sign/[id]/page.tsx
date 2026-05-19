@@ -49,6 +49,20 @@ const fieldIcons = {
   checkbox: CheckSquare,
 };
 
+const emptyFieldTones = {
+  signature: "border-blue-500/70 bg-blue-50/95 text-blue-950 shadow-[0_0_0_4px_rgba(59,130,246,0.08)] hover:bg-blue-100/90 dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-500/20",
+  text: "border-emerald-500/70 bg-emerald-50/95 text-emerald-950 shadow-[0_0_0_4px_rgba(16,185,129,0.08)] hover:bg-emerald-100/90 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/20",
+  date: "border-amber-500/70 bg-amber-50/95 text-amber-950 shadow-[0_0_0_4px_rgba(245,158,11,0.1)] hover:bg-amber-100/90 dark:bg-amber-500/15 dark:text-amber-200 dark:hover:bg-amber-500/20",
+  checkbox: "border-violet-500/70 bg-violet-50/95 text-violet-950 shadow-[0_0_0_4px_rgba(139,92,246,0.08)] hover:bg-violet-100/90 dark:bg-violet-500/15 dark:text-violet-200 dark:hover:bg-violet-500/20",
+};
+
+const completedFieldTones = {
+  signature: "border-blue-600 bg-blue-50/95 text-blue-950 dark:border-blue-400 dark:bg-blue-500/15 dark:text-blue-100",
+  text: "border-emerald-600 bg-emerald-50/95 text-emerald-950 dark:border-emerald-400 dark:bg-emerald-500/15 dark:text-emerald-100",
+  date: "border-amber-600 bg-amber-50/95 text-amber-950 dark:border-amber-400 dark:bg-amber-500/15 dark:text-amber-100",
+  checkbox: "border-violet-600 bg-violet-50/95 text-violet-950 dark:border-violet-400 dark:bg-violet-500/15 dark:text-violet-100",
+};
+
 export default function SignerPortal() {
   const { id } = useParams<{ id: string }>();
   const [session, setSession] = useState<SessionRecord | null>(null);
@@ -208,11 +222,11 @@ export default function SignerPortal() {
       </header>
 
       <main className="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_280px]">
-        <section className="sleek-grid min-h-0 overflow-auto bg-[#121214] px-6 py-8 md:px-10">
+        <section className="sleek-grid min-h-0 overflow-auto bg-zinc-100 px-6 py-8 dark:bg-[#121214] md:px-10">
           <PdfCanvasViewer
             fileUrl={session.document.fileUrl}
             className="mx-auto w-full max-w-[840px]"
-            pageClassName="relative border-t-8 border-[#3f3f46] bg-white shadow-2xl ring-1 ring-black/10"
+            pageClassName="relative border-t-8 border-zinc-300 bg-white shadow-xl ring-1 ring-black/10 dark:border-[#3f3f46] dark:shadow-2xl"
             renderOverlay={(pageIndex, metrics) =>
               fields
                 .filter((field) => field.page === pageIndex)
@@ -236,9 +250,7 @@ export default function SignerPortal() {
                         height: `${(field.height / 100) * metrics.height}px`,
                       }}
                       className={`absolute flex items-center justify-center border text-center transition ${
-                        isComplete
-                          ? "border-emerald-500 bg-emerald-50/85 text-emerald-700"
-                          : "border-blue-500 bg-blue-500/10 text-blue-500 shadow-[0_0_0_4px_rgba(59,130,246,0.06)] hover:bg-blue-500/15"
+                        isComplete ? completedFieldTones[field.type] : emptyFieldTones[field.type]
                       }`}
                     >
                       {isComplete ? (

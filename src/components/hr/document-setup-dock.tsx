@@ -32,6 +32,13 @@ const fieldIconMap = {
   checkbox: CheckSquareIcon,
 };
 
+const fieldToneMap = {
+  signature: "border-blue-500/60 bg-blue-50/95 text-blue-950 dark:bg-blue-500/15 dark:text-blue-200",
+  text: "border-emerald-500/60 bg-emerald-50/95 text-emerald-950 dark:bg-emerald-500/15 dark:text-emerald-200",
+  date: "border-amber-500/60 bg-amber-50/95 text-amber-950 dark:bg-amber-500/15 dark:text-amber-200",
+  checkbox: "border-violet-500/60 bg-violet-50/95 text-violet-950 dark:bg-violet-500/15 dark:text-violet-200",
+};
+
 function DocumentSetupDock({
   document,
   onFieldsChange,
@@ -159,12 +166,12 @@ function DocumentSetupDock({
 
       <section className="grid min-h-107.5 grid-rows-[auto_minmax(0,1fr)_auto] lg:min-h-0">
         <EditorToolbar zoom={zoom} onZoomChange={setZoom} isSaving={isSaving} />
-        <div className="sleek-grid min-h-0 overflow-auto bg-[#121214] p-3 sm:p-6">
+        <div className="sleek-grid min-h-0 overflow-auto bg-zinc-100 p-3 dark:bg-[#121214] sm:p-6">
           <PdfCanvasViewer
             fileUrl={document.fileUrl}
             maxPageWidth={Math.max(320, zoom * 8)}
             className="mx-auto w-full max-w-190"
-            pageClassName="relative border-t-8 border-[#3f3f46] bg-white shadow-2xl ring-1 ring-black/10"
+            pageClassName="relative border-t-8 border-zinc-300 bg-white shadow-xl ring-1 ring-black/10 dark:border-[#3f3f46] dark:shadow-2xl"
             onPageClick={addField}
             renderOverlay={(pageIndex, metrics) =>
               fields
@@ -203,15 +210,8 @@ function DocumentSetupDock({
                         });
                       }}
                       className={cn(
-                        "group flex items-center justify-center border border-dashed bg-background/75 text-primary shadow-sm backdrop-blur-sm",
-                        field.type === "signature" &&
-                          "border-blue-500/60 bg-blue-500/10 text-blue-300",
-                        field.type === "text" &&
-                          "border-emerald-500/60 bg-emerald-500/10 text-emerald-300",
-                        field.type === "date" &&
-                          "border-amber-500/60 bg-amber-500/10 text-amber-300",
-                        field.type === "checkbox" &&
-                          "border-purple-500/60 bg-purple-500/10 text-purple-300",
+                        "group flex items-center justify-center border border-dashed shadow-sm backdrop-blur-sm",
+                        fieldToneMap[field.type],
                         selectedFieldId === field.id && "ring-2 ring-primary",
                       )}
                     >
