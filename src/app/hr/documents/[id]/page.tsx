@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Field } from "@/lib/field-utils";
+import { uploadDocument } from "@/lib/upload-document";
+import { useCurrentWorkspaceId } from "@/lib/workspace-store";
 
 export default function HRDocumentPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,26 +26,67 @@ export default function HRDocumentPage() {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
+  const [uploadingDocumentName, setUploadingDocumentName] = useState<string | null>(null);
+  const workspaceId = useCurrentWorkspaceId();
+
+  function normalizeDocuments(data: unknown) {
+    return Array.isArray(data) ? (data as DocumentRecord[]) : [];
+  }
+
+  function delay(ms: number) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchWorkspace() {
       setIsLoading(true);
       try {
-        const [documentsRes, documentRes] = await Promise.all([
-          fetch("/api/documents"),
-          fetch(`/api/documents/${id}`),
+        const [documentsRes] = await Promise.all([
+          fetch(
+            workspaceId
+              ? `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`
+              : "/api/documents",
+          ),
         ]);
         const documentsData = await documentsRes.json();
-        const documentData = documentRes.ok ? await documentRes.json() : null;
-        setDocuments(documentsData);
+
+        let documentData: DocumentRecord | null = null;
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const documentRes = await fetch(`/api/documents/${id}`, {
+            cache: "no-store",
+          });
+          if (documentRes.ok) {
+            documentData = await documentRes.json();
+            break;
+          }
+
+          await delay(180 * (attempt + 1));
+        }
+
+        if (cancelled) return;
+
+        setDocuments(normalizeDocuments(documentsData));
         setDocument(documentData);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
-    fetchWorkspace();
-  }, [id]);
+    fetchWorkspace().catch(() => {
+      if (!cancelled) {
+        setDocument(null);
+        setIsLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, workspaceId]);
 
   const allSessions = documents.flatMap((item) => item.sessions || []);
   const completedCount = allSessions.filter(
@@ -57,20 +100,20 @@ export default function HRDocumentPage() {
   ).length;
 
   async function handleUpload(file: File) {
-    const formData = new FormData();
-    formData.append("file", file);
+    if (!workspaceId) {
+      toast.error("Select or create a workspace before uploading");
+      return;
+    }
+
+    setUploadingDocumentName(file.name);
 
     try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (!data.id) throw new Error("Upload failed");
+      const data = await uploadDocument(file, workspaceId);
       toast.success("Document uploaded");
       router.push(`/hr/documents/${data.id}`);
-    } catch {
-      toast.error("Upload failed");
+    } catch (error) {
+      setUploadingDocumentName(null);
+      toast.error(error instanceof Error ? error.message : "Upload failed");
     }
   }
 
@@ -90,6 +133,12 @@ export default function HRDocumentPage() {
       query={query}
       onQueryChange={setQuery}
       onUpload={handleUpload}
+      actionOverlay={{
+        visible: Boolean(uploadingDocumentName),
+        title: "Uploading document",
+        documentName: uploadingDocumentName || undefined,
+        detail: "Preparing for setup.",
+      }}
       headerMode="none"
       pendingCount={pendingCount}
       inProgressCount={inProgressCount}
