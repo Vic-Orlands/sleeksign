@@ -21,6 +21,7 @@ import { authClient } from "@/lib/auth-client"
 type AuthPanelProps = {
   mode: AuthMode
   token?: string
+  nextPath?: string
 }
 
 type AuthMode = "signin" | "signup" | "forgot" | "reset"
@@ -48,13 +49,14 @@ const authContent: Record<AuthMode, { eyebrow: string; title: string; copy: stri
   },
 }
 
-function AuthPanel({ mode, token }: AuthPanelProps) {
+function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
   const router = useRouter()
   const [displayMode, setDisplayMode] = React.useState(mode)
   const isSignUp = displayMode === "signup"
   const isSignIn = displayMode === "signin"
   const isForgot = displayMode === "forgot"
   const isReset = displayMode === "reset"
+  const isInvitationFlow = Boolean(nextPath?.startsWith("/accept-invitation/"))
   const content = authContent[displayMode]
   const springTransition = { type: "spring", stiffness: 420, damping: 34 } as const
 
@@ -68,8 +70,9 @@ function AuthPanel({ mode, token }: AuthPanelProps) {
   }, [])
 
   function navigate(href: string) {
+    const nextHref = appendNextPath(href, nextPath)
     setDisplayMode(getModeFromPath(href))
-    window.history.pushState(null, "", href)
+    window.history.pushState(null, "", nextHref)
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -107,7 +110,7 @@ function AuthPanel({ mode, token }: AuthPanelProps) {
           name,
           email,
           password,
-          callbackURL: "/hr/documents",
+          callbackURL: nextPath || "/hr/documents",
         })
         if (workspaceName) {
           const organization = await authClient.organization.create({
@@ -122,11 +125,11 @@ function AuthPanel({ mode, token }: AuthPanelProps) {
         await authClient.signIn.email({
           email,
           password,
-          callbackURL: "/hr/documents",
+          callbackURL: nextPath || "/hr/documents",
         })
       }
 
-      router.push("/hr/documents")
+      router.push(nextPath || "/hr/documents")
     } catch {
       toast.error(isSignUp ? "Sign up failed" : "Sign in failed")
     }
@@ -136,7 +139,7 @@ function AuthPanel({ mode, token }: AuthPanelProps) {
     try {
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/hr/documents",
+        callbackURL: nextPath || "/hr/documents",
       })
     } catch {
       toast.error("Google sign in is not configured yet")
@@ -256,7 +259,8 @@ function AuthPanel({ mode, token }: AuthPanelProps) {
                   type="text"
                   name="workspace"
                   autoComplete="organization"
-                  placeholder="HR Workspace"
+                  placeholder={isInvitationFlow ? "Optional workspace name" : "HR Workspace"}
+                  required={!isInvitationFlow}
                 />
               ) : null}
             </AnimatePresence>
@@ -354,6 +358,12 @@ function getSwitcherText(mode: AuthMode) {
 function getSwitcherHref(mode: AuthMode) {
   if (mode === "signin") return "/signup"
   return "/signin"
+}
+
+function appendNextPath(href: string, nextPath?: string) {
+  if (!nextPath) return href
+  const separator = href.includes("?") ? "&" : "?"
+  return `${href}${separator}next=${encodeURIComponent(nextPath)}`
 }
 
 function getSwitcherAction(mode: AuthMode) {

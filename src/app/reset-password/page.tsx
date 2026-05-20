@@ -3,9 +3,9 @@ import { AuthPanel } from "@/components/auth/auth-panel"
 export default async function ResetPasswordPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>
+  searchParams: Promise<{ token?: string; next?: string }>
 }) {
-  const { token } = await searchParams
+  const { token, next } = await searchParams
 
-  return <AuthPanel mode="reset" token={token} />
+  return <AuthPanel mode="reset" token={token} nextPath={next} />
 }

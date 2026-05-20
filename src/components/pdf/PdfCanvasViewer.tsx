@@ -19,6 +19,8 @@ type PdfCanvasViewerProps = {
   pageClassName?: string;
   onPageClick?: (pageIndex: number, point: { x: number; y: number }) => void;
   renderOverlay?: (pageIndex: number, metrics: PageMetrics) => ReactNode;
+  onDocumentLoad?: (pageCount: number) => void;
+  onVisiblePageChange?: (pageIndex: number) => void;
 };
 
 if (typeof window !== "undefined") {
@@ -35,8 +37,11 @@ export function PdfCanvasViewer({
   pageClassName,
   onPageClick,
   renderOverlay,
+  onDocumentLoad,
+  onVisiblePageChange,
 }: PdfCanvasViewerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const onDocumentLoadRef = useRef(onDocumentLoad);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [hostWidth, setHostWidth] = useState(maxPageWidth);
@@ -55,6 +60,10 @@ export function PdfCanvasViewer({
   }, [maxPageWidth]);
 
   useEffect(() => {
+    onDocumentLoadRef.current = onDocumentLoad;
+  }, [onDocumentLoad]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const task = pdfjs.getDocument(fileUrl);
@@ -63,6 +72,7 @@ export function PdfCanvasViewer({
         if (cancelled) return;
         setPdf(doc);
         setPageCount(doc.numPages);
+        onDocumentLoadRef.current?.(doc.numPages);
       })
       .catch(() => {
         if (!cancelled) setError("Unable to load this PDF.");
@@ -100,6 +110,7 @@ export function PdfCanvasViewer({
               pageClassName={pageClassName}
               onPageClick={onPageClick}
               renderOverlay={renderOverlay}
+              onVisiblePageChange={onVisiblePageChange}
             />
           ))}
         </div>
@@ -115,6 +126,7 @@ function PdfPageCanvas({
   pageClassName,
   onPageClick,
   renderOverlay,
+  onVisiblePageChange,
 }: {
   pdf: PDFDocumentProxy;
   pageIndex: number;
@@ -122,7 +134,9 @@ function PdfPageCanvas({
   pageClassName?: string;
   onPageClick?: PdfCanvasViewerProps["onPageClick"];
   renderOverlay?: PdfCanvasViewerProps["renderOverlay"];
+  onVisiblePageChange?: PdfCanvasViewerProps["onVisiblePageChange"];
 }) {
+  const pageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [metrics, setMetrics] = useState<PageMetrics | null>(null);
 
@@ -168,8 +182,30 @@ function PdfPageCanvas({
     };
   }, [pdf, pageIndex, targetWidth]);
 
+  useEffect(() => {
+    const node = pageRef.current;
+    if (!node || !onVisiblePageChange) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            onVisiblePageChange(pageIndex);
+          }
+        }
+      },
+      {
+        threshold: 0.55,
+      },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [onVisiblePageChange, pageIndex]);
+
   return (
     <div
+      ref={pageRef}
       className={pageClassName}
       data-pdf-page={pageIndex}
       style={{

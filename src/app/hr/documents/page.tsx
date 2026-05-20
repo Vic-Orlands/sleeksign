@@ -34,14 +34,22 @@ export default function HRDocuments() {
   const [documentToDelete, setDocumentToDelete] = useState<DocumentRecord | null>(null)
   const workspaceId = useCurrentWorkspaceId()
   const router = useRouter()
+  const visibleDocuments = useMemo(() => (workspaceId ? documents : []), [documents, workspaceId])
+  const showLoading = Boolean(workspaceId) && isLoading
+
+  function normalizeDocuments(data: unknown) {
+    return Array.isArray(data) ? (data as DocumentRecord[]) : []
+  }
 
   useEffect(() => {
+    if (!workspaceId) return
+
     function loadDocuments(options?: { background?: boolean }) {
       if (!options?.background) setIsLoading(true)
       fetch(`/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`)
         .then((res) => res.json())
-        .then((data: DocumentRecord[]) => {
-          setDocuments(data)
+        .then((data: unknown) => {
+          setDocuments(normalizeDocuments(data))
         })
         .finally(() => {
           if (!options?.background) setIsLoading(false)
@@ -61,11 +69,17 @@ export default function HRDocuments() {
   }, [])
 
   function fetchDocuments(options?: { background?: boolean }) {
+    if (!workspaceId) {
+      setDocuments([])
+      if (!options?.background) setIsLoading(false)
+      return
+    }
+
     if (!options?.background) setIsLoading(true)
     fetch(`/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`)
       .then((res) => res.json())
-      .then((data: DocumentRecord[]) => {
-        setDocuments(data)
+      .then((data: unknown) => {
+        setDocuments(normalizeDocuments(data))
       })
       .finally(() => {
         if (!options?.background) setIsLoading(false)
@@ -74,7 +88,7 @@ export default function HRDocuments() {
 
   const filteredDocuments = useMemo(
     () =>
-      documents.filter((document) => {
+      visibleDocuments.filter((document) => {
         const matchesQuery = document.name.toLowerCase().includes(query.trim().toLowerCase())
         if (!matchesQuery) return false
         if (tableFilter === "all") return true
@@ -82,11 +96,11 @@ export default function HRDocuments() {
         if (tableFilter === "signers") return true
         return getDocumentSetupStatus(document) === tableFilter
       }),
-    [documents, query, tableFilter],
+    [visibleDocuments, query, tableFilter],
   )
 
-  const allSessions = documents.flatMap((document) => document.sessions || [])
-  const signerRows = documents.flatMap((document) =>
+  const allSessions = visibleDocuments.flatMap((document) => document.sessions || [])
+  const signerRows = visibleDocuments.flatMap((document) =>
     (document.sessions || []).map((session) => ({
       ...session,
       documentName: document.name,
@@ -101,7 +115,7 @@ export default function HRDocuments() {
   })
   const completedCount = allSessions.filter((session) => session.status === "completed").length
   const pendingCount = allSessions.filter((session) => session.status === "pending").length
-  const inProgressCount = documents.filter((document) => getDocumentStatus(document) === "In Progress").length
+  const inProgressCount = visibleDocuments.filter((document) => getDocumentStatus(document) === "In Progress").length
 
   async function handleUpload(file: File) {
     const formData = new FormData()
@@ -171,7 +185,7 @@ export default function HRDocuments() {
               {tableFilter === "signers"
                 ? `${filteredSigners.length} of ${signerRows.length} signers`
                 : workspaceId
-                  ? `${filteredDocuments.length} of ${documents.length} documents`
+                  ? `${filteredDocuments.length} of ${visibleDocuments.length} documents`
                   : "Select a workspace to view documents"}
             </p>
           </div>
@@ -194,7 +208,7 @@ export default function HRDocuments() {
             </div>
           )}
         </div>
-        {isLoading ? (
+        {showLoading ? (
           <div className="flex flex-col gap-2 px-5 py-5">
             {Array.from({ length: 5 }).map((_, index) => (
               <Skeleton key={index} className="h-12 w-full" />

@@ -25,7 +25,7 @@ export default function PublicSignLanding() {
   const [signerEmail, setSignerEmail] = useState(savedSigner.signerEmail);
 
   useEffect(() => {
-    fetch(`/api/documents/${id}`)
+    fetch(`/api/public-documents/${id}`)
       .then((res) => res.json())
       .then((data) => setDoc(data))
       .catch(() => toast.error("Document not found"))

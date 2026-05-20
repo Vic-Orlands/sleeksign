@@ -1,5 +1,11 @@
 import { AuthPanel } from "@/components/auth/auth-panel"
 
-export default function ForgotPasswordPage() {
-  return <AuthPanel mode="forgot" />
+export default async function ForgotPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>
+}) {
+  const { next } = await searchParams
+
+  return <AuthPanel mode="forgot" nextPath={next} />
 }

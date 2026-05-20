@@ -27,6 +27,8 @@ import {
   encodeSignatureVector,
 } from "@/lib/field-utils";
 
+const SIGNATURE_STYLE_COUNT = 2;
+
 interface SignatureMakerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -55,6 +57,7 @@ export function SignatureMaker({
   const [isLoading, setIsLoading] = useState(false);
   const sigCanvas = useRef<SignatureCanvas>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasTypedName = name.trim().length > 0;
 
   useEffect(() => {
     if (isOpen) {
@@ -263,43 +266,70 @@ export function SignatureMaker({
                           <Button
                             variant="ghost"
                             size="icon"
+                            disabled={!hasTypedName || isLoading}
                             onClick={() =>
-                              setFontIndex((prev) => (prev > 0 ? prev - 1 : 3))
+                              setFontIndex((prev) =>
+                                prev > 0 ? prev - 1 : SIGNATURE_STYLE_COUNT - 1,
+                              )
                             }
                           >
                             <ChevronLeft />
                           </Button>
-                          <div className="flex flex-1 justify-center text-foreground">
-                            <svg
-                              viewBox={svgData.viewBox}
-                              className="max-h-full max-w-full"
-                              style={{ height: "116px" }}
-                            >
-                              <path
-                                d={svgData.pathData}
-                                fill="none"
-                                stroke="currentColor"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2.3"
-                                className="signature-path"
-                              />
-                            </svg>
+                          <div className="flex flex-1 justify-center">
+                            <div className="flex min-h-28 w-full max-w-[28rem] items-center justify-center rounded-none border border-zinc-200/80 bg-white/80 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+                              {svgData ? (
+                                <svg
+                                  viewBox={svgData.viewBox}
+                                  className="max-h-full max-w-full text-zinc-950"
+                                  style={{ height: "118px" }}
+                                >
+                                  <path
+                                    d={svgData.pathData}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2.8"
+                                    className="signature-path"
+                                  />
+                                </svg>
+                              ) : (
+                                <div className="flex items-center gap-2 text-sm text-zinc-500">
+                                  <Sparkles className="size-4" />
+                                  Type a legal name to preview a signature style
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <Button
                             variant="ghost"
                             size="icon"
+                            disabled={!hasTypedName || isLoading}
                             onClick={() =>
-                              setFontIndex((prev) => (prev < 3 ? prev + 1 : 0))
+                              setFontIndex((prev) =>
+                                prev < SIGNATURE_STYLE_COUNT - 1 ? prev + 1 : 0,
+                              )
                             }
                           >
                             <ChevronRight />
                           </Button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Sparkles className="size-4" />
-                          Type a legal name to preview a vector signature
+                        <div className="flex w-full items-center gap-4 px-8">
+                          <Button variant="ghost" size="icon" disabled>
+                            <ChevronLeft />
+                          </Button>
+                          <div className="flex flex-1 justify-center">
+                            <div className="flex min-h-28 w-full max-w-[28rem] items-center justify-center rounded-none border border-dashed border-zinc-300 bg-white/70 px-4 py-3">
+                              <div className="flex items-center gap-2 text-sm text-zinc-500">
+                                <Sparkles className="size-4" />
+                                Type a legal name to preview a signature style
+                              </div>
+                            </div>
+                          </div>
+                          <Button variant="ghost" size="icon" disabled>
+                            <ChevronRight />
+                          </Button>
                         </div>
                       )}
                     </div>

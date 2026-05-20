@@ -1,5 +1,11 @@
 import { AuthPanel } from "@/components/auth/auth-panel"
 
-export default function SignUpPage() {
-  return <AuthPanel mode="signup" />
+export default async function SignUpPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>
+}) {
+  const { next } = await searchParams
+
+  return <AuthPanel mode="signup" nextPath={next} />
 }
