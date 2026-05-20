@@ -11,6 +11,7 @@ import {
   Clock3Icon,
   FileTextIcon,
   LayoutListIcon,
+  LoaderCircleIcon,
   MenuIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
@@ -119,6 +120,12 @@ type HrShellProps = {
   query: string
   onQueryChange: (query: string) => void
   onUpload: (file: File) => void
+  actionOverlay?: {
+    visible: boolean
+    title: string
+    documentName?: string
+    detail?: string
+  }
   activeView?: "documents" | "shared" | "signers" | "signed"
   headerMode?: "documents" | "minimal" | "none"
   onSharedActivityClick?: () => void
@@ -134,6 +141,7 @@ function HrShell({
   query,
   onQueryChange,
   onUpload,
+  actionOverlay,
   activeView,
   headerMode = "documents",
   onSharedActivityClick,
@@ -150,7 +158,15 @@ function HrShell({
   const pathname = usePathname()
 
   function handleFile(file?: File) {
-    if (file) onUpload(file)
+    if (!file) return
+
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+    if (!isPdf) {
+      toast.error("Upload a PDF document")
+      return
+    }
+
+    onUpload(file)
   }
 
   function navigate(href: string) {
@@ -231,7 +247,7 @@ function HrShell({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf"
+                    accept="application/pdf,.pdf"
                     className="hidden"
                     onChange={(event) => {
                       handleFile(event.target.files?.[0])
@@ -255,6 +271,50 @@ function HrShell({
           {children}
         </main>
       </Sheet>
+      <AnimatePresence>
+        {actionOverlay?.visible ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="pointer-events-auto fixed inset-0 z-40 flex items-center justify-center bg-background/55 backdrop-blur-[2px]"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="w-[min(92vw,24rem)] border border-border bg-background px-5 py-4 shadow-sm"
+            >
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Preparing workspace</p>
+              <p className="mt-2 text-sm font-medium">{actionOverlay.title}</p>
+              {actionOverlay.documentName ? (
+                <div className="mt-3 flex min-w-0 items-center gap-3 border border-border bg-card px-3 py-2">
+                  <motion.span
+                    aria-hidden="true"
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 0.9, ease: "linear", repeat: Infinity }}
+                    className="flex size-7 shrink-0 items-center justify-center bg-primary text-primary-foreground"
+                  >
+                    <LoaderCircleIcon className="size-4" />
+                  </motion.span>
+                  <span className="min-w-0 truncate text-sm font-medium">{actionOverlay.documentName}</span>
+                </div>
+              ) : null}
+              {actionOverlay.detail ? <p className="mt-3 text-sm text-muted-foreground">{actionOverlay.detail}</p> : null}
+              <div className="mt-4 h-2 overflow-hidden bg-muted">
+                <motion.div
+                  className="h-full w-1/2 bg-primary/90"
+                  initial={{ x: "-120%" }}
+                  animate={{ x: "240%" }}
+                  transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1], repeat: Infinity }}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   )
 }
@@ -385,6 +445,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
   const [workspaceBusy, setWorkspaceBusy] = React.useState<"" | "creating" | "renaming" | "deleting">("")
   const [memberBusyId, setMemberBusyId] = React.useState("")
   const [invitationBusyId, setInvitationBusyId] = React.useState("")
+  const [workspaceTransitionVisible, setWorkspaceTransitionVisible] = React.useState(false)
   const [optimisticWorkspaceNames, setOptimisticWorkspaceNames] = React.useState<Record<string, { name: string; slug: string }>>({})
   const [optimisticDeletedWorkspaceIds, setOptimisticDeletedWorkspaceIds] = React.useState<string[]>([])
   const [optimisticCreatedWorkspaces, setOptimisticCreatedWorkspaces] = React.useState<WorkspaceSummary[]>([])
@@ -482,14 +543,31 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
     }
   }, [selectedWorkspaceId, settingsOpen])
 
-  function switchWorkspace(nextWorkspaceId: string) {
-    setCurrentWorkspaceId(nextWorkspaceId)
-    authClient.$fetch("/organization/set-active", {
-      method: "POST",
-      body: { organizationId: nextWorkspaceId },
-    }).catch(() => undefined)
+  async function playWorkspaceTransition(task: () => Promise<void> | void) {
+    setWorkspaceTransitionVisible(true)
+    setOpen(false)
     setWorkspaceOpen(false)
-    router.refresh()
+
+    await new Promise((resolve) => window.setTimeout(resolve, 40))
+
+    try {
+      await task()
+      router.refresh()
+    } finally {
+      window.setTimeout(() => {
+        setWorkspaceTransitionVisible(false)
+      }, 980)
+    }
+  }
+
+  async function switchWorkspace(nextWorkspaceId: string) {
+    await playWorkspaceTransition(async () => {
+      setCurrentWorkspaceId(nextWorkspaceId)
+      await authClient.$fetch("/organization/set-active", {
+        method: "POST",
+        body: { organizationId: nextWorkspaceId },
+      }).catch(() => undefined)
+    })
   }
 
   async function createWorkspace(event: React.FormEvent<HTMLFormElement>) {
@@ -508,7 +586,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
           ...current,
           { id: organization.data.id, name: organization.data.name, slug: organization.data.slug },
         ])
-        switchWorkspace(organization.data.id)
+        await switchWorkspace(organization.data.id)
       }
       toast.success("Workspace created")
     } catch {
@@ -534,12 +612,11 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
       if (workspaceId === selectedWorkspaceId) {
         setCurrentWorkspaceId(fallbackWorkspace)
         if (fallbackWorkspace) {
-          switchWorkspace(fallbackWorkspace)
+          await switchWorkspace(fallbackWorkspace)
         }
       }
       setConfirmDeleteWorkspaceOpen(false)
       setSettingsOpen(Boolean(fallbackWorkspace))
-      router.refresh()
       toast.success("Workspace deleted")
     } catch {
       if (currentWorkspace) {
@@ -936,7 +1013,9 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
                           "flex items-center gap-2 border border-border px-3 py-2 text-left transition-colors hover:bg-muted/60",
                           item.id === selectedWorkspaceId && "bg-secondary"
                         )}
-                        onClick={() => switchWorkspace(item.id)}
+                        onClick={() => {
+                          void switchWorkspace(item.id)
+                        }}
                       >
                         <Building2Icon className="size-3.5 text-muted-foreground" />
                         <div className="min-w-0 flex-1">
@@ -1108,6 +1187,27 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AnimatePresence>
+        {workspaceTransitionVisible ? <WorkspaceTransitionOverlay /> : null}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function WorkspaceTransitionOverlay() {
+  const segments = Array.from({ length: 6 }, (_, index) => index)
+
+  return (
+    <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
+      <div className="go flex h-full flex-col">
+        {segments.map((segment) => (
+          <div
+            key={segment}
+            className="blind-slat flex-1"
+          />
+        ))}
+      </div>
     </div>
   )
 }

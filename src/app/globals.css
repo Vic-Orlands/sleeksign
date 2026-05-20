@@ -146,4 +146,50 @@
         background-size: 24px 24px;
     }
 
+    .blind-slat {
+        transform: scaleX(0);
+        transform-origin: left;
+        background: #c9a84c;
+    }
+
+    .go .blind-slat {
+        animation:
+            slatIn 0.18s ease-in forwards,
+            slatOut 0.18s ease-out 0.48s forwards;
+    }
+
+    .go .blind-slat:nth-child(1) { animation-delay: 0s, 0.48s; }
+    .go .blind-slat:nth-child(2) { animation-delay: 0.045s, 0.525s; }
+    .go .blind-slat:nth-child(3) { animation-delay: 0.09s, 0.57s; }
+    .go .blind-slat:nth-child(4) { animation-delay: 0.135s, 0.615s; }
+    .go .blind-slat:nth-child(5) { animation-delay: 0.18s, 0.66s; }
+    .go .blind-slat:nth-child(6) { animation-delay: 0.225s, 0.705s; }
+
+    @keyframes slatIn {
+        from {
+            transform: scaleX(0);
+            transform-origin: left;
+        }
+        to {
+            transform: scaleX(1);
+        }
+    }
+
+    @keyframes slatOut {
+        from {
+            transform: scaleX(1);
+            transform-origin: right;
+        }
+        to {
+            transform: scaleX(0);
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .go .blind-slat {
+            animation: none;
+            transform: scaleX(0);
+        }
+    }
+
 }

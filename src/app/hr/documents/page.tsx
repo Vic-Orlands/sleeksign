@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { uploadDocument } from "@/lib/upload-document"
 import { useCurrentWorkspaceId } from "@/lib/workspace-store"
 
 type TableFilter = "all" | "shared" | "signers" | DocumentSetupStatus
@@ -31,6 +32,7 @@ export default function HRDocuments() {
   const [query, setQuery] = useState("")
   const [tableFilter, setTableFilter] = useState<TableFilter>("all")
   const [isLoading, setIsLoading] = useState(true)
+  const [uploadingDocumentName, setUploadingDocumentName] = useState<string | null>(null)
   const [documentToDelete, setDocumentToDelete] = useState<DocumentRecord | null>(null)
   const workspaceId = useCurrentWorkspaceId()
   const router = useRouter()
@@ -118,27 +120,20 @@ export default function HRDocuments() {
   const inProgressCount = visibleDocuments.filter((document) => getDocumentStatus(document) === "In Progress").length
 
   async function handleUpload(file: File) {
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("workspaceId", workspaceId)
-
     if (!workspaceId) {
       toast.error("Select or create a workspace before uploading")
       return
     }
 
+    setUploadingDocumentName(file.name)
+
     try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      })
-      const data = await res.json()
-      if (!data.id) throw new Error("Upload failed")
+      const data = await uploadDocument(file, workspaceId)
       toast.success("Document uploaded")
-      await fetchDocuments()
       router.push(`/hr/documents/${data.id}`)
-    } catch {
-      toast.error("Upload failed")
+    } catch (error) {
+      setUploadingDocumentName(null)
+      toast.error(error instanceof Error ? error.message : "Upload failed")
     }
   }
 
@@ -164,6 +159,12 @@ export default function HRDocuments() {
         query={query}
         onQueryChange={setQuery}
         onUpload={handleUpload}
+        actionOverlay={{
+          visible: Boolean(uploadingDocumentName),
+          title: "Uploading document",
+          documentName: uploadingDocumentName || undefined,
+          detail: "Preparing for setup.",
+        }}
         activeView={tableFilter === "shared" ? "shared" : tableFilter === "signers" ? "signers" : "documents"}
         onSharedActivityClick={() => setTableFilter("shared")}
         onSignersClick={() => setTableFilter("signers")}
