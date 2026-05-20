@@ -53,7 +53,7 @@ export async function POST(
   try {
     const { id } = await params;
     await requireDocumentAccess(req.headers, id, "manage");
-    const { type, page, x, y, width, height } = await req.json();
+    const { type, page, x, y, width, height, required } = await req.json();
     const fieldId = nanoid();
 
     await db.insert(fields).values({
@@ -65,6 +65,7 @@ export async function POST(
       y,
       width,
       height,
+      required: required ?? true,
     });
 
     return NextResponse.json({ id: fieldId });
@@ -82,7 +83,7 @@ export async function POST(
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { fieldId, x, y, width, height, documentId } = await req.json();
+    const { fieldId, x, y, width, height, required, documentId } = await req.json();
     if (!documentId) {
       return NextResponse.json(
         { error: "Document ID required" },
@@ -93,7 +94,7 @@ export async function PATCH(req: NextRequest) {
     await requireDocumentAccess(req.headers, documentId, "manage");
     await db
       .update(fields)
-      .set({ x, y, width, height })
+      .set({ x, y, width, height, required })
       .where(eq(fields.id, fieldId));
     return NextResponse.json({ success: true });
   } catch (error) {

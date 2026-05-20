@@ -8,6 +8,7 @@ export type Field = {
   y: number;
   width: number;
   height: number;
+  required: boolean;
 };
 
 export type SignatureVector = {

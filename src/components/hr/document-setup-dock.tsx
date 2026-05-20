@@ -80,6 +80,7 @@ function DocumentSetupDock({
       y: point.y,
       width: defaults.width,
       height: defaults.height,
+      required: true,
     });
 
     const res = await fetch(`/api/documents/${document.id}`, {
@@ -122,6 +123,7 @@ function DocumentSetupDock({
         y: field.y,
         width: field.width,
         height: field.height,
+        required: field.required,
       }),
     });
     setIsSaving(false);
