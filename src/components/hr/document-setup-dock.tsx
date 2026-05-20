@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { Rnd } from "react-rnd";
 import {
@@ -55,13 +55,10 @@ function DocumentSetupDock({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [zoom, setZoom] = useState(72);
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      setFields(document.fields || []);
-      setSelectedFieldId(document.fields?.[0]?.id || null);
-    });
-  }, [document.id, document.fields]);
+  const [pageCount, setPageCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [fitMode, setFitMode] = useState<"width" | "page">("width");
+  const viewerRef = useRef<HTMLDivElement>(null);
 
   const selectedField = fields.find((field) => field.id === selectedFieldId);
   const fieldCounts = useMemo(
@@ -102,11 +99,13 @@ function DocumentSetupDock({
   }
 
   async function persistField(fieldId: string, updates: Partial<Field>) {
-    const nextFields = fields.map((field) =>
-      field.id === fieldId
-        ? ({ ...field, ...clampField(updates) } as Field)
-        : field,
-    );
+    const nextFields = fields.map((field) => {
+      if (field.id !== fieldId) return field;
+      return clampField({
+        ...field,
+        ...updates,
+      }) as Field;
+    });
     updateLocalFields(nextFields);
     setSelectedFieldId(fieldId);
 
@@ -117,6 +116,7 @@ function DocumentSetupDock({
     await fetch(`/api/documents/${document.id}`, {
       method: "PATCH",
       body: JSON.stringify({
+        documentId: document.id,
         fieldId,
         x: field.x,
         y: field.y,
@@ -166,13 +166,15 @@ function DocumentSetupDock({
 
       <section className="grid min-h-107.5 grid-rows-[auto_minmax(0,1fr)_auto] lg:min-h-0">
         <EditorToolbar zoom={zoom} onZoomChange={setZoom} isSaving={isSaving} />
-        <div className="sleek-grid min-h-0 overflow-auto bg-zinc-100 p-3 dark:bg-[#121214] sm:p-6">
+        <div ref={viewerRef} className="sleek-grid min-h-0 overflow-auto bg-zinc-100 p-3 dark:bg-[#121214] sm:p-6">
           <PdfCanvasViewer
             fileUrl={document.fileUrl}
-            maxPageWidth={Math.max(320, zoom * 8)}
+            maxPageWidth={fitMode === "width" ? 1600 : Math.max(320, zoom * 8)}
             className="mx-auto w-full max-w-190"
             pageClassName="relative border-t-8 border-zinc-300 bg-white shadow-xl ring-1 ring-black/10 dark:border-[#3f3f46] dark:shadow-2xl"
             onPageClick={addField}
+            onDocumentLoad={(nextPageCount) => setPageCount(nextPageCount)}
+            onVisiblePageChange={(pageIndex) => setCurrentPage(pageIndex)}
             renderOverlay={(pageIndex, metrics) =>
               fields
                 .filter((field) => field.page === pageIndex)
@@ -183,6 +185,7 @@ function DocumentSetupDock({
                     <Rnd
                       key={field.id}
                       bounds="parent"
+                      cancel=".field-delete-button"
                       size={{
                         width: (field.width / 100) * metrics.width,
                         height: (field.height / 100) * metrics.height,
@@ -227,7 +230,10 @@ function DocumentSetupDock({
                           event.stopPropagation();
                           deleteField(field.id);
                         }}
-                        className="absolute -left-2 -top-2 hidden size-5 items-center justify-center border border-border bg-background text-destructive shadow-sm group-hover:flex"
+                        onMouseDown={(event) => {
+                          event.stopPropagation();
+                        }}
+                        className="field-delete-button absolute -left-2 -top-2 z-10 hidden size-5 items-center justify-center border border-border bg-background text-destructive shadow-sm group-hover:flex"
                       >
                         <Trash2Icon className="size-3" />
                       </button>
@@ -238,18 +244,42 @@ function DocumentSetupDock({
           />
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2 border-t border-border bg-card px-3 py-2 sm:gap-4 sm:px-4">
-          <Button variant="ghost" size="icon-sm">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={currentPage <= 0}
+            onClick={() => {
+              const previousPage = Math.max(0, currentPage - 1);
+              viewerRef.current
+                ?.querySelector(`[data-pdf-page="${previousPage}"]`)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          >
             <ChevronLeftIcon />
           </Button>
           <span className="border border-border bg-background px-3 py-1 font-mono text-xs">
-            1
+            {Math.min(currentPage + 1, Math.max(pageCount, 1))}
           </span>
-          <span className="font-mono text-xs text-muted-foreground">/ 3</span>
-          <Button variant="ghost" size="icon-sm">
+          <span className="font-mono text-xs text-muted-foreground">/ {Math.max(pageCount, 1)}</span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={pageCount === 0 || currentPage >= pageCount - 1}
+            onClick={() => {
+              const nextPage = Math.min(pageCount - 1, currentPage + 1);
+              viewerRef.current
+                ?.querySelector(`[data-pdf-page="${nextPage}"]`)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          >
             <ChevronRightIcon />
           </Button>
-          <Select defaultValue="fit" className="h-8 w-32">
-            <option value="fit">Fit Width</option>
+          <Select
+            value={fitMode}
+            onChange={(event) => setFitMode(event.target.value as "width" | "page")}
+            className="h-8 w-32"
+          >
+            <option value="width">Fit Width</option>
             <option value="page">Fit Page</option>
           </Select>
         </div>

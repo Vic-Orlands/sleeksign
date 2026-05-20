@@ -11,6 +11,7 @@ import type { DocumentRecord, SessionRecord } from "@/components/hr/types"
 import { getDocumentStatus } from "@/components/hr/types"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useCurrentWorkspaceId } from "@/lib/workspace-store"
 
 type SignedSession = SessionRecord & {
   documentName: string
@@ -20,34 +21,61 @@ export default function SignedDocumentsPage() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
   const [query, setQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
+  const workspaceId = useCurrentWorkspaceId()
+  const visibleDocuments = useMemo(() => (workspaceId ? documents : []), [documents, workspaceId])
+
+  function normalizeDocuments(data: unknown) {
+    return Array.isArray(data) ? (data as DocumentRecord[]) : []
+  }
 
   useEffect(() => {
-    fetchDocuments()
-    const interval = window.setInterval(() => fetchDocuments({ background: true }), 5000)
+    if (!workspaceId) return
+
+    const fetchWorkspaceDocuments = (options?: { background?: boolean }) => {
+      if (!options?.background) setIsLoading(true)
+      fetch(`/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`)
+        .then((res) => res.json())
+        .then((data: unknown) => setDocuments(normalizeDocuments(data)))
+        .finally(() => {
+          if (!options?.background) setIsLoading(false)
+        })
+    }
+
+    fetchWorkspaceDocuments()
+    const interval = window.setInterval(
+      () => fetchWorkspaceDocuments({ background: true }),
+      5000,
+    )
     return () => window.clearInterval(interval)
-  }, [])
+  }, [workspaceId])
 
   function fetchDocuments(options?: { background?: boolean }) {
+    if (!workspaceId) {
+      if (!options?.background) setIsLoading(false)
+      return
+    }
+
     if (!options?.background) setIsLoading(true)
-    fetch("/api/documents")
+    fetch(`/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`)
       .then((res) => res.json())
-      .then((data: DocumentRecord[]) => setDocuments(data))
+      .then((data: unknown) => setDocuments(normalizeDocuments(data)))
       .finally(() => {
         if (!options?.background) setIsLoading(false)
       })
   }
 
   const signedSessions = useMemo(
-    () =>
-      documents.flatMap((document) =>
+    () => {
+      return visibleDocuments.flatMap((document) =>
         (document.sessions || [])
           .filter((session) => session.status === "completed")
           .map((session) => ({
             ...session,
             documentName: document.name,
           })),
-      ),
-    [documents],
+      )
+    },
+    [visibleDocuments],
   )
 
   const filteredSessions = signedSessions.filter((session) => {
@@ -58,14 +86,20 @@ export default function SignedDocumentsPage() {
       .some((value) => String(value).toLowerCase().includes(needle))
   })
 
-  const allSessions = documents.flatMap((document) => document.sessions || [])
+  const allSessions = visibleDocuments.flatMap((document) => document.sessions || [])
   const completedCount = allSessions.filter((session) => session.status === "completed").length
   const pendingCount = allSessions.filter((session) => session.status === "pending").length
-  const inProgressCount = documents.filter((document) => getDocumentStatus(document) === "In Progress").length
+  const inProgressCount = visibleDocuments.filter((document) => getDocumentStatus(document) === "In Progress").length
 
   async function handleUpload(file: File) {
+    if (!workspaceId) {
+      toast.error("Select a workspace first")
+      return
+    }
+
     const formData = new FormData()
     formData.append("file", file)
+    formData.append("workspaceId", workspaceId)
 
     try {
       const res = await fetch("/api/upload", {
@@ -102,11 +136,17 @@ export default function SignedDocumentsPage() {
           </div>
         </div>
 
-        {isLoading ? (
+        {workspaceId && isLoading ? (
           <div className="flex flex-col gap-2 px-5 py-5">
             {Array.from({ length: 4 }).map((_, index) => (
               <Skeleton key={index} className="h-12 w-full" />
             ))}
+          </div>
+        ) : !workspaceId ? (
+          <div className="flex h-52 items-center justify-center px-5 py-5">
+            <div className="flex h-full w-full items-center justify-center border border-dashed border-border font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+              Select a workspace to view signed documents.
+            </div>
           </div>
         ) : (
           <SignedDocsTable sessions={filteredSessions} />

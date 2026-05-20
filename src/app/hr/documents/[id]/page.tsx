@@ -148,6 +148,7 @@ export default function HRDocumentPage() {
               </div>
             ) : document ? (
               <DocumentSetupDock
+                key={document.id}
                 document={document}
                 onFieldsChange={updateDocumentFields}
                 fullHeight

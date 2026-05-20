@@ -3,26 +3,47 @@ import { db } from "@/db";
 import { documents, fields, sessions, signatures } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { AccessError, requireDocumentAccess } from "@/lib/server-access";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const doc = await db.query.documents.findFirst({
-    where: eq(documents.id, id),
-    with: {
-      fields: true,
-      sessions: true,
-    },
-  });
+  try {
+    await requireDocumentAccess(req.headers, id, "read");
 
-  if (!doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(doc, {
-    headers: {
-      "Cache-Control": "no-store",
-    },
-  });
+    const doc = await db.query.documents.findFirst({
+      where: eq(documents.id, id),
+      with: {
+        fields: true,
+        sessions: true,
+      },
+    });
+
+    if (!doc) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(doc, {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    if (error instanceof AccessError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    }
+
+    console.error("Document fetch error:", error);
+    return NextResponse.json(
+      { error: "Failed to load document" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(
@@ -31,6 +52,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    await requireDocumentAccess(req.headers, id, "manage");
     const { type, page, x, y, width, height } = await req.json();
     const fieldId = nanoid();
 
@@ -46,20 +68,42 @@ export async function POST(
     });
 
     return NextResponse.json({ id: fieldId });
-  } catch {
+  } catch (error) {
+    if (error instanceof AccessError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    }
+
     return NextResponse.json({ error: "Failed to add field" }, { status: 500 });
   }
 }
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { fieldId, x, y, width, height } = await req.json();
+    const { fieldId, x, y, width, height, documentId } = await req.json();
+    if (!documentId) {
+      return NextResponse.json(
+        { error: "Document ID required" },
+        { status: 400 },
+      );
+    }
+
+    await requireDocumentAccess(req.headers, documentId, "manage");
     await db
       .update(fields)
       .set({ x, y, width, height })
       .where(eq(fields.id, fieldId));
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    if (error instanceof AccessError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    }
+
     return NextResponse.json(
       { error: "Failed to update field" },
       { status: 500 },
@@ -73,6 +117,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    await requireDocumentAccess(req.headers, id, "manage");
     const body = await req.json().catch(() => ({}));
 
     if (body.fieldId) {
@@ -93,7 +138,14 @@ export async function DELETE(
     await db.delete(documents).where(eq(documents.id, id));
 
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (error) {
+    if (error instanceof AccessError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    }
+
     return NextResponse.json(
       { error: "Failed to delete" },
       { status: 500 },
@@ -106,8 +158,23 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const { name } = await req.json();
+  try {
+    await requireDocumentAccess(req.headers, id, "manage");
+    const { name } = await req.json();
 
-  await db.update(documents).set({ name }).where(eq(documents.id, id));
-  return NextResponse.json({ success: true });
+    await db.update(documents).set({ name }).where(eq(documents.id, id));
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    if (error instanceof AccessError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    }
+
+    return NextResponse.json(
+      { error: "Failed to rename document" },
+      { status: 500 },
+    );
+  }
 }

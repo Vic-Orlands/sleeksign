@@ -4,9 +4,7 @@ import path from "path";
 
 const FONTS = [
   "signature2.ttf",
-  "signature3.ttf",
   "signature4.ttf",
-  "signature.ttf",
 ];
 
 function parseFont(fontPath: string) {

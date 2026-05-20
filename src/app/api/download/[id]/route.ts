@@ -1,30 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { sessions } from "@/db/schema";
-import { eq } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
+
+import { requireSigningSessionAccess, AccessError } from "@/lib/server-access";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await params;
-  const session = await db.query.sessions.findFirst({
-    where: eq(sessions.id, id),
-  });
-
-  if (!session || session.status !== "completed") {
-    return NextResponse.json(
-      { error: "Document not found or not completed" },
-      { status: 404 },
-    );
-  }
-
-  const fileName = `finalized_${session.id}.pdf`;
-  const filePath = path.join(process.cwd(), "public", "uploads", fileName);
-
   try {
+    const { id } = await params;
+    const { signingSession } = await requireSigningSessionAccess(
+      req.headers,
+      id,
+      "read",
+    );
+
+    if (signingSession.status !== "completed") {
+      return NextResponse.json(
+        { error: "Document not found or not completed" },
+        { status: 404 },
+      );
+    }
+
+    const fileName = `finalized_${signingSession.id}.pdf`;
+    const filePath = path.join(process.cwd(), "public", "uploads", fileName);
+
     const fileBuffer = await fs.readFile(filePath);
     return new NextResponse(fileBuffer, {
       headers: {
@@ -32,7 +33,14 @@ export async function GET(
         "Content-Disposition": `attachment; filename="${fileName}"`,
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof AccessError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    }
+
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 }

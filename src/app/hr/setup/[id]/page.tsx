@@ -56,7 +56,7 @@ export default function DocumentSetupPage() {
         </div>
       </header>
       <div className="min-h-0 p-4">
-        <DocumentSetupDock document={document} onFieldsChange={updateFields} fullHeight />
+        <DocumentSetupDock key={document.id} document={document} onFieldsChange={updateFields} fullHeight />
       </div>
     </div>
   )
