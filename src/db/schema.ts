@@ -33,6 +33,7 @@ export const fields = sqliteTable("fields", {
   y: real("y").notNull(),
   width: real("width").notNull().default(20),
   height: real("height").notNull().default(5),
+  required: integer("required", { mode: "boolean" }).notNull().default(true),
 });
 
 export const fieldsRelations = relations(fields, ({ one, many }) => ({

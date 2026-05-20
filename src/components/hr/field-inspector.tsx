@@ -44,7 +44,14 @@ function FieldInspector({
       </label>
       <div className="flex items-center justify-between border border-border bg-muted/20 px-3 py-2">
         <span className="font-mono text-[10px] font-medium uppercase tracking-widest">Required</span>
-        <Switch defaultChecked />
+        <Switch
+          checked={selectedField.required}
+          onCheckedChange={(required) =>
+            onUpdate(selectedField.id, {
+              required,
+            })
+          }
+        />
       </div>
       <div className="grid grid-cols-2 gap-3">
         {(["x", "y", "width", "height"] as const).map((key) => (

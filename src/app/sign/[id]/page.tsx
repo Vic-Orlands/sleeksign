@@ -91,18 +91,19 @@ export default function SignerPortal() {
   }, [id]);
 
   const fields: Field[] = useMemo(() => session?.document?.fields || [], [session]);
-  const requiredCount = fields.filter((field) => field.type !== "checkbox").length;
-  const completedCount = fields.filter((field) => {
-    if (field.type === "checkbox") return true;
+  const requiredFields = useMemo(
+    () => fields.filter((field) => field.required),
+    [fields],
+  );
+  const requiredCount = requiredFields.length;
+  const completedCount = requiredFields.filter((field) => {
     return valueIsComplete(signatures[field.id]);
   }).length;
-  const allFieldsSigned = fields.every(
-    (field) => field.type === "checkbox" || valueIsComplete(signatures[field.id]),
-  );
+  const allFieldsSigned = requiredFields.every((field) => valueIsComplete(signatures[field.id]));
 
   const nextField = useMemo(
-    () => fields.find((field) => field.type !== "checkbox" && !valueIsComplete(signatures[field.id])),
-    [fields, signatures],
+    () => requiredFields.find((field) => !valueIsComplete(signatures[field.id])),
+    [requiredFields, signatures],
   );
 
   async function handleFieldClick(field: Field) {
@@ -278,7 +279,7 @@ export default function SignerPortal() {
           <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest">Required fields</h2>
           <div className="mt-4 space-y-2">
             {fields.map((field, index) => {
-              const complete = field.type === "checkbox" || valueIsComplete(signatures[field.id]);
+              const complete = !field.required || valueIsComplete(signatures[field.id]);
               const Icon = fieldIcons[field.type];
               return (
                 <button
@@ -293,6 +294,11 @@ export default function SignerPortal() {
                   <span className="flex items-center gap-2 capitalize">
                     <Icon className="size-4 text-muted-foreground" />
                     {index + 1}. {field.type}
+                    {!field.required ? (
+                      <span className="border border-border px-1 py-0.5 text-[9px] uppercase tracking-widest text-muted-foreground">
+                        Optional
+                      </span>
+                    ) : null}
                   </span>
                   {complete ? (
                     <Check className="size-4 text-emerald-600" />
