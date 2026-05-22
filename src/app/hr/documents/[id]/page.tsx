@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeftIcon, SendIcon } from "lucide-react";
+import { ArrowLeftIcon, EyeIcon, SendIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { DocumentDetailPanel } from "@/components/hr/document-detail-panel";
+import { DocumentReviewPanel } from "@/components/hr/document-review-panel";
 import { DocumentSetupDock } from "@/components/hr/document-setup-dock";
 import { HrShell } from "@/components/hr/hr-shell";
 import type { DocumentRecord } from "@/components/hr/types";
@@ -26,6 +27,7 @@ export default function HRDocumentPage() {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [uploadingDocumentName, setUploadingDocumentName] = useState<string | null>(null);
   const workspaceId = useCurrentWorkspaceId();
 
@@ -170,6 +172,10 @@ export default function HRDocumentPage() {
                   <span className="hidden font-mono text-[10px] uppercase tracking-widest text-muted-foreground sm:inline">
                     {getDocumentCounts(document).fields} fields placed
                   </span>
+                  <Button variant="outline" onClick={() => setReviewOpen(true)}>
+                    <EyeIcon data-icon="inline-start" />
+                    Review
+                  </Button>
                   <Button onClick={() => setShareOpen(true)}>
                     <SendIcon data-icon="inline-start" />
                     Share Document
@@ -229,6 +235,18 @@ export default function HRDocumentPage() {
             />
           </SheetContent>
         </Sheet>
+
+        {document ? (
+          <Sheet open={reviewOpen} onOpenChange={setReviewOpen}>
+            <SheetContent
+              hideCloseButton
+              className="left-auto right-0 w-[min(100vw,72rem)] max-w-none translate-x-full border-l border-r-0 p-0 data-[state=open]:translate-x-0"
+            >
+              <SheetTitle className="sr-only">Review document before sharing</SheetTitle>
+              <DocumentReviewPanel document={document} onClose={() => setReviewOpen(false)} />
+            </SheetContent>
+          </Sheet>
+        ) : null}
       </div>
     </HrShell>
   );

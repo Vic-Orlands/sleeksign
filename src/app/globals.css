@@ -1,3 +1,11 @@
+@import url("https://fonts.googleapis.com/css2?family=Ruthie&display=swap");
+
+.ruthie-regular {
+    font-family: "Ruthie", cursive;
+    font-weight: 400;
+    font-style: normal;
+    line-height: normal;
+}
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -158,12 +166,24 @@
             slatOut 0.18s ease-out 0.48s forwards;
     }
 
-    .go .blind-slat:nth-child(1) { animation-delay: 0s, 0.48s; }
-    .go .blind-slat:nth-child(2) { animation-delay: 0.045s, 0.525s; }
-    .go .blind-slat:nth-child(3) { animation-delay: 0.09s, 0.57s; }
-    .go .blind-slat:nth-child(4) { animation-delay: 0.135s, 0.615s; }
-    .go .blind-slat:nth-child(5) { animation-delay: 0.18s, 0.66s; }
-    .go .blind-slat:nth-child(6) { animation-delay: 0.225s, 0.705s; }
+    .go .blind-slat:nth-child(1) {
+        animation-delay: 0s, 0.48s;
+    }
+    .go .blind-slat:nth-child(2) {
+        animation-delay: 0.045s, 0.525s;
+    }
+    .go .blind-slat:nth-child(3) {
+        animation-delay: 0.09s, 0.57s;
+    }
+    .go .blind-slat:nth-child(4) {
+        animation-delay: 0.135s, 0.615s;
+    }
+    .go .blind-slat:nth-child(5) {
+        animation-delay: 0.18s, 0.66s;
+    }
+    .go .blind-slat:nth-child(6) {
+        animation-delay: 0.225s, 0.705s;
+    }
 
     @keyframes slatIn {
         from {
@@ -191,5 +211,4 @@
             transform: scaleX(0);
         }
     }
-
 }

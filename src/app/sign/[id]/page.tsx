@@ -50,17 +50,21 @@ const fieldIcons = {
 };
 
 const emptyFieldTones = {
-  signature: "border-blue-500/70 bg-blue-50/95 text-zinc-950 shadow-[0_0_0_4px_rgba(59,130,246,0.08)] hover:bg-blue-100/90 dark:bg-blue-200/90 dark:text-zinc-950 dark:hover:bg-blue-300/90",
+  signature:
+    "border-blue-500/70 bg-blue-50/95 text-zinc-950 shadow-[0_0_0_4px_rgba(59,130,246,0.08)] hover:bg-blue-100/90 dark:bg-blue-200/90 dark:text-zinc-950 dark:hover:bg-blue-300/90",
   text: "border-emerald-500/70 bg-emerald-50/95 text-zinc-950 shadow-[0_0_0_4px_rgba(16,185,129,0.08)] hover:bg-emerald-100/90 dark:bg-emerald-200/90 dark:text-zinc-950 dark:hover:bg-emerald-300/90",
   date: "border-amber-500/70 bg-amber-50/95 text-zinc-950 shadow-[0_0_0_4px_rgba(245,158,11,0.1)] hover:bg-amber-100/90 dark:bg-amber-200/90 dark:text-zinc-950 dark:hover:bg-amber-300/90",
-  checkbox: "border-violet-500/70 bg-violet-50/95 text-zinc-950 shadow-[0_0_0_4px_rgba(139,92,246,0.08)] hover:bg-violet-100/90 dark:bg-violet-200/90 dark:text-zinc-950 dark:hover:bg-violet-300/90",
+  checkbox:
+    "border-violet-500/70 bg-violet-50/95 text-zinc-950 shadow-[0_0_0_4px_rgba(139,92,246,0.08)] hover:bg-violet-100/90 dark:bg-violet-200/90 dark:text-zinc-950 dark:hover:bg-violet-300/90",
 };
 
 const completedFieldTones = {
-  signature: "border-blue-600 bg-blue-50/95 text-zinc-950 dark:border-blue-400 dark:bg-blue-200/90 dark:text-zinc-950",
+  signature:
+    "border-blue-600 bg-blue-50/95 text-zinc-950 dark:border-blue-400 dark:bg-blue-200/90 dark:text-zinc-950",
   text: "border-emerald-600 bg-emerald-50/95 text-zinc-950 dark:border-emerald-400 dark:bg-emerald-200/90 dark:text-zinc-950",
   date: "border-amber-600 bg-amber-50/95 text-zinc-950 dark:border-amber-400 dark:bg-amber-200/90 dark:text-zinc-950",
-  checkbox: "border-violet-600 bg-violet-50/95 text-zinc-950 dark:border-violet-400 dark:bg-violet-200/90 dark:text-zinc-950",
+  checkbox:
+    "border-violet-600 bg-violet-50/95 text-zinc-950 dark:border-violet-400 dark:bg-violet-200/90 dark:text-zinc-950",
 };
 
 export default function SignerPortal() {
@@ -82,15 +86,23 @@ export default function SignerPortal() {
         setSession(data);
         setSignatures(
           Object.fromEntries(
-            data.signatures?.map((item: SignatureRecord) => [item.fieldId, item.value]) || [],
+            data.signatures?.map((item: SignatureRecord) => [
+              item.fieldId,
+              item.value,
+            ]) || [],
           ),
         );
       })
-      .catch((error) => setLoadError(error.message || "Failed to load document"))
+      .catch((error) =>
+        setLoadError(error.message || "Failed to load document"),
+      )
       .finally(() => setIsLoading(false));
   }, [id]);
 
-  const fields: Field[] = useMemo(() => session?.document?.fields || [], [session]);
+  const fields: Field[] = useMemo(
+    () => session?.document?.fields || [],
+    [session],
+  );
   const requiredFields = useMemo(
     () => fields.filter((field) => field.required),
     [fields],
@@ -99,10 +111,13 @@ export default function SignerPortal() {
   const completedCount = requiredFields.filter((field) => {
     return valueIsComplete(signatures[field.id]);
   }).length;
-  const allFieldsSigned = requiredFields.every((field) => valueIsComplete(signatures[field.id]));
+  const allFieldsSigned = requiredFields.every((field) =>
+    valueIsComplete(signatures[field.id]),
+  );
 
   const nextField = useMemo(
-    () => requiredFields.find((field) => !valueIsComplete(signatures[field.id])),
+    () =>
+      requiredFields.find((field) => !valueIsComplete(signatures[field.id])),
     [requiredFields, signatures],
   );
 
@@ -115,7 +130,10 @@ export default function SignerPortal() {
     }
 
     if (field.type === "checkbox") {
-      await updateSignature(field.id, signatures[field.id] === "true" ? "false" : "true");
+      await updateSignature(
+        field.id,
+        signatures[field.id] === "true" ? "false" : "true",
+      );
       return;
     }
 
@@ -142,7 +160,9 @@ export default function SignerPortal() {
       if (!res.ok) throw new Error("Finalize failed");
       const data = await res.json();
       setFinalPdfUrl(data.url);
-      setSession((current) => (current ? { ...current, status: "completed" } : current));
+      setSession((current) =>
+        current ? { ...current, status: "completed" } : current,
+      );
       toast.success("Document finalized");
     } catch {
       toast.error("Failed to finalize document");
@@ -171,7 +191,9 @@ export default function SignerPortal() {
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center">
         <AlertCircle className="size-12 text-destructive" />
         <h1 className="text-xl font-semibold">Unable to open this document</h1>
-        <p className="max-w-md text-sm text-muted-foreground">{loadError || "Session not found"}</p>
+        <p className="max-w-md text-sm text-muted-foreground">
+          {loadError || "Session not found"}
+        </p>
       </div>
     );
   }
@@ -181,11 +203,16 @@ export default function SignerPortal() {
       <div className="flex min-h-screen items-center justify-center bg-[var(--paper)] p-6">
         <div className="w-full max-w-md border border-border bg-background p-8 text-center shadow-xl">
           <CheckCircle2 className="mx-auto size-14 text-emerald-400" />
-          <h1 className="mt-5 font-mono text-xs font-semibold uppercase tracking-widest">Document completed</h1>
+          <h1 className="mt-5 font-mono text-xs font-semibold uppercase tracking-widest">
+            Document completed
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Your signed PDF and completion certificate are ready.
           </p>
-          <Button className="mt-6 w-full gap-2" onClick={() => window.open(finalPdfUrl, "_blank")}>
+          <Button
+            className="mt-6 w-full gap-2"
+            onClick={() => window.open(finalPdfUrl, "_blank")}
+          >
             <Download className="size-4" />
             Download signed PDF
           </Button>
@@ -199,25 +226,43 @@ export default function SignerPortal() {
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="flex size-6 items-center justify-center bg-primary font-mono text-[10px] font-bold text-primary-foreground">S</span>
-            <h1 className="font-mono text-xs font-semibold uppercase tracking-widest">SleekSign</h1>
-            <Badge variant="outline" className="rounded-none font-mono text-[9px] uppercase tracking-widest">
+            <h1 className="text-lg ruthie-regular">SleekSign</h1>
+            <Badge
+              variant="outline"
+              className="rounded-none font-mono text-[9px] uppercase tracking-widest"
+            >
               Signing
             </Badge>
           </div>
-          <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{session.document?.name}</p>
+          <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            {session.document?.name}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
           {!allFieldsSigned ? (
-            <Button variant="outline" onClick={scrollToNextField} className="hidden gap-2 md:flex">
+            <Button
+              variant="outline"
+              onClick={scrollToNextField}
+              className="hidden gap-2 md:flex"
+            >
               Next field
               <ChevronDown className="size-4" />
             </Button>
           ) : null}
-          <Button disabled={!allFieldsSigned || isFinalizing} onClick={finalize} className="gap-2">
-            {isFinalizing ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-            {allFieldsSigned ? "Complete" : `${completedCount}/${requiredCount} complete`}
+          <Button
+            disabled={!allFieldsSigned || isFinalizing}
+            onClick={finalize}
+            className="gap-2"
+          >
+            {isFinalizing ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Check className="size-4" />
+            )}
+            {allFieldsSigned
+              ? "Complete"
+              : `${completedCount}/${requiredCount} complete`}
           </Button>
         </div>
       </header>
@@ -251,16 +296,23 @@ export default function SignerPortal() {
                         height: `${(field.height / 100) * metrics.height}px`,
                       }}
                       className={`absolute flex items-center justify-center border text-center transition ${
-                        isComplete ? completedFieldTones[field.type] : emptyFieldTones[field.type]
+                        isComplete
+                          ? completedFieldTones[field.type]
+                          : emptyFieldTones[field.type]
                       }`}
                     >
                       {isComplete ? (
                         field.type === "checkbox" ? (
                           <Check className="size-4" />
                         ) : field.type === "signature" ? (
-                          <SignatureValue value={value} className="h-full w-full px-2 py-1" />
+                          <SignatureValue
+                            value={value}
+                            className="h-full w-full px-2 py-1"
+                          />
                         ) : (
-                          <span className="truncate px-2 text-xs font-semibold">{value}</span>
+                          <span className="truncate px-2 text-xs font-semibold">
+                            {value}
+                          </span>
                         )
                       ) : (
                         <span className="flex items-center gap-1 px-1 font-mono text-[10px] font-semibold uppercase tracking-wider">
@@ -276,10 +328,13 @@ export default function SignerPortal() {
         </section>
 
         <aside className="hidden min-h-0 border-l border-border bg-card p-5 md:block">
-          <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest">Required fields</h2>
+          <h2 className="font-mono text-[10px] font-semibold uppercase tracking-widest">
+            Required fields
+          </h2>
           <div className="mt-4 space-y-2">
             {fields.map((field, index) => {
-              const complete = !field.required || valueIsComplete(signatures[field.id]);
+              const complete =
+                !field.required || valueIsComplete(signatures[field.id]);
               const Icon = fieldIcons[field.type];
               return (
                 <button
@@ -326,8 +381,12 @@ export default function SignerPortal() {
           (selectedField?.type === "signature" ? session.signerName || "" : "")
         }
         textSuggestions={[
-          ...(session.signerName ? [{ label: "Full name", value: session.signerName }] : []),
-          ...(session.signerEmail ? [{ label: "Email address", value: session.signerEmail }] : []),
+          ...(session.signerName
+            ? [{ label: "Full name", value: session.signerName }]
+            : []),
+          ...(session.signerEmail
+            ? [{ label: "Email address", value: session.signerEmail }]
+            : []),
         ]}
       />
     </div>

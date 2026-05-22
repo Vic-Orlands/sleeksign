@@ -1,12 +1,15 @@
 "use client"
 
 import type { ElementType } from "react"
-import { CalendarIcon, CheckSquareIcon, PenLineIcon, TypeIcon } from "lucide-react"
+import { CalendarIcon, CheckSquareIcon, MousePointer2Icon, PenLineIcon, TypeIcon } from "lucide-react"
 
 import { FieldType } from "@/lib/field-utils"
 import { cn } from "@/lib/utils"
 
-const fieldTools: Array<{ type: FieldType; label: string; icon: ElementType; accent: string }> = [
+type FieldToolType = FieldType | "select"
+
+const fieldTools: Array<{ type: FieldToolType; label: string; icon: ElementType; accent: string }> = [
+  { type: "select", label: "Select", icon: MousePointer2Icon, accent: "text-muted-foreground" },
   { type: "signature", label: "Signature", icon: PenLineIcon, accent: "text-blue-400" },
   { type: "text", label: "Text", icon: TypeIcon, accent: "text-emerald-400" },
   { type: "date", label: "Date", icon: CalendarIcon, accent: "text-amber-400" },
@@ -18,9 +21,9 @@ function FieldPalette({
   fieldCounts,
   onSelectType,
 }: {
-  selectedType: FieldType
+  selectedType: FieldToolType
   fieldCounts: Record<FieldType, number>
-  onSelectType: (type: FieldType) => void
+  onSelectType: (type: FieldToolType) => void
 }) {
   return (
     <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4 lg:flex lg:flex-col">
@@ -36,11 +39,12 @@ function FieldPalette({
             <Icon className={cn("size-4", accent)} />
             <span className="truncate">{label}</span>
           </span>
-          <span className="font-mono text-xs text-muted-foreground">{fieldCounts[type] || 0}</span>
+          <span className="font-mono text-xs text-muted-foreground">{type === "select" ? "" : fieldCounts[type] || 0}</span>
         </button>
       ))}
     </div>
   )
 }
 
+export type { FieldToolType }
 export { FieldPalette, fieldTools }
