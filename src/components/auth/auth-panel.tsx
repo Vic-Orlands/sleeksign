@@ -241,7 +241,7 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
               onSubmit={submit}
               transition={springTransition}
             >
-              <AnimatePresence initial={false} presenceAffectsLayout={false}>
+              <AnimatePresence initial={false}>
                 {isSignUp ? (
                   <AuthField
                     key="name"
@@ -266,7 +266,7 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
                   placeholder="alex@company.com"
                 />
               ) : null}
-              <AnimatePresence initial={false} presenceAffectsLayout={false}>
+              <AnimatePresence initial={false}>
                 {isSignIn || isSignUp ? (
                   <AuthField
                     key="password"
@@ -282,7 +282,7 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
                   />
                 ) : null}
               </AnimatePresence>
-              <AnimatePresence initial={false} presenceAffectsLayout={false}>
+              <AnimatePresence initial={false}>
                 {isReset ? (
                   <AuthField
                     key="new-password"
@@ -296,18 +296,24 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
                   />
                 ) : null}
               </AnimatePresence>
-              {isSignIn ? (
-                <motion.button
-                  layoutId="auth-forgot"
-                  type="button"
-                  className="-mt-1 self-end font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-                  onClick={() => navigate("/forgot-password")}
-                  transition={springTransition}
-                >
-                  Forgot Password?
-                </motion.button>
-              ) : null}
-              <AnimatePresence initial={false} presenceAffectsLayout={false}>
+              <AnimatePresence initial={false}>
+                {isSignIn ? (
+                  <motion.button
+                    key="forgot"
+                    layoutId="auth-forgot"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    type="button"
+                    className="-mt-1 self-end font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => navigate("/forgot-password")}
+                    transition={springTransition}
+                  >
+                    Forgot Password?
+                  </motion.button>
+                ) : null}
+              </AnimatePresence>
+              <AnimatePresence initial={false}>
                 {isSignUp ? (
                   <AuthField
                     key="workspace"
@@ -328,6 +334,7 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
               </AnimatePresence>
 
               <motion.div
+                layout
                 layoutId="auth-submit"
                 className="mt-2"
                 transition={springTransition}
