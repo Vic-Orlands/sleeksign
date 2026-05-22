@@ -18,11 +18,12 @@ import { toast } from "sonner";
 
 import { FieldInspector } from "@/components/hr/field-inspector";
 import { FieldPalette } from "@/components/hr/field-palette";
+import type { FieldToolType } from "@/components/hr/field-palette";
 import type { DocumentRecord } from "@/components/hr/types";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { PdfCanvasViewer } from "@/components/pdf/PdfCanvasViewer";
-import { Field, FieldType, clampField, fieldDefaults } from "@/lib/field-utils";
+import { Field, clampField, fieldDefaults } from "@/lib/field-utils";
 import { cn } from "@/lib/utils";
 
 const fieldIconMap = {
@@ -33,10 +34,17 @@ const fieldIconMap = {
 };
 
 const fieldToneMap = {
-  signature: "border-blue-500/60 bg-blue-50/95 text-blue-950 dark:bg-blue-200/90 dark:text-blue-950",
-  text: "border-emerald-500/60 bg-emerald-50/95 text-emerald-950 dark:bg-emerald-200/90 dark:text-emerald-950",
-  date: "border-amber-500/60 bg-amber-50/95 text-amber-950 dark:bg-amber-200/90 dark:text-amber-950",
-  checkbox: "border-violet-500/60 bg-violet-50/95 text-violet-950 dark:bg-violet-200/90 dark:text-violet-950",
+  signature: "border-blue-600/80 bg-blue-100/90 text-blue-800 dark:bg-blue-200/90 dark:text-blue-950",
+  text: "border-emerald-600/80 bg-emerald-100/90 text-emerald-800 dark:bg-emerald-200/90 dark:text-emerald-950",
+  date: "border-amber-600/80 bg-amber-100/90 text-amber-900 dark:bg-amber-200/90 dark:text-amber-950",
+  checkbox: "border-violet-600/80 bg-violet-100/90 text-violet-800 dark:bg-violet-200/90 dark:text-violet-950",
+};
+
+const fieldLabelToneMap = {
+  signature: "bg-blue-600 text-white",
+  text: "bg-emerald-600 text-white",
+  date: "bg-amber-500 text-black",
+  checkbox: "bg-violet-600 text-white",
 };
 
 function DocumentSetupDock({
@@ -49,7 +57,7 @@ function DocumentSetupDock({
   fullHeight?: boolean;
 }) {
   const [fields, setFields] = useState<Field[]>(document.fields || []);
-  const [selectedType, setSelectedType] = useState<FieldType>("signature");
+  const [selectedType, setSelectedType] = useState<FieldToolType>("select");
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(
     document.fields?.[0]?.id || null,
   );
@@ -72,6 +80,8 @@ function DocumentSetupDock({
   );
 
   async function addField(page: number, point: { x: number; y: number }) {
+    if (selectedType === "select") return;
+
     const defaults = fieldDefaults[selectedType];
     const draft = clampField({
       type: selectedType,
@@ -155,7 +165,7 @@ function DocumentSetupDock({
               Add Field
             </h3>
             <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-              Click the PDF to place selected fields.
+              Select a field type, then click the PDF to place it.
             </p>
           </div>
           <FieldPalette
@@ -200,6 +210,10 @@ function DocumentSetupDock({
                         event.stopPropagation();
                         setSelectedFieldId(field.id);
                       }}
+                      onMouseDown={(event) => {
+                        event.stopPropagation();
+                        setSelectedFieldId(field.id);
+                      }}
                       onDragStop={(_, data) => {
                         persistField(field.id, {
                           x: (data.x / metrics.width) * 100,
@@ -215,14 +229,21 @@ function DocumentSetupDock({
                         });
                       }}
                       className={cn(
-                        "group flex items-center justify-center border border-dashed shadow-sm backdrop-blur-sm",
+                        "group flex items-center justify-center border border-dashed shadow-sm backdrop-blur-sm outline outline-0 outline-offset-2 transition-[box-shadow,background-color,outline-color]",
                         fieldToneMap[field.type],
-                        selectedFieldId === field.id && "ring-2 ring-primary",
+                        selectedFieldId === field.id && "border-solid outline-2 outline-primary ring-2 ring-primary/20",
                       )}
                     >
-                      <span className="pointer-events-none flex items-center gap-1 px-1 font-mono text-[10px] font-medium uppercase tracking-wider">
-                        <Icon className="size-3" />
+                      <span
+                        className={cn(
+                          "pointer-events-none absolute -top-5 left-0 whitespace-nowrap px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider shadow-sm",
+                          fieldLabelToneMap[field.type],
+                        )}
+                      >
                         {field.type}
+                      </span>
+                      <span className="pointer-events-none flex h-full w-full items-center justify-center">
+                        <Icon className="h-[45%] max-h-5 min-h-3 w-[45%] max-w-5 min-w-3 stroke-[2.3]" />
                       </span>
                       <span className="absolute -right-2 -top-2 flex size-5 items-center justify-center bg-primary font-mono text-[10px] text-primary-foreground">
                         {index + 1}

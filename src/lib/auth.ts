@@ -1,10 +1,10 @@
-import { betterAuth } from "better-auth"
-import { drizzleAdapter } from "better-auth/adapters/drizzle"
-import { organization } from "better-auth/plugins"
-import { nextCookies } from "better-auth/next-js"
-import { Resend } from "resend"
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { organization } from "better-auth/plugins";
+import { nextCookies } from "better-auth/next-js";
+import { Resend } from "resend";
 
-import { db } from "@/db"
+import { db } from "@/db";
 import {
   authAccount,
   authInvitation,
@@ -13,12 +13,18 @@ import {
   authSession,
   authUser,
   authVerification,
-} from "@/db/schema"
+} from "@/db/schema";
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
+const resend = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
 
 function getBaseUrl() {
-  return process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3000"
+  return (
+    process.env.BETTER_AUTH_URL ||
+    process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
+    "http://localhost:3000"
+  );
 }
 
 async function sendEmail({
@@ -27,17 +33,19 @@ async function sendEmail({
   html,
   text,
 }: {
-  to: string
-  subject: string
-  html: string
-  text: string
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
 }) {
-  const from = process.env.RESEND_FROM_EMAIL
+  const from = process.env.RESEND_FROM_EMAIL;
 
   if (!resend || !from) {
-    console.warn(`Email delivery skipped for ${to}. Configure RESEND_API_KEY and RESEND_FROM_EMAIL.`)
-    console.info(text)
-    return
+    console.warn(
+      `Email delivery skipped for ${to}. Configure RESEND_API_KEY and RESEND_FROM_EMAIL.`,
+    );
+    console.info(text);
+    return;
   }
 
   await resend.emails.send({
@@ -46,13 +54,17 @@ async function sendEmail({
     subject,
     html,
     text,
-  })
+  });
 }
 
 export const auth = betterAuth({
   appName: "SleekSign",
-  secret: process.env.BETTER_AUTH_SECRET || "sleeksign-local-development-secret",
-  baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3000",
+  secret:
+    process.env.BETTER_AUTH_SECRET || "sleeksign-local-development-secret",
+  baseURL:
+    process.env.BETTER_AUTH_URL ||
+    process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
+    "http://localhost:3000",
   database: drizzleAdapter(db, {
     provider: "sqlite",
     schema: {
@@ -79,7 +91,7 @@ export const auth = betterAuth({
           <p style="margin:0 0 16px"><a href="${url}" style="display:inline-block;padding:10px 14px;background:#111827;color:#ffffff;text-decoration:none">Reset Password</a></p>
           <p style="margin:0;color:#4b5563">If you did not request this, you can ignore this email.</p>
         </div>`,
-      })
+      });
     },
   },
   user: {
@@ -89,14 +101,21 @@ export const auth = betterAuth({
   },
   socialProviders: {
     google: {
-      clientId: process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || process.env.AUTH_GOOGLE_SECRET || "",
+      clientId:
+        process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID || "",
+      clientSecret:
+        process.env.GOOGLE_CLIENT_SECRET ||
+        process.env.AUTH_GOOGLE_SECRET ||
+        "",
     },
   },
   plugins: [
     organization({
       sendInvitationEmail: async ({ id, email, organization, inviter }) => {
-        const url = new URL(`/accept-invitation/${id}`, getBaseUrl()).toString()
+        const url = new URL(
+          `/accept-invitation/${id}`,
+          getBaseUrl(),
+        ).toString();
 
         await sendEmail({
           to: email,
@@ -108,9 +127,9 @@ export const auth = betterAuth({
             <p style="margin:0 0 16px"><a href="${url}" style="display:inline-block;padding:10px 14px;background:#111827;color:#ffffff;text-decoration:none">Accept Invitation</a></p>
             <p style="margin:0;color:#4b5563">This link opens the invitation acceptance flow for your workspace.</p>
           </div>`,
-        })
+        });
       },
     }),
     nextCookies(),
   ],
-})
+});

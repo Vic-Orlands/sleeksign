@@ -51,7 +51,7 @@ function SheetContent({
       className="fixed inset-0 z-50 pointer-events-none data-[state=open]:pointer-events-auto"
     >
       <button
-        className="absolute inset-0 bg-black/50 opacity-0 transition-opacity duration-300 data-[state=open]:opacity-100"
+        className="absolute inset-0 bg-black/35 opacity-0 backdrop-blur-[2px] transition-opacity duration-300 data-[state=open]:opacity-100"
         data-state={open ? "open" : "closed"}
         tabIndex={open ? 0 : -1}
         onClick={() => onOpenChange(false)}

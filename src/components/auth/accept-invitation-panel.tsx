@@ -1,64 +1,69 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { useRouter } from "next/navigation"
-import { Building2Icon, CheckCircle2Icon, LoaderCircleIcon } from "lucide-react"
-import { toast } from "sonner"
+import * as React from "react";
+import { useRouter } from "next/navigation";
+import {
+  Building2Icon,
+  CheckCircle2Icon,
+  LoaderCircleIcon,
+} from "lucide-react";
+import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button"
-import { authClient } from "@/lib/auth-client"
+import { Button } from "@/components/ui/button";
+import { authClient } from "@/lib/auth-client";
 
-function AcceptInvitationPanel({
-  invitationId,
-}: {
-  invitationId: string
-}) {
-  const router = useRouter()
-  const [status, setStatus] = React.useState<"idle" | "loading" | "success" | "error">("idle")
+function AcceptInvitationPanel({ invitationId }: { invitationId: string }) {
+  const router = useRouter();
+  const [status, setStatus] = React.useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
 
   React.useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
 
     async function acceptInvitation() {
-      setStatus("loading")
+      setStatus("loading");
 
       try {
         await authClient.$fetch("/organization/accept-invitation", {
           method: "POST",
           body: { invitationId },
-        })
+        });
 
-        if (cancelled) return
+        if (cancelled) return;
 
-        setStatus("success")
-        toast.success("Workspace invitation accepted")
-        router.replace("/hr/documents")
+        setStatus("success");
+        toast.success("Workspace invitation accepted");
+        router.replace("/hr/documents");
       } catch {
-        if (cancelled) return
-        setStatus("error")
-        toast.error("Unable to accept this invitation")
+        if (cancelled) return;
+        setStatus("error");
+        toast.error("Unable to accept this invitation");
       }
     }
 
-    acceptInvitation()
+    acceptInvitation();
 
     return () => {
-      cancelled = true
-    }
-  }, [invitationId, router])
+      cancelled = true;
+    };
+  }, [invitationId, router]);
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-[var(--paper)] px-4 py-8 text-foreground">
       <div className="w-full max-w-md border border-border bg-background p-6 shadow-sm">
         <div className="flex items-center gap-2">
-          <span className="flex size-7 items-center justify-center bg-primary text-[10px] font-bold text-primary-foreground">S</span>
-          <span className="text-xs font-semibold uppercase tracking-widest">SleekSign</span>
+          <span className="text-xl ruthie-regular">SleekSign</span>
         </div>
 
         <div className="mt-8">
-          <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Workspace Invitation</p>
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Workspace Invitation
+          </p>
           <h1 className="mt-3 text-2xl font-semibold tracking-normal">
-            {status === "error" ? "This invitation needs attention" : "Joining workspace"}
+            {status === "error"
+              ? "This invitation needs attention"
+              : "Joining workspace"}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {status === "error"
@@ -78,10 +83,16 @@ function AcceptInvitationPanel({
             )}
             <div>
               <p className="text-sm font-medium">
-                {status === "loading" ? "Accepting invitation" : status === "success" ? "Workspace joined" : "Invitation unavailable"}
+                {status === "loading"
+                  ? "Accepting invitation"
+                  : status === "success"
+                    ? "Workspace joined"
+                    : "Invitation unavailable"}
               </p>
               <p className="text-xs text-muted-foreground">
-                {status === "error" ? "Try signing in with the invited email address." : "You will be taken into Documents as soon as the workspace is ready."}
+                {status === "error"
+                  ? "Try signing in with the invited email address."
+                  : "You will be taken into Documents as soon as the workspace is ready."}
               </p>
             </div>
           </div>
@@ -89,17 +100,32 @@ function AcceptInvitationPanel({
 
         {status === "error" ? (
           <div className="mt-6 flex gap-2">
-            <Button className="flex-1" onClick={() => router.push(`/signin?next=${encodeURIComponent(`/accept-invitation/${invitationId}`)}`)}>
+            <Button
+              className="flex-1"
+              onClick={() =>
+                router.push(
+                  `/signin?next=${encodeURIComponent(`/accept-invitation/${invitationId}`)}`,
+                )
+              }
+            >
               Sign In Again
             </Button>
-            <Button variant="outline" className="flex-1" onClick={() => router.push(`/signup?next=${encodeURIComponent(`/accept-invitation/${invitationId}`)}`)}>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() =>
+                router.push(
+                  `/signup?next=${encodeURIComponent(`/accept-invitation/${invitationId}`)}`,
+                )
+              }
+            >
               Create Account
             </Button>
           </div>
         ) : null}
       </div>
     </main>
-  )
+  );
 }
 
-export { AcceptInvitationPanel }
+export { AcceptInvitationPanel };

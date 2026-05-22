@@ -36,7 +36,9 @@ export async function finalizeDocument(sessionId: string) {
     where: eq(signatures.sessionId, sessionId),
   });
 
-  const fallbackSignatureFont = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+  const fallbackSignatureFont = await pdfDoc.embedFont(
+    StandardFonts.HelveticaOblique,
+  );
 
   for (const field of docFields) {
     const signature = sessionSignatures.find((s) => s.fieldId === field.id);
