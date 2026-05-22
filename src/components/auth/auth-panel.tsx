@@ -241,8 +241,8 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
               onSubmit={submit}
               transition={springTransition}
             >
-              <AnimatePresence initial={false}>
-                {isSignUp && (
+              <AnimatePresence initial={false} presenceAffectsLayout={false}>
+                {isSignUp ? (
                   <AuthField
                     key="name"
                     layoutId="auth-field-name"
@@ -253,20 +253,21 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
                     autoComplete="name"
                     placeholder="Alex Kim"
                   />
-                )}
-                {!isReset && (
-                  <AuthField
-                    key="email"
-                    layoutId="auth-field-email"
-                    icon={MailIcon}
-                    label="Email"
-                    type="email"
-                    name="email"
-                    autoComplete="email"
-                    placeholder="alex@company.com"
-                  />
-                )}
-                {(isSignIn || isSignUp) && (
+                ) : null}
+              </AnimatePresence>
+              {!isReset ? (
+                <AuthField
+                  layoutId="auth-field-email"
+                  icon={MailIcon}
+                  label="Email"
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  placeholder="alex@company.com"
+                />
+              ) : null}
+              <AnimatePresence initial={false} presenceAffectsLayout={false}>
+                {isSignIn || isSignUp ? (
                   <AuthField
                     key="password"
                     layoutId="auth-field-password"
@@ -279,8 +280,10 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
                     }
                     placeholder="Password"
                   />
-                )}
-                {isReset && (
+                ) : null}
+              </AnimatePresence>
+              <AnimatePresence initial={false} presenceAffectsLayout={false}>
+                {isReset ? (
                   <AuthField
                     key="new-password"
                     layoutId="auth-field-password"
@@ -291,23 +294,21 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
                     autoComplete="new-password"
                     placeholder="New password"
                   />
-                )}
-                {isSignIn && (
-                  <motion.button
-                    key="forgot"
-                    layoutId="auth-forgot"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    type="button"
-                    className="-mt-1 self-end font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-                    onClick={() => navigate("/forgot-password")}
-                    transition={springTransition}
-                  >
-                    Forgot Password?
-                  </motion.button>
-                )}
-                {isSignUp && (
+                ) : null}
+              </AnimatePresence>
+              {isSignIn ? (
+                <motion.button
+                  layoutId="auth-forgot"
+                  type="button"
+                  className="-mt-1 self-end font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => navigate("/forgot-password")}
+                  transition={springTransition}
+                >
+                  Forgot Password?
+                </motion.button>
+              ) : null}
+              <AnimatePresence initial={false} presenceAffectsLayout={false}>
+                {isSignUp ? (
                   <AuthField
                     key="workspace"
                     layoutId="auth-field-workspace"
@@ -323,11 +324,10 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
                     }
                     required={!isInvitationFlow}
                   />
-                )}
+                ) : null}
               </AnimatePresence>
 
               <motion.div
-                layout
                 layoutId="auth-submit"
                 className="mt-2"
                 transition={springTransition}
@@ -339,24 +339,24 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
               </motion.div>
             </motion.form>
 
-            <AnimatePresence>
-              {(isSignIn || isSignUp) && (
+            {isSignIn || isSignUp ? (
+              <>
                 <motion.div
-                  key="social-auth"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
+                  layoutId="auth-divider"
+                  className="my-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3"
                   transition={springTransition}
-                  className="overflow-hidden"
                 >
-                  <div className="my-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                    <span className="h-px bg-border" />
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-                      or
-                    </span>
-                    <span className="h-px bg-border" />
-                  </div>
+                  <span className="h-px bg-border" />
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                    or
+                  </span>
+                  <span className="h-px bg-border" />
+                </motion.div>
 
+                <motion.div
+                  layoutId="auth-google"
+                  transition={springTransition}
+                >
                   <Button
                     variant="outline"
                     className="w-full gap-2"
@@ -371,8 +371,8 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
                     Continue with Google
                   </Button>
                 </motion.div>
-              )}
-            </AnimatePresence>
+              </>
+            ) : null}
 
             <motion.div
               layoutId="auth-switcher"
