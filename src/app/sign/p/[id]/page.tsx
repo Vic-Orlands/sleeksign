@@ -49,7 +49,10 @@ export default function PublicSignLanding() {
       if (!data.sessionId) throw new Error("No session created");
       localStorage.setItem(
         "sleeksign:last-signer",
-        JSON.stringify({ signerName: signerName.trim(), signerEmail: signerEmail.trim() }),
+        JSON.stringify({
+          signerName: signerName.trim(),
+          signerEmail: signerEmail.trim(),
+        }),
       );
       router.push(`/sign/${data.sessionId}`);
     } catch {
@@ -67,7 +70,11 @@ export default function PublicSignLanding() {
   }
 
   if (!doc) {
-    return <div className="flex h-screen items-center justify-center bg-background">Document not found</div>;
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        Document not found
+      </div>
+    );
   }
 
   return (
@@ -81,7 +88,8 @@ export default function PublicSignLanding() {
             Review and sign securely
           </h1>
           <p className="mt-3 max-w-md leading-7 text-muted-foreground">
-            This signing session records your name, completion time, and audit metadata for HR.
+            This signing session records your name, completion time, and audit
+            metadata for Any.
           </p>
           <div className="mt-8 border border-border bg-background p-4 shadow-sm">
             <div className="flex items-center gap-3">
@@ -89,7 +97,9 @@ export default function PublicSignLanding() {
                 <FileText className="size-5 text-muted-foreground" />
               </div>
               <div className="min-w-0">
-                <p className="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Document</p>
+                <p className="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                  Document
+                </p>
                 <h2 className="truncate font-semibold">{doc.name}</h2>
               </div>
             </div>
@@ -98,9 +108,12 @@ export default function PublicSignLanding() {
 
         <form onSubmit={startSigning} className="flex flex-col gap-5 p-8">
           <div>
-            <h2 className="font-mono text-xs font-semibold uppercase tracking-widest">Before you start</h2>
+            <h2 className="font-mono text-xs font-semibold uppercase tracking-widest">
+              Before you start
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Enter your legal name so your signature and certificate match the signed PDF.
+              Enter your legal name so your signature and certificate match the
+              signed PDF.
             </p>
           </div>
 
@@ -125,14 +138,19 @@ export default function PublicSignLanding() {
             />
           </label>
 
-          <Button type="submit" disabled={isCreating} className="h-11 w-full gap-2">
+          <Button
+            type="submit"
+            disabled={isCreating}
+            className="h-11 w-full gap-2"
+          >
             {isCreating ? <Loader2 className="size-4 animate-spin" /> : null}
             Start signing
             <ArrowRight className="size-4" />
           </Button>
 
           <p className="text-xs leading-5 text-muted-foreground">
-            By continuing, you consent to use electronic records and signatures for this document.
+            By continuing, you consent to use electronic records and signatures
+            for this document.
           </p>
         </form>
       </main>
@@ -147,7 +165,10 @@ function getSavedSigner() {
   if (!savedSigner) return { signerName: "", signerEmail: "" };
 
   try {
-    const parsed = JSON.parse(savedSigner) as { signerName?: string; signerEmail?: string };
+    const parsed = JSON.parse(savedSigner) as {
+      signerName?: string;
+      signerEmail?: string;
+    };
     return {
       signerName: parsed.signerName || "",
       signerEmail: parsed.signerEmail || "",

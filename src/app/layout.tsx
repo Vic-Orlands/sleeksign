@@ -18,7 +18,7 @@ const jetBrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "SleekSign",
-  description: "HR document signing and audit workflow",
+  description: "Any document signing and audit workflow",
 };
 
 export default function RootLayout({
