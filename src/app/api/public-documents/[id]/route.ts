@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { documents } from "@/db/schema";
+import { parseSignerRoles } from "@/lib/field-utils";
 
 export async function GET(
   _req: Request,
@@ -15,6 +16,7 @@ export async function GET(
     columns: {
       id: true,
       name: true,
+      signerRoles: true,
     },
   });
 
@@ -22,9 +24,15 @@ export async function GET(
     return NextResponse.json({ error: "Document not found" }, { status: 404 });
   }
 
-  return NextResponse.json(document, {
-    headers: {
-      "Cache-Control": "no-store",
+  return NextResponse.json(
+    {
+      ...document,
+      signerRoles: parseSignerRoles(document.signerRoles),
     },
-  });
+    {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    },
+  );
 }

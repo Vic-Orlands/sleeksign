@@ -14,7 +14,7 @@ import { getDocumentCounts, getDocumentStatus } from "@/components/hr/types";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Field } from "@/lib/field-utils";
+import type { Field, RoleConfig } from "@/lib/field-utils";
 import { uploadDocument } from "@/lib/upload-document";
 import { useCurrentWorkspaceId } from "@/lib/workspace-store";
 
@@ -130,6 +130,40 @@ export default function HRDocumentPage() {
     );
   }
 
+  function updateDocumentRoleConfigs(documentId: string, roleConfigs: RoleConfig[]) {
+    setDocument((current) =>
+      current?.id === documentId ? { ...current, roleConfigs } : current,
+    );
+    setDocuments((current) =>
+      current.map((item) =>
+        item.id === documentId ? { ...item, roleConfigs } : item,
+      ),
+    );
+  }
+
+  function getUnassignedFieldCount(currentDocument?: DocumentRecord | null) {
+    return (currentDocument?.fields || []).filter(
+      (field) => !String(field.assigneeRole || "").trim(),
+    ).length;
+  }
+
+  function openSharePanel() {
+    const unassignedFieldCount = getUnassignedFieldCount(document);
+
+    if (unassignedFieldCount > 0) {
+      toast.error(
+        `Assign all ${unassignedFieldCount} unassigned field${unassignedFieldCount === 1 ? "" : "s"} before sharing`,
+      );
+      setupRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      return;
+    }
+
+    setShareOpen(true);
+  }
+
   return (
     <HrShell
       query={query}
@@ -176,7 +210,7 @@ export default function HRDocumentPage() {
                     <EyeIcon data-icon="inline-start" />
                     Review
                   </Button>
-                  <Button onClick={() => setShareOpen(true)}>
+                  <Button onClick={openSharePanel}>
                     <SendIcon data-icon="inline-start" />
                     Share Document
                   </Button>
@@ -206,6 +240,7 @@ export default function HRDocumentPage() {
                 key={document.id}
                 document={document}
                 onFieldsChange={updateDocumentFields}
+                onRoleConfigsChange={updateDocumentRoleConfigs}
                 fullHeight
               />
             ) : (
@@ -216,7 +251,17 @@ export default function HRDocumentPage() {
           </div>
         </section>
 
-        <Sheet open={shareOpen} onOpenChange={setShareOpen}>
+        <Sheet
+          open={shareOpen}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) {
+              setShareOpen(false);
+              return;
+            }
+
+            openSharePanel();
+          }}
+        >
           <SheetContent
             hideCloseButton
             className="left-auto right-0 w-[min(100vw,36rem)] max-w-none translate-x-full border-l border-r-0 p-0 data-[state=open]:translate-x-0"
@@ -224,6 +269,7 @@ export default function HRDocumentPage() {
             <SheetTitle className="sr-only">Share document</SheetTitle>
             <DocumentDetailPanel
               document={document || undefined}
+              canShare={getUnassignedFieldCount(document) === 0}
               onClose={() => setShareOpen(false)}
               onEdit={() => {
                 setShareOpen(false);

@@ -1,36 +1,84 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, FileText, Loader2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 
 type PublicDocument = {
   id: string;
   name: string;
+  signerRoles: string[];
+};
+
+type PublicPacket = {
+  id: string;
+  mode: string;
+  status: string;
+  roleConfigs: Array<{ name: string; scope: "shared" | "private" }>;
+  document: {
+    id: string;
+    name: string;
+  };
 };
 
 export default function PublicSignLanding() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const savedSigner = getSavedSigner();
   const [doc, setDoc] = useState<PublicDocument | null>(null);
+  const [packet, setPacket] = useState<PublicPacket | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [signerName, setSignerName] = useState(savedSigner.signerName);
   const [signerEmail, setSignerEmail] = useState(savedSigner.signerEmail);
+  const [signerRole, setSignerRole] = useState(savedSigner.signerRole);
+  const requestedRole = searchParams.get("role") || "";
+  const packetId = searchParams.get("packet") || "";
+
+  const roleOptions = useMemo(
+    () =>
+      packet
+        ? packet.roleConfigs.map((role) => role.name)
+        : doc?.signerRoles || [],
+    [doc?.signerRoles, packet],
+  );
 
   useEffect(() => {
-    fetch(`/api/public-documents/${id}`)
+    const target = packetId
+      ? `/api/public-packets/${packetId}`
+      : `/api/public-documents/${id}`;
+
+    fetch(target)
       .then((res) => res.json())
-      .then((data) => setDoc(data))
+      .then((data) => {
+        if (packetId) {
+          setPacket(data);
+          const packetRoles = data.roleConfigs?.map(
+            (role: { name: string }) => role.name,
+          );
+          const validRequestedRole = packetRoles?.includes(requestedRole)
+            ? requestedRole
+            : "";
+          setSignerRole(validRequestedRole || savedSigner.signerRole || packetRoles?.[0] || "");
+          return;
+        }
+
+        setDoc(data);
+        const validRequestedRole = data.signerRoles?.includes(requestedRole)
+          ? requestedRole
+          : "";
+        setSignerRole(validRequestedRole || savedSigner.signerRole || data.signerRoles?.[0] || "");
+      })
       .catch(() => toast.error("Document not found"))
       .finally(() => setIsLoading(false));
-  }, [id]);
+  }, [id, packetId, requestedRole, savedSigner.signerRole]);
 
   async function startSigning(event: FormEvent) {
     event.preventDefault();
@@ -38,22 +86,52 @@ export default function PublicSignLanding() {
       toast.error("Enter your full name");
       return;
     }
+    if (!signerRole) {
+      toast.error("Select who is signing");
+      return;
+    }
 
     setIsCreating(true);
     try {
-      const res = await fetch("/api/sessions", {
-        method: "POST",
-        body: JSON.stringify({ documentId: id, signerName, signerEmail }),
-      });
-      const data = await res.json();
-      if (!data.sessionId) throw new Error("No session created");
       localStorage.setItem(
         "sleeksign:last-signer",
         JSON.stringify({
           signerName: signerName.trim(),
           signerEmail: signerEmail.trim(),
+          signerRole,
         }),
       );
+
+      if (packetId) {
+        const copyRes = await fetch("/api/public-packet-copies", {
+          method: "POST",
+          body: JSON.stringify({
+            packetId,
+            roleName: signerRole,
+            signerName,
+            signerEmail,
+          }),
+        });
+        const copyData = await copyRes.json();
+        router.push(
+          `/sign/packet/${packetId}?role=${encodeURIComponent(signerRole)}${
+            copyData.copyId ? `&copyId=${encodeURIComponent(copyData.copyId)}` : ""
+          }`,
+        );
+        return;
+      }
+
+      const res = await fetch("/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          documentId: id,
+          signerName,
+          signerEmail,
+          signerRole,
+        }),
+      });
+      const data = await res.json();
+      if (!data.sessionId) throw new Error("No session created");
       router.push(`/sign/${data.sessionId}`);
     } catch {
       toast.error("Failed to initialize signing session");
@@ -69,7 +147,7 @@ export default function PublicSignLanding() {
     );
   }
 
-  if (!doc) {
+  if (!doc && !packet) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         Document not found
@@ -100,7 +178,9 @@ export default function PublicSignLanding() {
                 <p className="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
                   Document
                 </p>
-                <h2 className="truncate font-semibold">{doc.name}</h2>
+                <h2 className="truncate font-semibold">
+                  {packet?.document.name || doc?.name}
+                </h2>
               </div>
             </div>
           </div>
@@ -117,6 +197,21 @@ export default function PublicSignLanding() {
             </p>
           </div>
 
+          <label className="flex flex-col gap-1.5">
+            <Label>Signing as</Label>
+            <Select
+              value={signerRole}
+              onChange={(event) => setSignerRole(event.target.value)}
+              className="h-11"
+              disabled={Boolean(requestedRole && roleOptions.includes(requestedRole))}
+            >
+              {roleOptions.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </Select>
+          </label>
           <label className="flex flex-col gap-1.5">
             <Label>Your full name</Label>
             <Input
@@ -168,13 +263,15 @@ function getSavedSigner() {
     const parsed = JSON.parse(savedSigner) as {
       signerName?: string;
       signerEmail?: string;
+      signerRole?: string;
     };
     return {
       signerName: parsed.signerName || "",
       signerEmail: parsed.signerEmail || "",
+      signerRole: parsed.signerRole || "",
     };
   } catch {
     localStorage.removeItem("sleeksign:last-signer");
-    return { signerName: "", signerEmail: "" };
+    return { signerName: "", signerEmail: "", signerRole: "" };
   }
 }

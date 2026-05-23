@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { CopyIcon, Edit3Icon, LinkIcon, SendIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -7,19 +8,60 @@ import { SignerTimeline } from "@/components/hr/signer-timeline"
 import type { DocumentRecord } from "@/components/hr/types"
 import { getDocumentCounts, getDocumentStatus } from "@/components/hr/types"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { areRoleConfigsEqual, type WorkflowMode } from "@/lib/field-utils"
+
+type PacketSummary = {
+  id: string
+  mode: WorkflowMode
+  status: string
+  roleConfigs: Array<{ name: string; scope: "shared" | "private" }>
+}
 
 function DocumentDetailPanel({
   document,
+  canShare = true,
   onEdit,
   onClose,
 }: {
   document?: DocumentRecord
+  canShare?: boolean
   onEdit: () => void
   onClose?: () => void
 }) {
+  const [packets, setPackets] = useState<PacketSummary[]>([])
+  const [isCreatingPacket, setIsCreatingPacket] = useState(false)
+  const [selectedMode, setSelectedMode] = useState<WorkflowMode>("shared-base")
+
+  useEffect(() => {
+    if (!document) return
+
+    fetch(`/api/signing-packets?documentId=${encodeURIComponent(document.id)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setPackets(Array.isArray(data) ? data : [])
+      })
+      .catch(() => undefined)
+  }, [document])
+
+  const roleConfigs = useMemo(
+    () => document?.roleConfigs || [],
+    [document?.roleConfigs],
+  )
+
+  const selectedPacket = useMemo(
+    () =>
+      document
+        ? packets.find(
+            (packet) =>
+              packet.mode === selectedMode &&
+              areRoleConfigsEqual(packet.roleConfigs, roleConfigs),
+          ) || null
+        : null,
+    [document, packets, roleConfigs, selectedMode],
+  )
+
   if (!document) {
     return (
       <aside className="min-h-[320px] min-w-0 border-t border-border bg-card p-4 xl:min-h-0 xl:border-l xl:border-t-0">
@@ -33,6 +75,62 @@ function DocumentDetailPanel({
   const publicUrl = typeof window === "undefined" ? "" : `${window.location.origin}/sign/p/${document.id}`
   const counts = getDocumentCounts(document)
   const status = getDocumentStatus(document)
+
+  function guardShareAction(action: () => void) {
+    if (!canShare) {
+      toast.error("Assign all fields before sharing this document")
+      return
+    }
+
+    action()
+  }
+
+  async function ensurePacket(mode: WorkflowMode) {
+    if (!document) return null
+
+    const existingPacket = packets.find(
+      (packet) =>
+        packet.mode === mode &&
+        areRoleConfigsEqual(packet.roleConfigs, roleConfigs),
+    )
+    if (existingPacket) return existingPacket
+
+    setIsCreatingPacket(true)
+    try {
+      const res = await fetch("/api/signing-packets", {
+        method: "POST",
+        body: JSON.stringify({
+          documentId: document.id,
+          mode,
+          roleConfigs,
+        }),
+      })
+      const data = await res.json()
+      if (!data.packetId) throw new Error("Failed to create packet")
+
+      const packet: PacketSummary = {
+        id: data.packetId,
+        mode,
+        status: "active",
+        roleConfigs,
+      }
+      setPackets((current) => [packet, ...current])
+      toast.success("Share packet created")
+      return packet
+    } catch {
+      toast.error("Unable to create share packet")
+      return null
+    } finally {
+      setIsCreatingPacket(false)
+    }
+  }
+
+  function getPacketRoleLinks(packet: PacketSummary) {
+    return packet.roleConfigs.map((role) => ({
+      role,
+      url: `${publicUrl}?packet=${encodeURIComponent(packet.id)}&role=${encodeURIComponent(role.name)}`,
+    }))
+  }
 
   return (
     <aside className="grid h-full min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-x-hidden bg-card">
@@ -81,27 +179,101 @@ function DocumentDetailPanel({
           </TabsContent>
 
           <TabsContent value="link" className="m-0 flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Share Link</label>
-              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <Input value={publicUrl} readOnly className="min-w-0 font-mono text-xs" />
+            <div className="grid gap-3">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Choose a workflow model
+              </p>
+              {[
+                {
+                  mode: "collaborative" as WorkflowMode,
+                  title: "Collaborative Packet",
+                  copy: "Everyone signs the same live document and sees the other shared signers on the same PDF.",
+                },
+                {
+                  mode: "individual" as WorkflowMode,
+                  title: "Individual Copies",
+                  copy: "Each signer gets a clean isolated copy. Nobody sees any other signer on their document.",
+                },
+                {
+                  mode: "shared-base" as WorkflowMode,
+                  title: "Shared Base + Recipient Copies",
+                  copy: "Shared roles sign once, then each recipient signs their own copy with those shared signatures already visible.",
+                },
+              ].map((option) => (
+                <button
+                  key={option.mode}
+                  type="button"
+                  onClick={() => setSelectedMode(option.mode)}
+                  className={`border px-4 py-3 text-left transition-colors ${
+                    selectedMode === option.mode
+                      ? "border-foreground bg-muted"
+                      : "border-border bg-background hover:bg-muted/40"
+                  }`}
+                >
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {option.mode}
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-foreground">{option.title}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{option.copy}</p>
+                </button>
+              ))}
+            </div>
+            <div className="border border-border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Active packet
+                  </p>
+                  <p className="mt-2 text-sm text-foreground">
+                    {selectedPacket
+                      ? `Packet ${selectedPacket.id.slice(0, 10)}`
+                      : "No packet matches the current role setup yet."}
+                  </p>
+                </div>
                 <Button
                   variant="outline"
-                  className="w-full sm:w-auto"
-                  onClick={() => {
-                    navigator.clipboard.writeText(publicUrl)
-                    toast.success("Share link copied")
-                  }}
+                  disabled={!canShare || isCreatingPacket}
+                  onClick={() =>
+                    guardShareAction(() => {
+                      void ensurePacket(selectedMode)
+                    })
+                  }
                 >
-                  <CopyIcon data-icon="inline-start" />
-                  Copy
+                  {isCreatingPacket ? "Creating..." : selectedPacket ? "Reuse Packet" : "Create Packet"}
                 </Button>
               </div>
             </div>
-            <div className="border border-border bg-background p-4">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Public signing route</p>
-              <p className="mt-2 break-all font-mono text-xs text-foreground">{publicUrl}</p>
-            </div>
+            {selectedPacket ? (
+              <div className="grid gap-2">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Role links
+                </p>
+                {getPacketRoleLinks(selectedPacket).map(({ role, url }) => (
+                  <div key={`${selectedPacket.id}-${role.name}`} className="grid min-w-0 grid-cols-1 gap-2 border border-border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <div className="min-w-0">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                        {role.name} · {role.scope === "shared" ? "Shared" : "Private"}
+                      </p>
+                      <p className="mt-1 truncate font-mono text-xs text-foreground">{url}</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="w-full sm:w-auto"
+                      disabled={!canShare}
+                      onClick={() =>
+                        guardShareAction(() => {
+                          navigator.clipboard.writeText(url)
+                          toast.success(`${role.name} link copied`)
+                        })
+                      }
+                    >
+                      <CopyIcon data-icon="inline-start" />
+                      Copy
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </TabsContent>
 
           <TabsContent value="activity" className="m-0 flex flex-col gap-4">
@@ -125,14 +297,28 @@ function DocumentDetailPanel({
 
       <div className="grid gap-3 border-t border-border p-4">
         <Button
-          onClick={() => {
-            navigator.clipboard.writeText(publicUrl)
-            toast.success("Share link copied")
-          }}
+          disabled={!canShare || !selectedPacket}
+          onClick={() =>
+            guardShareAction(() => {
+              if (!selectedPacket) {
+                toast.error("Create a packet before copying links")
+                return
+              }
+              navigator.clipboard.writeText(
+                `${publicUrl}?packet=${encodeURIComponent(selectedPacket.id)}`,
+              )
+              toast.success("Packet link copied")
+            })
+          }
         >
           <LinkIcon data-icon="inline-start" />
-          Copy Share Link
+          Copy Packet Link
         </Button>
+        {!canShare ? (
+          <p className="font-mono text-[10px] uppercase tracking-widest text-destructive">
+            Assign every field before sharing links.
+          </p>
+        ) : null}
         <Button variant="outline" onClick={onEdit}>
           <Edit3Icon data-icon="inline-start" />
           Continue Editing

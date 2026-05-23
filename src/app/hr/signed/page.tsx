@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
-import { DownloadIcon, FolderIcon, MailIcon, SearchIcon } from "lucide-react"
+import { DownloadIcon, FolderIcon, MailIcon, SearchIcon, Trash2Icon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -11,6 +11,14 @@ import { StatusBadge } from "@/components/hr/status-badge"
 import type { DocumentRecord, SessionRecord } from "@/components/hr/types"
 import { getDocumentStatus } from "@/components/hr/types"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -34,6 +42,7 @@ export default function SignedDocumentsPage() {
   const [uploadingDocumentName, setUploadingDocumentName] = useState<string | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<SignedSessionGroup | null>(null)
   const [groupQuery, setGroupQuery] = useState("")
+  const [sessionToDelete, setSessionToDelete] = useState<SignedSession | null>(null)
   const workspaceId = useCurrentWorkspaceId()
   const router = useRouter()
   const visibleDocuments = useMemo(() => (workspaceId ? documents : []), [documents, workspaceId])
@@ -47,7 +56,9 @@ export default function SignedDocumentsPage() {
 
     const fetchWorkspaceDocuments = (options?: { background?: boolean }) => {
       if (!options?.background) setIsLoading(true)
-      fetch(`/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`)
+      fetch(
+        `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}&includeArchived=true&includeDeleted=true`,
+      )
         .then((res) => res.json())
         .then((data: unknown) => setDocuments(normalizeDocuments(data)))
         .finally(() => {
@@ -67,7 +78,12 @@ export default function SignedDocumentsPage() {
     () => {
       return visibleDocuments.flatMap((document) =>
         (document.sessions || [])
-          .filter((session) => session.status === "completed")
+          .filter(
+            (session) =>
+              session.status === "completed" &&
+              (Boolean(session.finalizedFileUrl) ||
+                !session.id.startsWith("packet-")),
+          )
           .map((session) => ({
             ...session,
             documentName: document.name,
@@ -136,6 +152,35 @@ export default function SignedDocumentsPage() {
     }
   }
 
+  async function deleteSignedSession() {
+    if (!sessionToDelete) return
+
+    try {
+      const res = await fetch(`/api/signers/${sessionToDelete.id}`, {
+        method: "DELETE",
+      })
+      if (!res.ok) throw new Error("Delete failed")
+      toast.success("Signed copy deleted")
+      setSessionToDelete(null)
+      setSelectedGroup((current) =>
+        current
+          ? {
+              ...current,
+              sessions: current.sessions.filter(
+                (session) => session.id !== sessionToDelete.id,
+              ),
+            }
+          : current,
+      )
+      const data = await fetch(
+        `/api/documents?workspaceId=${encodeURIComponent(workspaceId || "")}&includeArchived=true&includeDeleted=true`,
+      ).then((res) => res.json())
+      setDocuments(normalizeDocuments(data))
+    } catch {
+      toast.error("Failed to delete signed copy")
+    }
+  }
+
   return (
     <>
       <HrShell
@@ -176,7 +221,7 @@ export default function SignedDocumentsPage() {
               </div>
             </div>
           ) : (
-            <SignedDocsTable groups={sessionGroups} onOpenGroup={(group) => {
+            <SignedDocsTable groups={sessionGroups} onDeleteSession={setSessionToDelete} onOpenGroup={(group) => {
               setSelectedGroup(group)
               setGroupQuery("")
             }} />
@@ -207,20 +252,44 @@ export default function SignedDocumentsPage() {
               </div>
             </div>
             <div className="min-h-0 overflow-auto p-5">
-              <SignedGroupList sessions={selectedGroupSessions} />
+              <SignedGroupList sessions={selectedGroupSessions} onDeleteSession={setSessionToDelete} />
             </div>
           </div>
         </SheetContent>
       </Sheet>
+
+      <Dialog open={Boolean(sessionToDelete)} onOpenChange={(open) => !open && setSessionToDelete(null)}>
+        <DialogContent className="rounded-none border-border bg-popover shadow-sm">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-xs uppercase tracking-widest">Delete signed copy?</DialogTitle>
+            <DialogDescription>
+              This removes the signed copy from Signed Docs without affecting the source document setup.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="border border-border bg-background p-3 text-sm">
+            {sessionToDelete?.documentName} · {sessionToDelete?.signerName || "Anonymous signer"}
+          </div>
+          <DialogFooter className="rounded-none border-border">
+            <Button variant="outline" onClick={() => setSessionToDelete(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={deleteSignedSession}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
 
 function SignedDocsTable({
   groups,
+  onDeleteSession,
   onOpenGroup,
 }: {
   groups: SignedSessionGroup[]
+  onDeleteSession: (session: SignedSession) => void
   onOpenGroup: (group: SignedSessionGroup) => void
 }) {
   return (
@@ -243,7 +312,7 @@ function SignedDocsTable({
             group.sessions.length > 1 ? (
               <SignedGroupRow key={group.documentId} group={group} onOpen={() => onOpenGroup(group)} />
             ) : (
-              <SignedSessionRow key={group.sessions[0].id} session={group.sessions[0]} />
+              <SignedSessionRow key={group.sessions[0].id} session={group.sessions[0]} onDelete={onDeleteSession} />
             ),
           )
         )}
@@ -287,7 +356,13 @@ function SignedGroupRow({ group, onOpen }: { group: SignedSessionGroup; onOpen: 
   )
 }
 
-function SignedSessionRow({ session }: { session: SignedSession }) {
+function SignedSessionRow({
+  session,
+  onDelete,
+}: {
+  session: SignedSession
+  onDelete: (session: SignedSession) => void
+}) {
   return (
     <div className="grid grid-cols-12 items-center gap-4 border-b border-border p-4 transition-colors hover:bg-secondary">
       <div className="col-span-4">
@@ -303,12 +378,18 @@ function SignedSessionRow({ session }: { session: SignedSession }) {
       <div className="col-span-1">
         <StatusBadge status={session.status} />
       </div>
-      <SessionActions session={session} className="col-span-2" />
+      <SessionActions session={session} className="col-span-2" onDelete={onDelete} />
     </div>
   )
 }
 
-function SignedGroupList({ sessions }: { sessions: SignedSession[] }) {
+function SignedGroupList({
+  sessions,
+  onDeleteSession,
+}: {
+  sessions: SignedSession[]
+  onDeleteSession: (session: SignedSession) => void
+}) {
   if (sessions.length === 0) {
     return (
       <div className="flex h-52 items-center justify-center border border-dashed border-border font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
@@ -322,36 +403,66 @@ function SignedGroupList({ sessions }: { sessions: SignedSession[] }) {
       <div className="grid grid-cols-12 gap-4 border-b border-border bg-secondary p-4 font-mono uppercase tracking-tight text-muted-foreground">
         <div className="col-span-4">Signer</div>
         <div className="col-span-2">Completed</div>
-        <div className="col-span-2">Session</div>
-        <div className="col-span-1">Status</div>
-        <div className="col-span-3 text-right">Review / Download</div>
+        <div className="col-span-2">Type</div>
+        <div className="col-span-2">Status</div>
+        <div className="col-span-2 text-right">Actions</div>
       </div>
       {sessions.map((session) => (
         <div
           key={session.id}
           className="grid grid-cols-12 items-center gap-4 border-b border-border p-4 transition-colors last:border-b-0 hover:bg-secondary"
         >
-          <SignerCell session={session} className="col-span-4" />
+          <SignerCell
+            session={session}
+            className="col-span-4"
+            reviewUrl={getReviewUrl(session)}
+          />
           <div className="col-span-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             {formatCompletedAt(session)}
           </div>
           <div className="col-span-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-            {session.id.slice(0, 10)}
+            {session.signerRole || "Signer"}
           </div>
-          <div className="col-span-1">
+          <div className="col-span-2">
             <StatusBadge status={session.status} />
           </div>
-          <SessionActions session={session} className="col-span-3" />
+          <SessionActions
+            session={session}
+            className="col-span-2"
+            onDelete={onDeleteSession}
+            showReview={false}
+            compactDownload
+          />
         </div>
       ))}
     </div>
   )
 }
 
-function SignerCell({ session, className }: { session: SignedSession; className?: string }) {
+function SignerCell({
+  session,
+  className,
+  reviewUrl,
+}: {
+  session: SignedSession
+  className?: string
+  reviewUrl?: string
+}) {
   return (
     <div className={`${className || ""} space-y-1`}>
-      <div className="text-[13px] font-bold text-foreground">{session.signerName || "Anonymous signer"}</div>
+      {reviewUrl ? (
+        <button
+          type="button"
+          className="text-left text-[13px] font-bold text-foreground underline-offset-4 hover:underline"
+          onClick={() => window.open(reviewUrl, "_blank")}
+        >
+          {session.signerName || "Anonymous signer"}
+        </button>
+      ) : (
+        <div className="text-[13px] font-bold text-foreground">
+          {session.signerName || "Anonymous signer"}
+        </div>
+      )}
       <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
         <MailIcon className="size-3" />
         {session.signerEmail || "No email"}
@@ -360,19 +471,68 @@ function SignerCell({ session, className }: { session: SignedSession; className?
   )
 }
 
-function SessionActions({ session, className }: { session: SignedSession; className?: string }) {
+function SessionActions({
+  session,
+  className,
+  onDelete,
+  showReview = true,
+  compactDownload = false,
+}: {
+  session: SignedSession
+  className?: string
+  onDelete: (session: SignedSession) => void
+  showReview?: boolean
+  compactDownload?: boolean
+}) {
   return (
     <div className={`${className || ""} text-right`}>
       <div className="flex justify-end gap-2">
+        {showReview ? (
+          <Button
+            variant="outline"
+            onClick={() => {
+              const reviewUrl = getReviewUrl(session)
+              if (!reviewUrl) return
+              window.open(reviewUrl, "_blank")
+            }}
+            disabled={!getReviewUrl(session)}
+          >
+            Review
+          </Button>
+        ) : null}
+        {compactDownload ? (
+          <Button
+            size="icon-sm"
+            aria-label={`Download ${session.signerName || "signed copy"}`}
+            onClick={() => {
+              const downloadUrl = getDownloadUrl(session)
+              if (!downloadUrl) return
+              window.open(downloadUrl, "_blank")
+            }}
+            disabled={!getDownloadUrl(session)}
+          >
+            <DownloadIcon />
+          </Button>
+        ) : (
+          <Button
+            onClick={() => {
+              const downloadUrl = getDownloadUrl(session)
+              if (!downloadUrl) return
+              window.open(downloadUrl, "_blank")
+            }}
+            disabled={!getDownloadUrl(session)}
+          >
+            <DownloadIcon data-icon="inline-start" />
+            Download
+          </Button>
+        )}
         <Button
-          variant="outline"
-          onClick={() => window.open(`/uploads/finalized_${session.id}.pdf`, "_blank")}
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground hover:bg-red-500/10 hover:text-red-300"
+          onClick={() => onDelete(session)}
         >
-          Review
-        </Button>
-        <Button onClick={() => window.open(`/api/download/${session.id}`, "_blank")}>
-          <DownloadIcon data-icon="inline-start" />
-          Download
+          <Trash2Icon />
         </Button>
       </div>
     </div>
@@ -393,4 +553,16 @@ function getCompletedAt(session: SignedSession) {
 
 function formatCompletedAt(session: SignedSession) {
   return session.completedAt ? format(new Date(session.completedAt), "PP") : "Just now"
+}
+
+function getReviewUrl(session: SignedSession) {
+  if (session.finalizedFileUrl) return session.finalizedFileUrl
+  if (session.id.startsWith("packet-")) return undefined
+  return `/uploads/finalized_${session.id}.pdf`
+}
+
+function getDownloadUrl(session: SignedSession) {
+  if (session.finalizedFileUrl) return session.finalizedFileUrl
+  if (session.id.startsWith("packet-")) return undefined
+  return `/api/download/${session.id}`
 }

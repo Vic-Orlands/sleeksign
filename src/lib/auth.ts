@@ -95,6 +95,12 @@ export const auth = betterAuth({
     },
   },
   user: {
+    additionalFields: {
+      lastWorkspaceId: {
+        type: "string",
+        required: false,
+      },
+    },
     deleteUser: {
       enabled: true,
     },

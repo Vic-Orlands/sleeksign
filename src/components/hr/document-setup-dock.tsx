@@ -23,7 +23,15 @@ import type { DocumentRecord } from "@/components/hr/types";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { PdfCanvasViewer } from "@/components/pdf/PdfCanvasViewer";
-import { Field, clampField, fieldDefaults } from "@/lib/field-utils";
+import {
+  Field,
+  RoleConfig,
+  DEFAULT_ROLE_CONFIGS,
+  clampField,
+  fieldDefaults,
+  normalizeRoleConfigs,
+  UNASSIGNED_ROLE,
+} from "@/lib/field-utils";
 import { cn } from "@/lib/utils";
 
 const fieldIconMap = {
@@ -50,13 +58,18 @@ const fieldLabelToneMap = {
 function DocumentSetupDock({
   document,
   onFieldsChange,
+  onRoleConfigsChange,
   fullHeight = false,
 }: {
   document: DocumentRecord;
   onFieldsChange?: (documentId: string, fields: Field[]) => void;
+  onRoleConfigsChange?: (documentId: string, roleConfigs: RoleConfig[]) => void;
   fullHeight?: boolean;
 }) {
   const [fields, setFields] = useState<Field[]>(document.fields || []);
+  const [roleConfigs, setRoleConfigs] = useState<RoleConfig[]>(
+    normalizeRoleConfigs(document.roleConfigs || [...DEFAULT_ROLE_CONFIGS]),
+  );
   const [selectedType, setSelectedType] = useState<FieldToolType>("select");
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(
     document.fields?.[0]?.id || null,
@@ -91,11 +104,15 @@ function DocumentSetupDock({
       width: defaults.width,
       height: defaults.height,
       required: true,
+      assigneeRole: UNASSIGNED_ROLE,
     });
 
     const res = await fetch(`/api/documents/${document.id}`, {
       method: "POST",
-      body: JSON.stringify(draft),
+      body: JSON.stringify({
+        ...draft,
+        assigneeRole: draft.assigneeRole,
+      }),
     });
     const data = await res.json();
     const field = { ...draft, id: data.id } as Field;
@@ -134,8 +151,60 @@ function DocumentSetupDock({
         width: field.width,
         height: field.height,
         required: field.required,
+        assigneeRole: field.assigneeRole,
       }),
     });
+    setIsSaving(false);
+  }
+
+  async function persistRoleConfigs(nextRoleConfigs: RoleConfig[]) {
+    const normalizedRoleConfigs = normalizeRoleConfigs(nextRoleConfigs);
+    const roleNames = new Set(normalizedRoleConfigs.map((role) => role.name));
+    const nextFields = fields.map((field) =>
+      !field.assigneeRole || roleNames.has(field.assigneeRole)
+        ? field
+        : { ...field, assigneeRole: UNASSIGNED_ROLE },
+    );
+
+    setRoleConfigs(normalizedRoleConfigs);
+    updateLocalFields(nextFields);
+    onRoleConfigsChange?.(document.id, normalizedRoleConfigs);
+
+    if (
+      selectedFieldId &&
+      !roleNames.has(
+        nextFields.find((field) => field.id === selectedFieldId)?.assigneeRole || "",
+      )
+    ) {
+      setSelectedFieldId(selectedFieldId);
+    }
+
+    setIsSaving(true);
+    await Promise.all([
+      fetch(`/api/documents/${document.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          roleConfigs: normalizedRoleConfigs,
+        }),
+      }),
+      ...nextFields
+        .filter((field, index) => field.assigneeRole !== fields[index]?.assigneeRole)
+        .map((field) =>
+          fetch(`/api/documents/${document.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              documentId: document.id,
+              fieldId: field.id,
+              x: field.x,
+              y: field.y,
+              width: field.width,
+              height: field.height,
+              required: field.required,
+              assigneeRole: field.assigneeRole,
+            }),
+          }),
+        ),
+    ]);
     setIsSaving(false);
   }
 
@@ -240,7 +309,7 @@ function DocumentSetupDock({
                           fieldLabelToneMap[field.type],
                         )}
                       >
-                        {field.type}
+                        {field.type} · {field.assigneeRole || "Unassigned"}
                       </span>
                       <span className="pointer-events-none flex h-full w-full items-center justify-center">
                         <Icon className="h-[45%] max-h-5 min-h-3 w-[45%] max-w-5 min-w-3 stroke-[2.3]" />
@@ -308,13 +377,15 @@ function DocumentSetupDock({
         </div>
       </section>
 
-      <aside className="min-h-[220px] border-t border-border bg-card p-3 lg:min-h-0 lg:border-l lg:border-t-0">
+      <aside className="flex min-h-[220px] flex-col border-t border-border bg-card p-3 lg:min-h-0 lg:border-l lg:border-t-0">
         <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest">
           Field Inspector
         </h3>
         <FieldInspector
           selectedField={selectedField}
+          roleConfigs={roleConfigs}
           onUpdate={persistField}
+          onRoleConfigsChange={persistRoleConfigs}
           onDelete={deleteField}
         />
       </aside>

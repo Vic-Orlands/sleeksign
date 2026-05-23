@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { ViewTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import {
   ArrowRightIcon,
   Building2Icon,
@@ -16,7 +16,8 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { authClient } from "@/lib/auth-client";
+import { authClient, saveLastWorkspaceId } from "@/lib/auth-client";
+import { setCurrentWorkspaceId } from "@/lib/workspace-store";
 
 type AuthPanelProps = {
   mode: AuthMode;
@@ -54,32 +55,16 @@ const authContent: Record<
 
 function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
   const router = useRouter();
-  const [displayMode, setDisplayMode] = React.useState(mode);
-  const isSignUp = displayMode === "signup";
-  const isSignIn = displayMode === "signin";
-  const isForgot = displayMode === "forgot";
-  const isReset = displayMode === "reset";
+  const isSignUp = mode === "signup";
+  const isSignIn = mode === "signin";
+  const isForgot = mode === "forgot";
+  const isReset = mode === "reset";
   const isInvitationFlow = Boolean(nextPath?.startsWith("/accept-invitation/"));
-  const content = authContent[displayMode];
-  const springTransition = {
-    type: "spring",
-    stiffness: 420,
-    damping: 34,
-  } as const;
-
-  React.useEffect(() => {
-    function handlePopState() {
-      setDisplayMode(getModeFromPath(window.location.pathname));
-    }
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  const content = authContent[mode];
 
   function navigate(href: string) {
     const nextHref = appendNextPath(href, nextPath);
-    setDisplayMode(getModeFromPath(href));
-    window.history.pushState(null, "", nextHref);
+    router.push(nextHref, { scroll: false });
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -119,7 +104,7 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
           name,
           email,
           password,
-          callbackURL: nextPath || "/hr/documents",
+          callbackURL: getWorkspaceRedirectPath(nextPath),
         });
         if (workspaceName) {
           const organization = await authClient.organization.create({
@@ -130,21 +115,27 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
               .replace(/(^-|-$)/g, ""),
           });
           if (organization?.data?.id) {
-            localStorage.setItem(
-              "sleeksign:workspace-id",
-              organization.data.id,
-            );
+            setCurrentWorkspaceId(organization.data.id);
+            await authClient.$fetch("/organization/set-active", {
+              method: "POST",
+              body: { organizationId: organization.data.id },
+            });
+            await saveLastWorkspaceId(organization.data.id);
           }
         }
       } else {
         await authClient.signIn.email({
           email,
           password,
-          callbackURL: nextPath || "/hr/documents",
+          callbackURL: getWorkspaceRedirectPath(nextPath),
         });
       }
 
-      router.push(nextPath || "/hr/documents");
+      router.push(
+        isSignUp && workspaceName
+          ? nextPath || "/hr/documents"
+          : getWorkspaceRedirectPath(nextPath),
+      );
     } catch {
       toast.error(isSignUp ? "Sign up failed" : "Sign in failed");
     }
@@ -154,7 +145,7 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
     try {
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: nextPath || "/hr/documents",
+        callbackURL: getWorkspaceRedirectPath(nextPath),
       });
     } catch {
       toast.error("Google sign in is not configured yet");
@@ -162,289 +153,190 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
   }
 
   return (
-    <LayoutGroup id="auth-flow">
-      <main className="grid min-h-svh bg-[var(--paper)] text-foreground lg:grid-cols-[minmax(0,0.95fr)_minmax(480px,1.05fr)]">
-        <section className="hidden border-r border-border bg-background p-8 lg:flex lg:flex-col">
-          <div className="flex items-center gap-2">
-            <span className="text-xl ruthie-regular">SleekSign</span>
-          </div>
+    <main className="grid min-h-svh bg-[var(--paper)] text-foreground lg:grid-cols-[minmax(0,0.95fr)_minmax(480px,1.05fr)]">
+      <section className="hidden border-r border-border bg-background p-8 lg:flex lg:flex-col">
+        <div className="flex items-center gap-2">
+          <span className="text-xl ruthie-regular">SleekSign</span>
+        </div>
 
-          <div className="mt-auto max-w-xl">
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-              Document Operations
-            </p>
-            <h1 className="mt-4 text-4xl font-semibold tracking-normal text-foreground">
-              <span className="text-orange-400">Prepare</span>,{" "}
-              <span className="text-orange-400">send</span>,{" "}
-              <span className="text-orange-400">sign</span>, and{" "}
-              <span className="text-orange-400">review</span> documents from
-              one focused workspace.
-            </h1>
-            <div className="mt-8 flex flex-col -space-y-px">
-              <AuthSignal
-                icon={FileTextIcon}
-                label="Edited documents stay separate from untouched uploads"
-              />
-              <AuthSignal
-                icon={CheckCircle2Icon}
-                label="Signed documents are reviewable before download"
-              />
-              <AuthSignal
-                icon={Building2Icon}
-                label="Workspace switching keeps teams in context"
-              />
-            </div>
+        <div className="mt-auto max-w-xl">
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Document Operations
+          </p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-normal text-foreground">
+            <span className="text-orange-400">Prepare</span>,{" "}
+            <span className="text-orange-400">send</span>,{" "}
+            <span className="text-orange-400">sign</span>, and{" "}
+            <span className="text-orange-400">review</span> documents from one
+            focused workspace.
+          </h1>
+          <div className="mt-8 flex flex-col -space-y-px">
+            <AuthSignal
+              icon={FileTextIcon}
+              label="Edited documents stay separate from untouched uploads"
+            />
+            <AuthSignal
+              icon={CheckCircle2Icon}
+              label="Signed documents are reviewable before download"
+            />
+            <AuthSignal
+              icon={Building2Icon}
+              label="Workspace switching keeps teams in context"
+            />
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="flex min-h-svh items-center justify-center px-4 py-8 sm:px-6">
-          <motion.div
-            layout
-            layoutId="auth-card"
-            transition={springTransition}
-            className="w-full max-w-md border border-border bg-background p-5 shadow-sm transition-[border-color,box-shadow] duration-200 ease-out sm:p-6"
-          >
+      <section className="flex min-h-svh items-center justify-center px-4 py-8 sm:px-6">
+        <ViewTransition name="auth-card">
+          <div className="w-full max-w-md border border-border bg-background p-5 shadow-sm transition-[border-color,box-shadow] duration-200 ease-out sm:p-6">
             <div className="lg:hidden">
               <div className="flex items-center gap-2">
                 <span className="text-xl ruthie-regular">SleekSign</span>
               </div>
             </div>
 
-            <motion.div
-              layout
-              className="mt-8 sm:mt-0"
-              transition={springTransition}
-            >
-              <motion.p
-                layoutId="auth-eyebrow"
-                className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"
-                transition={springTransition}
-              >
+            <div className="mt-8 sm:mt-0">
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                 {content.eyebrow}
-              </motion.p>
-              <motion.h2
-                layoutId="auth-title"
-                className="mt-3 text-2xl font-semibold tracking-normal"
-                transition={springTransition}
-              >
+              </p>
+              <h2 className="mt-3 text-2xl font-semibold tracking-normal">
                 {content.title}
-              </motion.h2>
-              <motion.p
-                layoutId="auth-copy"
-                className="mt-2 text-sm text-muted-foreground"
-                transition={springTransition}
-              >
+              </h2>
+              <p className="mt-2 text-sm text-muted-foreground">
                 {content.copy}
-              </motion.p>
-            </motion.div>
+              </p>
+            </div>
 
-            <motion.form
-              layout
+            <form
               className="mt-6 flex flex-col gap-3"
               onSubmit={submit}
-              transition={springTransition}
             >
-              <AnimatePresence mode="popLayout" initial={false}>
-                {isSignUp ? (
-                  <AuthField
-                    key="name"
-                    layoutId="auth-field-name"
-                    icon={UserIcon}
-                    label="Full name"
-                    type="text"
-                    name="name"
-                    autoComplete="name"
-                    placeholder="Alex Kim"
-                  />
-                ) : null}
-                {!isReset ? (
-                  <AuthField
-                    key="email"
-                    layoutId="auth-field-email"
-                    icon={MailIcon}
-                    label="Email"
-                    type="email"
-                    name="email"
-                    autoComplete="email"
-                    placeholder="alex@company.com"
-                  />
-                ) : null}
-                {isSignIn || isSignUp ? (
-                  <AuthField
-                    key="password"
-                    layoutId="auth-field-password"
-                    icon={LockIcon}
-                    label="Password"
-                    type="password"
-                    name="password"
-                    autoComplete={
-                      isSignUp ? "new-password" : "current-password"
-                    }
-                    placeholder="Password"
-                  />
-                ) : null}
-                {isReset ? (
-                  <AuthField
-                    key="new-password"
-                    layoutId="auth-field-password"
-                    icon={LockIcon}
-                    label="New Password"
-                    type="password"
-                    name="newPassword"
-                    autoComplete="new-password"
-                    placeholder="New password"
-                  />
-                ) : null}
-                {isSignIn ? (
-                  <motion.button
-                    key="forgot"
-                    layoutId="auth-forgot"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    type="button"
-                    className="-mt-1 self-end font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
-                    onClick={() => navigate("/forgot-password")}
-                    transition={springTransition}
-                  >
-                    Forgot Password?
-                  </motion.button>
-                ) : null}
-                {isSignUp ? (
-                  <AuthField
-                    key="workspace"
-                    layoutId="auth-field-workspace"
-                    icon={Building2Icon}
-                    label="Workspace"
-                    type="text"
-                    name="workspace"
-                    autoComplete="organization"
-                    placeholder={
-                      isInvitationFlow
-                        ? "Optional workspace name"
-                        : "Any Workspace"
-                    }
-                    required={!isInvitationFlow}
-                  />
-                ) : null}
-              </AnimatePresence>
+              {isSignUp ? (
+                <AuthField
+                  icon={UserIcon}
+                  label="Full name"
+                  type="text"
+                  name="name"
+                  autoComplete="name"
+                  placeholder="Alex Kim"
+                />
+              ) : null}
+              {!isReset ? (
+                <AuthField
+                  icon={MailIcon}
+                  label="Email"
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  placeholder="alex@company.com"
+                />
+              ) : null}
+              {isSignIn || isSignUp ? (
+                <AuthField
+                  icon={LockIcon}
+                  label="Password"
+                  type="password"
+                  name="password"
+                  autoComplete={isSignUp ? "new-password" : "current-password"}
+                  placeholder="Password"
+                />
+              ) : null}
+              {isReset ? (
+                <AuthField
+                  icon={LockIcon}
+                  label="New Password"
+                  type="password"
+                  name="newPassword"
+                  autoComplete="new-password"
+                  placeholder="New password"
+                />
+              ) : null}
+              {isSignIn ? (
+                <button
+                  type="button"
+                  className="-mt-1 self-end font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => navigate("/forgot-password")}
+                >
+                  Forgot Password?
+                </button>
+              ) : null}
+              {isSignUp ? (
+                <AuthField
+                  icon={Building2Icon}
+                  label="Workspace"
+                  type="text"
+                  name="workspace"
+                  autoComplete="organization"
+                  placeholder={
+                    isInvitationFlow ? "Optional workspace name" : "Any Workspace"
+                  }
+                  required={!isInvitationFlow}
+                />
+              ) : null}
 
-              <motion.div
-                layout
-                layoutId="auth-submit"
-                className="mt-2"
-                transition={springTransition}
-              >
+              <div className="mt-2">
                 <Button className="w-full gap-2" type="submit">
-                  {getSubmitLabel(displayMode)}
+                  {getSubmitLabel(mode)}
                   <ArrowRightIcon data-icon="inline-end" />
                 </Button>
-              </motion.div>
-            </motion.form>
+              </div>
+            </form>
 
-            <AnimatePresence>
-              {isSignIn || isSignUp ? (
-                <motion.div
-                  key="social-auth"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={springTransition}
-                  className="overflow-hidden"
-                >
-                  <motion.div
-                    layout
-                    layoutId="auth-divider"
-                    className="my-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3"
-                    transition={springTransition}
-                  >
-                    <span className="h-px bg-border" />
-                    <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
-                      or
-                    </span>
-                    <span className="h-px bg-border" />
-                  </motion.div>
+            {isSignIn || isSignUp ? (
+              <div>
+                <div className="my-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                  <span className="h-px bg-border" />
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">
+                    or
+                  </span>
+                  <span className="h-px bg-border" />
+                </div>
 
-                  <motion.div
-                    layout
-                    layoutId="auth-google"
-                    transition={springTransition}
+                <div>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={signInWithGoogle}
                   >
-                    <Button
-                      variant="outline"
-                      className="w-full gap-2"
-                      onClick={signInWithGoogle}
+                    <span
+                      data-icon="inline-start"
+                      className="text-[12px] font-bold normal-case tracking-normal"
                     >
-                      <span
-                        data-icon="inline-start"
-                        className="text-[12px] font-bold normal-case tracking-normal"
-                      >
-                        G
-                      </span>
-                      Continue with Google
-                    </Button>
-                  </motion.div>
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
+                      G
+                    </span>
+                    Continue with Google
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
-            <motion.div
-              layoutId="auth-switcher"
-              className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground"
-              transition={springTransition}
-            >
-              <span>{getSwitcherText(displayMode)}</span>
+            <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4 text-sm text-muted-foreground">
+              <span>{getSwitcherText(mode)}</span>
               <button
                 className="font-mono text-[10px] font-bold uppercase tracking-widest text-foreground transition-colors hover:text-muted-foreground"
-                onClick={() => navigate(getSwitcherHref(displayMode))}
+                onClick={() => navigate(getSwitcherHref(mode))}
               >
-                {getSwitcherAction(displayMode)}
+                {getSwitcherAction(mode)}
               </button>
-            </motion.div>
-          </motion.div>
-        </section>
-      </main>
-    </LayoutGroup>
+            </div>
+          </div>
+        </ViewTransition>
+      </section>
+    </main>
   );
 }
 
-const AuthField = React.forwardRef<
-  HTMLLabelElement,
-  React.ComponentProps<"input"> & {
-    icon: React.ElementType;
-    label: string;
-    layoutId: string;
-  }
->(function AuthField({ icon: Icon, label, layoutId, ...props }, ref) {
+function AuthField({
+  icon: Icon,
+  label,
+  ...props
+}: React.ComponentProps<"input"> & {
+  icon: React.ElementType;
+  label: string;
+}) {
   return (
-    <motion.label
-      ref={ref}
-      layout
-      layoutId={layoutId}
-      initial={{
-        opacity: 0,
-        height: 0,
-        y: -6,
-        filter: "blur(2px)",
-        overflow: "hidden",
-      }}
-      animate={{
-        opacity: 1,
-        height: "auto",
-        y: 0,
-        filter: "blur(0px)",
-        overflow: "visible",
-      }}
-      exit={{
-        opacity: 0,
-        height: 0,
-        y: -6,
-        filter: "blur(2px)",
-        overflow: "hidden",
-      }}
-      transition={{ type: "spring", stiffness: 420, damping: 34 }}
-      className="grid gap-1.5"
-    >
+    <label className="grid gap-1.5">
       <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
         {label}
       </span>
@@ -452,15 +344,8 @@ const AuthField = React.forwardRef<
         <Icon className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input className="h-9 pl-9" required {...props} />
       </span>
-    </motion.label>
+    </label>
   );
-});
-
-function getModeFromPath(path: string): AuthMode {
-  if (path.startsWith("/signup")) return "signup";
-  if (path.startsWith("/forgot-password")) return "forgot";
-  if (path.startsWith("/reset-password")) return "reset";
-  return "signin";
 }
 
 function getSubmitLabel(mode: AuthMode) {
@@ -485,6 +370,10 @@ function appendNextPath(href: string, nextPath?: string) {
   if (!nextPath) return href;
   const separator = href.includes("?") ? "&" : "?";
   return `${href}${separator}next=${encodeURIComponent(nextPath)}`;
+}
+
+function getWorkspaceRedirectPath(nextPath?: string) {
+  return appendNextPath("/auth/workspace", nextPath);
 }
 
 function getSwitcherAction(mode: AuthMode) {

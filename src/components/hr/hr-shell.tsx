@@ -53,6 +53,7 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
 import { authClient } from "@/lib/auth-client";
+import { saveLastWorkspaceId } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import {
   setCurrentWorkspaceId,
@@ -330,7 +331,7 @@ function HrShell({
                       ease: "linear",
                       repeat: Infinity,
                     }}
-                    className="flex size-7 shrink-0 items-center justify-center bg-primary text-primary-foreground"
+                    className="flex size-7 shrink-0 items-center justify-center bg-primary text-primary-foreground rounded-full"
                   >
                     <LoaderCircleIcon className="size-4" />
                   </motion.span>
@@ -667,12 +668,13 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
   async function switchWorkspace(nextWorkspaceId: string) {
     await playWorkspaceTransition(async () => {
       setCurrentWorkspaceId(nextWorkspaceId);
-      await authClient
-        .$fetch("/organization/set-active", {
+      await Promise.allSettled([
+        authClient.$fetch("/organization/set-active", {
           method: "POST",
           body: { organizationId: nextWorkspaceId },
-        })
-        .catch(() => undefined);
+        }),
+        saveLastWorkspaceId(nextWorkspaceId),
+      ]);
     });
   }
 
@@ -731,6 +733,8 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         setCurrentWorkspaceId(fallbackWorkspace);
         if (fallbackWorkspace) {
           await switchWorkspace(fallbackWorkspace);
+        } else {
+          await saveLastWorkspaceId(null);
         }
       }
       setConfirmDeleteWorkspaceOpen(false);

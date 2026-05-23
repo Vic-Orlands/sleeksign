@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { FileTextIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, FileTextIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
 
 import { StatusBadge } from "@/components/hr/status-badge";
 import {
@@ -26,12 +26,16 @@ function DocumentTable({
   selectedDocumentId,
   onSelectDocument,
   onDeleteDocument,
+  onArchiveDocument,
+  onRestoreDocument,
   variant = "documents",
 }: {
   documents: DocumentRecord[];
   selectedDocumentId?: string;
   onSelectDocument: (document: DocumentRecord) => void;
   onDeleteDocument?: (document: DocumentRecord) => void;
+  onArchiveDocument?: (document: DocumentRecord) => void;
+  onRestoreDocument?: (document: DocumentRecord) => void;
   variant?: "documents" | "shared";
 }) {
   return (
@@ -44,8 +48,8 @@ function DocumentTable({
           <TableHead>Fields</TableHead>
           {variant === "shared" ? <TableHead>Signatures</TableHead> : null}
           <TableHead>Last Updated</TableHead>
-          {onDeleteDocument ? (
-            <TableHead className="w-12 text-right">Actions</TableHead>
+          {onDeleteDocument || onArchiveDocument || onRestoreDocument ? (
+            <TableHead className="w-24 text-right">Actions</TableHead>
           ) : null}
         </TableRow>
       </TableHeader>
@@ -108,20 +112,52 @@ function DocumentTable({
                   </p>
                 </div>
               </TableCell>
-              {onDeleteDocument ? (
+              {onDeleteDocument || onArchiveDocument || onRestoreDocument ? (
                 <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-muted-foreground hover:bg-red-500/10 hover:text-red-300"
-                    aria-label={`Delete ${document.name}`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDeleteDocument(document);
-                    }}
-                  >
-                    <Trash2Icon />
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    {onRestoreDocument ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground"
+                        aria-label={`Restore ${document.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onRestoreDocument(document);
+                        }}
+                      >
+                        <RotateCcwIcon />
+                      </Button>
+                    ) : null}
+                    {onArchiveDocument ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground"
+                        aria-label={`Archive ${document.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onArchiveDocument(document);
+                        }}
+                      >
+                        <ArchiveIcon />
+                      </Button>
+                    ) : null}
+                    {onDeleteDocument ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground hover:bg-red-500/10 hover:text-red-300"
+                        aria-label={`Delete ${document.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDeleteDocument(document);
+                        }}
+                      >
+                        <Trash2Icon />
+                      </Button>
+                    ) : null}
+                  </div>
                 </TableCell>
               ) : null}
             </TableRow>

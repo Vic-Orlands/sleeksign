@@ -1,4 +1,5 @@
-import * as opentype from "opentype.js";
+import * as opentypeModule from "opentype.js";
+import type { Font } from "opentype.js";
 import fs from "fs";
 import path from "path";
 
@@ -14,7 +15,7 @@ function parseFont(fontPath: string) {
     buffer.byteOffset + buffer.byteLength,
   );
 
-  return opentype.parse(arrayBuffer);
+  return getOpenTypeParser()(arrayBuffer);
 }
 
 export async function generateSignatureSVG(
@@ -26,7 +27,7 @@ export async function generateSignatureSVG(
     ...FONTS.filter((font) => font !== (FONTS[fontIndex] || FONTS[0])),
   ];
 
-  let font: opentype.Font | null = null;
+  let font: Font | null = null;
 
   for (const fontFile of fontOrder) {
     try {
@@ -55,4 +56,23 @@ export async function generateSignatureSVG(
     width,
     height,
   };
+}
+
+function getOpenTypeParser() {
+  const parser =
+    "parse" in opentypeModule && typeof opentypeModule.parse === "function"
+      ? opentypeModule.parse
+      : "default" in opentypeModule &&
+          opentypeModule.default &&
+          typeof opentypeModule.default === "object" &&
+          "parse" in opentypeModule.default &&
+          typeof opentypeModule.default.parse === "function"
+        ? opentypeModule.default.parse
+        : null;
+
+  if (!parser) {
+    throw new Error("OpenType parser unavailable");
+  }
+
+  return parser;
 }
