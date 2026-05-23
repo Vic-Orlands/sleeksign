@@ -1,73 +1,115 @@
+"use client";
+
 import Link from "next/link";
-import { ArrowLeftIcon, FileWarningIcon, HomeIcon, LayoutGridIcon } from "lucide-react";
+import { motion } from "motion/react";
+import {
+  HomeIcon,
+  ArrowLeftIcon,
+  LayoutGridIcon,
+  FileWarningIcon,
+} from "lucide-react";
 
 export default function NotFound() {
   return (
-    <main className="min-h-screen bg-[var(--paper)] text-foreground">
-      <section className="sleek-grid flex min-h-screen items-center justify-center px-5 py-10">
-        <div className="w-full max-w-4xl border border-border bg-background shadow-xl">
-          <div className="grid border-b border-border lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="border-b border-border p-8 lg:border-b-0 lg:border-r lg:p-10">
-              <div className="flex items-center gap-3">
-                <span className="border border-border bg-primary px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-primary-foreground">
-                  404
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
-                  Page not found
-                </span>
-              </div>
-              <h1 className="mt-8 max-w-2xl font-mono text-3xl font-semibold uppercase leading-tight tracking-tight sm:text-5xl">
-                This route does not exist in your signing workspace.
+    <main className="min-h-screen bg-[(--paper)] text-foreground font-sans relative flex items-center justify-center overflow-hidden">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-150 h-150 bg-orange-500/5 rounded-full blur-[100px] pointer-events-none" />
+
+      <section className="relative z-10 mx-auto w-[90%] max-w-5xl py-20 px-4 flex flex-col items-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8 }}
+          className="w-full bg-white/40 backdrop-blur-sm border border-border/50 rounded-[2rem] overflow-hidden shadow-sm"
+        >
+          <div className="grid lg:grid-cols-[1.2fr_0.8fr]">
+            {/* Left content area */}
+            <div className="p-10 lg:p-14 border-b lg:border-b-0 lg:border-r border-border/50 flex flex-col justify-center">
+              <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-medium">
+                Page not found
+              </p>
+
+              <h1 className="mt-10 font-light text-[32px] sm:text-[42px] leading-[1.1] tracking-tight">
+                This route{" "}
+                <span className="font-cursive italic text-stone-500/80 pr-1 text-[40px] sm:text-[46px] leading-[0.5] -ml-1">
+                  vanished
+                </span>{" "}
+                from the workspace.
               </h1>
-              <p className="mt-5 max-w-xl text-sm leading-7 text-muted-foreground sm:text-base">
+
+              <p className="mt-8 text-[14px] leading-[1.8] text-muted-foreground font-light max-w-lg">
                 The page may have expired, the link may be wrong, or the signed
                 file you are trying to open may no longer be available from this
-                route. Go back to the dashboard and reopen it from the correct
-                workflow.
+                route. Return to your active documents or dashboard.
               </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+
+              <div className="mt-10 flex flex-col sm:flex-row gap-4">
                 <Link
-                  href="/hr/documents"
-                  className="inline-flex items-center justify-center gap-2 border border-primary bg-primary px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-primary-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  href="/"
+                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-primary px-8 py-3.5 text-[10px] uppercase tracking-[0.15em] font-medium text-primary-foreground transition-all hover:bg-primary/90"
                 >
                   Open Dashboard
-                  <LayoutGridIcon className="size-4" />
+                  <LayoutGridIcon className="size-3.5" />
                 </Link>
                 <Link
                   href="/"
-                  className="inline-flex items-center justify-center gap-2 border border-border bg-background px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground transition-colors hover:bg-muted"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-border/60 bg-white/50 px-8 py-3.5 text-[10px] uppercase tracking-[0.15em] font-medium transition-colors hover:bg-stone-50 text-foreground"
                 >
                   Back Home
-                  <HomeIcon className="size-4" />
+                  <HomeIcon className="size-3.5" />
                 </Link>
               </div>
             </div>
 
-            <div className="flex flex-col justify-between bg-secondary/40 p-8 lg:p-10">
+            {/* Right helper area */}
+            <div className="p-10 lg:p-14 bg-stone-50/50 flex flex-col justify-between">
               <div>
-                <div className="flex size-12 items-center justify-center border border-border bg-background">
-                  <FileWarningIcon className="size-5 text-muted-foreground" />
+                <div className="size-12 rounded-2xl border border-border/60 bg-white shadow-sm flex items-center justify-center mb-8">
+                  <FileWarningIcon className="size-5 text-muted-foreground/70" />
                 </div>
-                <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-foreground font-medium mb-6">
                   Quick recovery
                 </p>
-                <ul className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
-                  <li>Check Signed Docs for completed files.</li>
-                  <li>Check Shared Activity for packet progress.</li>
-                  <li>Reopen the document from the dashboard instead of an old link.</li>
+                <ul className="space-y-4 text-[13px] leading-[1.6] text-muted-foreground font-light">
+                  <li className="flex items-start gap-3">
+                    <div className="mt-1.5 size-1 rounded-full bg-orange-500/40 shrink-0" />
+                    <span>
+                      Check{" "}
+                      <strong className="font-medium text-foreground/80">
+                        Signed Docs
+                      </strong>{" "}
+                      for completed and executed files.
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="mt-1.5 size-1 rounded-full bg-orange-500/40 shrink-0" />
+                    <span>
+                      Review{" "}
+                      <strong className="font-medium text-foreground/80">
+                        Shared Activity
+                      </strong>{" "}
+                      for packet progress and history.
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="mt-1.5 size-1 rounded-full bg-orange-500/40 shrink-0" />
+                    <span>
+                      Reopen the document from the shared dashboard instead of
+                      an old link.
+                    </span>
+                  </li>
                 </ul>
               </div>
 
               <Link
-                href="/hr/documents"
-                className="mt-8 inline-flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.28em] text-foreground underline-offset-4 hover:underline"
+                href="/"
+                className="mt-12 group inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
-                <ArrowLeftIcon className="size-4" />
-                Return to document management
+                <ArrowLeftIcon className="size-3.5 transition-transform group-hover:-translate-x-1" />
+                Return to management
               </Link>
             </div>
           </div>
-        </div>
+        </motion.div>
       </section>
     </main>
   );
