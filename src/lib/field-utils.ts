@@ -1,4 +1,10 @@
 export type FieldType = "signature" | "text" | "date" | "checkbox";
+export type RoleScope = "shared" | "private";
+export type WorkflowMode = "collaborative" | "individual" | "shared-base";
+export type RoleConfig = {
+  name: string;
+  scope: RoleScope;
+};
 
 export type Field = {
   id: string;
@@ -9,7 +15,153 @@ export type Field = {
   width: number;
   height: number;
   required: boolean;
+  assigneeRole: string;
 };
+
+export const UNASSIGNED_ROLE = "";
+
+export const DEFAULT_SIGNER_ROLES = ["HR", "Employee", "Contractor"] as const;
+export const DEFAULT_ROLE_CONFIGS: RoleConfig[] = DEFAULT_SIGNER_ROLES.map(
+  (name) => ({
+    name,
+    scope: "private",
+  }),
+);
+
+export function normalizeRoleConfigs(value: unknown) {
+  if (!Array.isArray(value)) return [...DEFAULT_ROLE_CONFIGS];
+
+  const roleConfigs = value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const name = String((item as { name?: unknown }).name || "").trim();
+      const scope = (item as { scope?: unknown }).scope === "shared"
+        ? "shared"
+        : "private";
+
+      if (!name) return null;
+      return { name, scope } satisfies RoleConfig;
+    })
+    .filter((item): item is RoleConfig => Boolean(item))
+    .filter(
+      (item, index, array) =>
+        array.findIndex((entry) => entry.name === item.name) === index,
+    );
+
+  return roleConfigs;
+}
+
+export function normalizeSignerRoles(value: unknown) {
+  if (!Array.isArray(value)) return [...DEFAULT_SIGNER_ROLES];
+
+  const roles = value
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .filter((role, index, array) => array.indexOf(role) === index);
+
+  return roles;
+}
+
+export function parseSignerRoles(value?: string | null) {
+  if (!value) return [...DEFAULT_SIGNER_ROLES];
+
+  try {
+    return normalizeSignerRoles(JSON.parse(value));
+  } catch {
+    return [...DEFAULT_SIGNER_ROLES];
+  }
+}
+
+export function serializeSignerRoles(roles: string[]) {
+  return JSON.stringify(normalizeSignerRoles(roles));
+}
+
+export function parseRoleConfigs(value?: string | null) {
+  if (!value) return [...DEFAULT_ROLE_CONFIGS];
+
+  try {
+    return normalizeRoleConfigs(JSON.parse(value));
+  } catch {
+    return [...DEFAULT_ROLE_CONFIGS];
+  }
+}
+
+export function serializeRoleConfigs(roleConfigs: RoleConfig[]) {
+  return JSON.stringify(normalizeRoleConfigs(roleConfigs));
+}
+
+export function deriveSignerRoles(roleConfigs: RoleConfig[]) {
+  return normalizeRoleConfigs(roleConfigs).map((role) => role.name);
+}
+
+export function areRoleConfigsEqual(
+  left: RoleConfig[] | undefined,
+  right: RoleConfig[] | undefined,
+) {
+  const normalizedLeft = normalizeRoleConfigs(left || []);
+  const normalizedRight = normalizeRoleConfigs(right || []);
+
+  if (normalizedLeft.length !== normalizedRight.length) {
+    return false;
+  }
+
+  return normalizedLeft.every((role, index) => {
+    const comparison = normalizedRight[index];
+    return (
+      comparison &&
+      comparison.name === role.name &&
+      comparison.scope === role.scope
+    );
+  });
+}
+
+export function getRoleScope(roleConfigs: RoleConfig[], roleName: string) {
+  return (
+    normalizeRoleConfigs(roleConfigs).find((role) => role.name === roleName)
+      ?.scope || "private"
+  );
+}
+
+export function getVisibleRoles(
+  roleConfigs: RoleConfig[],
+  mode: WorkflowMode,
+  currentRole: string,
+) {
+  const normalizedRoleConfigs = normalizeRoleConfigs(roleConfigs);
+
+  if (mode === "collaborative") {
+    return normalizedRoleConfigs.map((role) => role.name);
+  }
+
+  if (mode === "individual") {
+    return [currentRole];
+  }
+
+  return normalizedRoleConfigs
+    .filter((role) => role.scope === "shared" || role.name === currentRole)
+    .map((role) => role.name);
+}
+
+export function isSharedRole(
+  roleConfigs: RoleConfig[],
+  roleName: string,
+  mode: WorkflowMode,
+) {
+  if (mode === "collaborative") return true;
+  if (mode === "individual") return false;
+  return getRoleScope(roleConfigs, roleName) === "shared";
+}
+
+export function getEditableFieldIdsForRole(
+  fields: Field[],
+  roleName: string,
+) {
+  return new Set(
+    fields
+      .filter((field) => field.assigneeRole === roleName)
+      .map((field) => field.id),
+  );
+}
 
 export type SignatureVector = {
   kind: "signature-vector";

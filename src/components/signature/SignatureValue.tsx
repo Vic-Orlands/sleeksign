@@ -23,11 +23,7 @@ export function SignatureValue({
       >
         <path
           d={vector.pathData}
-          fill="none"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2.3"
+          fill="currentColor"
         />
       </svg>
     );

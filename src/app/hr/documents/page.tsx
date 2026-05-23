@@ -3,7 +3,7 @@
 import type { ReactNode } from "react"
 import { useEffect, useMemo, useState } from "react"
 import { format } from "date-fns"
-import { MailIcon, UsersIcon } from "lucide-react"
+import { MailIcon, Trash2Icon, UsersIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -25,7 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { uploadDocument } from "@/lib/upload-document"
 import { useCurrentWorkspaceId } from "@/lib/workspace-store"
 
-type TableFilter = "all" | "shared" | "signers" | DocumentSetupStatus
+type TableFilter = "all" | "archived" | "shared" | "signers" | DocumentSetupStatus
 
 export default function HRDocuments() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
@@ -34,6 +34,9 @@ export default function HRDocuments() {
   const [isLoading, setIsLoading] = useState(true)
   const [uploadingDocumentName, setUploadingDocumentName] = useState<string | null>(null)
   const [documentToDelete, setDocumentToDelete] = useState<DocumentRecord | null>(null)
+  const [documentToArchive, setDocumentToArchive] = useState<DocumentRecord | null>(null)
+  const [documentToRestore, setDocumentToRestore] = useState<DocumentRecord | null>(null)
+  const [signerToDelete, setSignerToDelete] = useState<(SessionRecord & { documentName: string }) | null>(null)
   const workspaceId = useCurrentWorkspaceId()
   const router = useRouter()
   const visibleDocuments = useMemo(() => (workspaceId ? documents : []), [documents, workspaceId])
@@ -48,7 +51,9 @@ export default function HRDocuments() {
 
     function loadDocuments(options?: { background?: boolean }) {
       if (!options?.background) setIsLoading(true)
-      fetch(`/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`)
+      fetch(
+        `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}&includeArchived=true&includeDeleted=true`,
+      )
         .then((res) => res.json())
         .then((data: unknown) => {
           setDocuments(normalizeDocuments(data))
@@ -78,7 +83,9 @@ export default function HRDocuments() {
     }
 
     if (!options?.background) setIsLoading(true)
-    fetch(`/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`)
+    fetch(
+      `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}&includeArchived=true&includeDeleted=true`,
+    )
       .then((res) => res.json())
       .then((data: unknown) => {
         setDocuments(normalizeDocuments(data))
@@ -93,7 +100,14 @@ export default function HRDocuments() {
       visibleDocuments.filter((document) => {
         const matchesQuery = document.name.toLowerCase().includes(query.trim().toLowerCase())
         if (!matchesQuery) return false
+        if (document.archivedAt) {
+          return tableFilter === "archived" || tableFilter === "signers"
+        }
+        if (document.deletedAt) {
+          return tableFilter === "signers"
+        }
         if (tableFilter === "all") return true
+        if (tableFilter === "archived") return false
         if (tableFilter === "shared") return Boolean(document.sessions?.length)
         if (tableFilter === "signers") return true
         return getDocumentSetupStatus(document) === tableFilter
@@ -153,6 +167,56 @@ export default function HRDocuments() {
     }
   }
 
+  async function archiveDocument() {
+    if (!documentToArchive) return
+
+    try {
+      const res = await fetch(`/api/documents/${documentToArchive.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "archive" }),
+      })
+      if (!res.ok) throw new Error("Archive failed")
+      toast.success("Document archived")
+      setDocumentToArchive(null)
+      await fetchDocuments()
+    } catch {
+      toast.error("Failed to archive document")
+    }
+  }
+
+  async function deleteSigner() {
+    if (!signerToDelete) return
+
+    try {
+      const res = await fetch(`/api/signers/${signerToDelete.id}`, {
+        method: "DELETE",
+      })
+      if (!res.ok) throw new Error("Delete failed")
+      toast.success("Signer deleted")
+      setSignerToDelete(null)
+      await fetchDocuments()
+    } catch {
+      toast.error("Failed to delete signer")
+    }
+  }
+
+  async function restoreDocument() {
+    if (!documentToRestore) return
+
+    try {
+      const res = await fetch(`/api/documents/${documentToRestore.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action: "restore" }),
+      })
+      if (!res.ok) throw new Error("Restore failed")
+      toast.success("Document restored")
+      setDocumentToRestore(null)
+      await fetchDocuments()
+    } catch {
+      toast.error("Failed to restore document")
+    }
+  }
+
   return (
     <>
       <HrShell
@@ -180,7 +244,13 @@ export default function HRDocuments() {
         <div className="flex flex-col gap-4 border-b border-border bg-background px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="font-mono text-xs font-semibold uppercase tracking-widest">
-              {tableFilter === "signers" ? "Signer Management" : tableFilter === "shared" ? "Shared Activity" : "All Documents"}
+              {tableFilter === "signers"
+                ? "Signer Management"
+                : tableFilter === "shared"
+                  ? "Shared Activity"
+                  : tableFilter === "archived"
+                    ? "Archived Docs"
+                    : "All Documents"}
             </h1>
             <p className="mt-1 font-mono text-[11px] text-muted-foreground">
               {tableFilter === "signers"
@@ -200,6 +270,9 @@ export default function HRDocuments() {
               <FilterButton value="all" tableFilter={tableFilter} onSelect={setTableFilter}>
                 All
               </FilterButton>
+              <FilterButton value="archived" tableFilter={tableFilter} onSelect={setTableFilter}>
+                Archived
+              </FilterButton>
               <FilterButton value="Needs Setup" tableFilter={tableFilter} onSelect={setTableFilter}>
                 Needs Setup
               </FilterButton>
@@ -216,7 +289,7 @@ export default function HRDocuments() {
             ))}
           </div>
         ) : tableFilter === "signers" ? (
-          <SignerTable sessions={filteredSigners} />
+          <SignerTable sessions={filteredSigners} onDeleteSigner={setSignerToDelete} />
         ) : !workspaceId ? (
           <div className="mx-5 my-5 flex h-52 items-center justify-center border border-dashed border-border bg-card px-4 text-center font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
             Select or create a workspace from the account menu.
@@ -232,6 +305,14 @@ export default function HRDocuments() {
               variant={tableFilter === "shared" ? "shared" : "documents"}
               onSelectDocument={(document) => router.push(`/hr/documents/${document.id}`)}
               onDeleteDocument={tableFilter === "shared" ? undefined : setDocumentToDelete}
+              onArchiveDocument={
+                tableFilter === "shared" || tableFilter === "archived"
+                  ? undefined
+                  : setDocumentToArchive
+              }
+              onRestoreDocument={
+                tableFilter === "archived" ? setDocumentToRestore : undefined
+              }
             />
           </div>
         )}
@@ -243,7 +324,7 @@ export default function HRDocuments() {
           <DialogHeader>
             <DialogTitle className="font-mono text-xs uppercase tracking-widest">Delete document?</DialogTitle>
             <DialogDescription>
-              This will remove the document, setup fields, signer sessions, and signatures from SleekSign.
+              This will remove the document from document management while keeping signer history available in the other views.
             </DialogDescription>
           </DialogHeader>
           <div className="border border-border bg-background p-3 text-sm">
@@ -259,23 +340,92 @@ export default function HRDocuments() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={Boolean(documentToArchive)} onOpenChange={(open) => !open && setDocumentToArchive(null)}>
+        <DialogContent className="rounded-none border-border bg-popover shadow-sm">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-xs uppercase tracking-widest">Archive document?</DialogTitle>
+            <DialogDescription>
+              This removes the document from All Documents without deleting signer history.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="border border-border bg-background p-3 text-sm">
+            {documentToArchive?.name}
+          </div>
+          <DialogFooter className="rounded-none border-border">
+            <Button variant="outline" onClick={() => setDocumentToArchive(null)}>
+              Cancel
+            </Button>
+            <Button onClick={archiveDocument}>
+              Archive
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(documentToRestore)} onOpenChange={(open) => !open && setDocumentToRestore(null)}>
+        <DialogContent className="rounded-none border-border bg-popover shadow-sm">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-xs uppercase tracking-widest">Restore document?</DialogTitle>
+            <DialogDescription>
+              This returns the document to All Documents and makes it editable/shareable again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="border border-border bg-background p-3 text-sm">
+            {documentToRestore?.name}
+          </div>
+          <DialogFooter className="rounded-none border-border">
+            <Button variant="outline" onClick={() => setDocumentToRestore(null)}>
+              Cancel
+            </Button>
+            <Button onClick={restoreDocument}>
+              Restore
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(signerToDelete)} onOpenChange={(open) => !open && setSignerToDelete(null)}>
+        <DialogContent className="rounded-none border-border bg-popover shadow-sm">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-xs uppercase tracking-widest">Delete signer?</DialogTitle>
+            <DialogDescription>
+              This removes the signer record from signer management and signed document history.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="border border-border bg-background p-3 text-sm">
+            {signerToDelete?.signerName || "Anonymous signer"} · {signerToDelete?.documentName}
+          </div>
+          <DialogFooter className="rounded-none border-border">
+            <Button variant="outline" onClick={() => setSignerToDelete(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={deleteSigner}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
 
 function SignerTable({
   sessions,
+  onDeleteSigner,
 }: {
   sessions: Array<SessionRecord & { documentName: string }>
+  onDeleteSigner?: (session: SessionRecord & { documentName: string }) => void
 }) {
   return (
     <div className="overflow-x-auto px-4 py-4 sm:px-5">
       <div className="min-w-[760px] border border-border bg-background text-[11px]">
-        <div className="grid grid-cols-12 gap-4 border-b border-border bg-secondary p-4 font-mono uppercase tracking-tight text-muted-foreground">
+          <div className="grid grid-cols-12 gap-4 border-b border-border bg-secondary p-4 font-mono uppercase tracking-tight text-muted-foreground">
           <div className="col-span-3">Name / Role</div>
           <div className="col-span-4">Contact</div>
           <div className="col-span-2">Docs Signed</div>
-          <div className="col-span-3 text-right">Status</div>
+          <div className="col-span-2 text-right">Status</div>
+          <div className="col-span-1 text-right">Action</div>
         </div>
 
         {sessions.length === 0 ? (
@@ -306,8 +456,21 @@ function SignerTable({
               <div className="col-span-2 font-mono text-[13px] text-foreground">
                 {session.status === "completed" ? "1" : "0"}
               </div>
-              <div className="col-span-3 text-right">
+              <div className="col-span-2 text-right">
                 <StatusBadge status={session.status} />
+              </div>
+              <div className="col-span-1 flex justify-end">
+                {onDeleteSigner ? (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground hover:bg-red-500/10 hover:text-red-300"
+                    aria-label={`Delete ${session.signerName || "signer"}`}
+                    onClick={() => onDeleteSigner(session)}
+                  >
+                    <Trash2Icon />
+                  </Button>
+                ) : null}
               </div>
             </div>
           ))

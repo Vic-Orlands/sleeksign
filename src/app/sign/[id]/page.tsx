@@ -34,9 +34,11 @@ type SessionRecord = {
   status: "pending" | "completed";
   signerName?: string | null;
   signerEmail?: string | null;
+  signerRole?: string | null;
   document: {
     name: string;
     fileUrl: string;
+    signerRoles?: string[];
     fields: Field[];
   };
   signatures?: SignatureRecord[];
@@ -100,7 +102,10 @@ export default function SignerPortal() {
   }, [id]);
 
   const fields: Field[] = useMemo(
-    () => session?.document?.fields || [],
+    () =>
+      (session?.document?.fields || []).filter((field) =>
+        session?.signerRole ? field.assigneeRole === session.signerRole : true,
+      ),
     [session],
   );
   const requiredFields = useMemo(
@@ -233,6 +238,14 @@ export default function SignerPortal() {
             >
               Signing
             </Badge>
+            {session.signerRole ? (
+              <Badge
+                variant="outline"
+                className="rounded-none font-mono text-[9px] uppercase tracking-widest"
+              >
+                {session.signerRole}
+              </Badge>
+            ) : null}
           </div>
           <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             {session.document?.name}

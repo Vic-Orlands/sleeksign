@@ -3,10 +3,11 @@ import { db } from "@/db";
 import { sessions, signatures } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { parseSignerRoles } from "@/lib/field-utils";
 
 export async function POST(req: NextRequest) {
   try {
-    const { documentId, signerName, signerEmail } = await req.json();
+    const { documentId, signerName, signerEmail, signerRole } = await req.json();
     const sessionId = nanoid();
 
     await db.insert(sessions).values({
@@ -14,6 +15,7 @@ export async function POST(req: NextRequest) {
       documentId,
       signerName: signerName || null,
       signerEmail: signerEmail || null,
+      signerRole: signerRole || null,
     });
 
     return NextResponse.json({ sessionId });
@@ -58,11 +60,24 @@ export async function GET(req: NextRequest) {
       .where(eq(sessions.id, sessionId));
   }
 
-  return NextResponse.json(session, {
-    headers: {
-      "Cache-Control": "no-store",
+  return NextResponse.json(
+    {
+      ...session,
+      document: {
+        ...session.document,
+        signerRoles: parseSignerRoles(session.document.signerRoles),
+        fields: session.document.fields.map((field) => ({
+          ...field,
+          assigneeRole: field.assigneeRole || "",
+        })),
+      },
     },
-  });
+    {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    },
+  );
 }
 
 export async function PATCH(req: NextRequest) {

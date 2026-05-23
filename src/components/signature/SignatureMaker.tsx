@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import React, { useState, useEffect, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -24,10 +25,21 @@ import {
 } from "lucide-react";
 import {
   decodeSignatureVector,
-  encodeSignatureVector,
 } from "@/lib/field-utils";
 
 const SIGNATURE_STYLE_COUNT = 2;
+const SIGNATURE_FONT_FACES = [
+  {
+    family: "SignageSignatureOne",
+    url: "/fonts/signature2.ttf",
+  },
+  {
+    family: "SignageSignatureTwo",
+    url: "/fonts/signature4.ttf",
+  },
+] as const;
+
+const signatureFontPromises = new Map<string, Promise<void>>();
 
 interface SignatureMakerProps {
   isOpen: boolean;
@@ -50,11 +62,10 @@ export function SignatureMaker({
   const [name, setName] = useState(defaultValue);
   const [textValue, setTextValue] = useState(defaultValue);
   const [fontIndex, setFontIndex] = useState(0);
-  const [svgData, setSvgData] = useState<{
-    pathData: string;
-    viewBox: string;
-  } | null>(null);
+  const [typedPreviewUrl, setTypedPreviewUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [drawVersion, setDrawVersion] = useState(0);
+  const [drawHasContent, setDrawHasContent] = useState(false);
   const sigCanvas = useRef<SignatureCanvas>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasTypedName = name.trim().length > 0;
@@ -65,16 +76,11 @@ export function SignatureMaker({
         const vector = decodeSignatureVector(defaultValue);
         setActiveTab(type === "text" ? "text" : "type");
         setTextValue(defaultValue);
-        setSvgData(
-          vector
-            ? {
-                pathData: vector.pathData,
-                viewBox: vector.viewBox,
-              }
-            : null,
-        );
+        setTypedPreviewUrl(defaultValue.startsWith("data:image") ? defaultValue : "");
+        setDrawVersion(0);
+        setDrawHasContent(false);
         if (type === "signature") {
-          setName(vector?.name || defaultValue);
+          setName(vector?.name || (defaultValue.startsWith("data:image") ? "" : defaultValue));
           if (vector) setFontIndex(vector.fontIndex);
         }
       });
@@ -85,7 +91,9 @@ export function SignatureMaker({
     if (activeTab !== "type") return;
 
     if (!name.trim()) {
-      queueMicrotask(() => setSvgData(null));
+      queueMicrotask(() =>
+        setTypedPreviewUrl(defaultValue.startsWith("data:image") ? defaultValue : ""),
+      );
       return;
     }
 
@@ -93,63 +101,64 @@ export function SignatureMaker({
       const vector = decodeSignatureVector(name);
       if (vector) {
         queueMicrotask(() => {
-          setSvgData({
-            pathData: vector.pathData,
-            viewBox: vector.viewBox,
-          });
+          setTypedPreviewUrl("");
           setName(vector.name);
         });
       }
       return;
     }
 
-    if (activeTab === "type" && name.trim()) {
-      const fetchSvg = async () => {
-        setIsLoading(true);
-        try {
-          const res = await fetch("/api/signature-generate", {
-            method: "POST",
-            body: JSON.stringify({ name, fontIndex }),
-          });
-          if (!res.ok) {
-            setSvgData(null);
-            return;
-          }
-          const data = await res.json();
-          setSvgData(data);
-        } catch (err) {
-          console.error(err);
-          setSvgData(null);
-        } finally {
+    let cancelled = false;
+
+    const buildPreview = async () => {
+      setIsLoading(true);
+      try {
+        await ensureSignatureFont(fontIndex);
+        const previewUrl = createTypedSignatureDataUrl(name, fontIndex);
+        if (!cancelled) {
+          setTypedPreviewUrl(previewUrl);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setTypedPreviewUrl("");
+        }
+      } finally {
+        if (!cancelled) {
           setIsLoading(false);
         }
-      };
-      fetchSvg();
-    }
-  }, [name, fontIndex, activeTab]);
+      }
+    };
+
+    void buildPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [name, fontIndex, activeTab, defaultValue]);
 
   const handleConfirm = () => {
     if (activeTab === "text") {
       onConfirm(textValue);
-    } else if (activeTab === "type" && svgData) {
-      onConfirm(
-        encodeSignatureVector({
-          kind: "signature-vector",
-          name,
-          pathData: svgData.pathData,
-          viewBox: svgData.viewBox,
-          width: Number(svgData.viewBox.split(" ")[2] || 0),
-          height: Number(svgData.viewBox.split(" ")[3] || 0),
-          fontIndex,
-        }),
-      );
+    } else if (activeTab === "type" && typedPreviewUrl) {
+      onConfirm(typedPreviewUrl);
     } else if (activeTab === "draw" && sigCanvas.current) {
       if (!sigCanvas.current.isEmpty()) {
-        onConfirm(sigCanvas.current.getTrimmedCanvas().toDataURL("image/png"));
+        const trimmedCanvas = trimCanvas(sigCanvas.current.getCanvas());
+        onConfirm(trimmedCanvas.toDataURL("image/png"));
       }
     }
     onClose();
   };
+
+  const canConfirm =
+    activeTab === "text"
+      ? textValue.trim().length > 0
+      : activeTab === "type"
+          ? Boolean(typedPreviewUrl)
+          : activeTab === "draw"
+            ? drawHasContent
+            : true;
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -164,7 +173,12 @@ export function SignatureMaker({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent className="!w-[min(calc(100vw-2rem),46rem)] !max-w-none overflow-hidden rounded-none border border-border bg-background p-0 shadow-2xl sm:!w-[46rem]">
         <DialogHeader className="border-b border-border bg-muted/40 p-6">
           <DialogTitle className="font-mono text-xs font-semibold uppercase tracking-widest">
@@ -261,7 +275,7 @@ export function SignatureMaker({
                     <div className="relative flex h-44 items-center justify-center overflow-hidden border border-border bg-[linear-gradient(to_bottom,#fff_0%,#fff_62%,#f3f0e8_62%,#f3f0e8_63%,#fff_63%)] text-zinc-900 shadow-sm">
                       {isLoading ? (
                         <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                      ) : svgData ? (
+                      ) : typedPreviewUrl ? (
                         <div className="flex w-full items-center gap-4 px-8">
                           <Button
                             variant="ghost"
@@ -277,22 +291,16 @@ export function SignatureMaker({
                           </Button>
                           <div className="flex flex-1 justify-center">
                             <div className="flex min-h-28 w-full max-w-[28rem] items-center justify-center rounded-none border border-zinc-200/80 bg-white/80 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
-                              {svgData ? (
-                                <svg
-                                  viewBox={svgData.viewBox}
-                                  className="max-h-full max-w-full text-zinc-950"
+                              {typedPreviewUrl ? (
+                                <Image
+                                  src={typedPreviewUrl}
+                                  alt="Typed signature preview"
+                                  className="max-h-full max-w-full"
+                                  unoptimized
+                                  width={560}
+                                  height={160}
                                   style={{ height: "118px" }}
-                                >
-                                  <path
-                                    d={svgData.pathData}
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="2.8"
-                                    className="signature-path"
-                                  />
-                                </svg>
+                                />
                               ) : (
                                 <div className="flex items-center gap-2 text-sm text-zinc-500">
                                   <Sparkles className="size-4" />
@@ -347,6 +355,10 @@ export function SignatureMaker({
                       velocityFilterWeight={0.7}
                       minWidth={1.5}
                       maxWidth={4}
+                      onEnd={() => {
+                        setDrawVersion((value) => value + 1);
+                        setDrawHasContent(true);
+                      }}
                       canvasProps={{
                         className:
                           "w-full h-[300px] cursor-crosshair touch-none",
@@ -359,7 +371,11 @@ export function SignatureMaker({
                   <Button
                     variant="link"
                     size="sm"
-                    onClick={() => sigCanvas.current?.clear()}
+                    onClick={() => {
+                      sigCanvas.current?.clear();
+                      setDrawVersion(0);
+                      setDrawHasContent(false);
+                    }}
                     className="p-0 text-xs font-semibold text-red-400"
                   >
                     <Eraser className="w-4 h-4" />
@@ -407,26 +423,135 @@ export function SignatureMaker({
           <Button
             onClick={handleConfirm}
             className="h-10 px-8 font-semibold"
-            disabled={isLoading}
+            disabled={
+              isLoading ||
+              !canConfirm ||
+              (activeTab === "draw" && drawVersion === 0)
+            }
           >
             Confirm {type === "text" ? "Entry" : "Signature"}
           </Button>
         </div>
       </DialogContent>
-
-      <style jsx global>{`
-        .signature-path {
-          stroke-dasharray: 1500;
-          stroke-dashoffset: 1500;
-          animation: draw 2.5s ease-in-out forwards;
-        }
-
-        @keyframes draw {
-          to {
-            stroke-dashoffset: 0;
-          }
-        }
-      `}</style>
     </Dialog>
   );
+}
+
+async function ensureSignatureFont(fontIndex: number) {
+  const font = SIGNATURE_FONT_FACES[fontIndex] || SIGNATURE_FONT_FACES[0];
+  if (typeof document === "undefined" || !("fonts" in document)) return;
+
+  const cacheKey = `${font.family}:${font.url}`;
+  const existingPromise = signatureFontPromises.get(cacheKey);
+  if (existingPromise) {
+    await existingPromise;
+    return;
+  }
+
+  const loadPromise = new FontFace(font.family, `url(${font.url})`)
+    .load()
+    .then((loadedFont) => {
+      document.fonts.add(loadedFont);
+    });
+
+  signatureFontPromises.set(cacheKey, loadPromise);
+  await loadPromise;
+}
+
+function createTypedSignatureDataUrl(name: string, fontIndex: number) {
+  const font = SIGNATURE_FONT_FACES[fontIndex] || SIGNATURE_FONT_FACES[0];
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Canvas context unavailable");
+  }
+
+  const fontSize = 110;
+  context.font = `${fontSize}px "${font.family}"`;
+  const metrics = context.measureText(name);
+  const horizontalPadding = 40;
+  const verticalPadding = 28;
+  const width = Math.max(
+    Math.ceil(metrics.width + horizontalPadding * 2),
+    320,
+  );
+  const ascent = Math.ceil(
+    metrics.actualBoundingBoxAscent || fontSize * 0.7,
+  );
+  const descent = Math.ceil(
+    metrics.actualBoundingBoxDescent || fontSize * 0.25,
+  );
+  const height = Math.max(ascent + descent + verticalPadding * 2, 160);
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const drawContext = canvas.getContext("2d");
+  if (!drawContext) {
+    throw new Error("Canvas context unavailable");
+  }
+
+  drawContext.clearRect(0, 0, width, height);
+  drawContext.font = `${fontSize}px "${font.family}"`;
+  drawContext.fillStyle = "#111111";
+  drawContext.textBaseline = "alphabetic";
+  drawContext.fillText(name, horizontalPadding, verticalPadding + ascent);
+
+  return trimCanvas(canvas).toDataURL("image/png");
+}
+
+function trimCanvas(sourceCanvas: HTMLCanvasElement) {
+  const sourceContext = sourceCanvas.getContext("2d");
+  if (!sourceContext) return sourceCanvas;
+
+  const { width, height } = sourceCanvas;
+  const imageData = sourceContext.getImageData(0, 0, width, height);
+  const { data } = imageData;
+
+  let top = height;
+  let left = width;
+  let right = -1;
+  let bottom = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const alpha = data[(y * width + x) * 4 + 3];
+      if (alpha === 0) continue;
+
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+
+  if (right < left || bottom < top) {
+    return sourceCanvas;
+  }
+
+  const padding = 8;
+  const trimmedWidth = right - left + 1;
+  const trimmedHeight = bottom - top + 1;
+  const targetCanvas = document.createElement("canvas");
+
+  targetCanvas.width = trimmedWidth + padding * 2;
+  targetCanvas.height = trimmedHeight + padding * 2;
+
+  const targetContext = targetCanvas.getContext("2d");
+  if (!targetContext) return sourceCanvas;
+
+  targetContext.drawImage(
+    sourceCanvas,
+    left,
+    top,
+    trimmedWidth,
+    trimmedHeight,
+    padding,
+    padding,
+    trimmedWidth,
+    trimmedHeight,
+  );
+
+  return targetCanvas;
 }

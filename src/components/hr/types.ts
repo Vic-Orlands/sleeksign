@@ -1,4 +1,5 @@
 import type { Field } from "@/lib/field-utils"
+import type { RoleConfig } from "@/lib/field-utils"
 
 export type SessionStatus = "pending" | "completed"
 
@@ -6,11 +7,14 @@ export type SessionRecord = {
   id: string
   documentId: string
   status: SessionStatus
+  finalizedFileUrl?: string | null
   signerName?: string | null
   signerEmail?: string | null
+  signerRole?: string | null
   signerIp?: string | null
   signerUserAgent?: string | null
   completedAt?: string | number | Date | null
+  deletedAt?: string | number | Date | null
   createdAt: string | number | Date
 }
 
@@ -19,7 +23,11 @@ export type DocumentRecord = {
   name: string
   fileUrl: string
   createdAt: string | number | Date
+  archivedAt?: string | number | Date | null
+  deletedAt?: string | number | Date | null
   isTemplate?: boolean
+  signerRoles?: string[]
+  roleConfigs?: RoleConfig[]
   fields?: Field[]
   sessions?: SessionRecord[]
 }
