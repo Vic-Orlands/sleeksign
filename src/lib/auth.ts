@@ -2,7 +2,6 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
-import { Resend } from "resend";
 
 import { db } from "@/db";
 import {
@@ -14,10 +13,8 @@ import {
   authUser,
   authVerification,
 } from "@/db/schema";
-
-const resend = process.env.RESEND_API_KEY
-  ? new Resend(process.env.RESEND_API_KEY)
-  : null;
+import { buildInvitationEmail, buildResetPasswordEmail } from "@/lib/email/messages";
+import { sendTransactionalEmail } from "@/lib/email/send-email";
 
 function getBaseUrl() {
   return (
@@ -25,36 +22,6 @@ function getBaseUrl() {
     process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
     "http://localhost:3000"
   );
-}
-
-async function sendEmail({
-  to,
-  subject,
-  html,
-  text,
-}: {
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-}) {
-  const from = process.env.RESEND_FROM_EMAIL;
-
-  if (!resend || !from) {
-    console.warn(
-      `Email delivery skipped for ${to}. Configure RESEND_API_KEY and RESEND_FROM_EMAIL.`,
-    );
-    console.info(text);
-    return;
-  }
-
-  await resend.emails.send({
-    from,
-    to,
-    subject,
-    html,
-    text,
-  });
 }
 
 export const auth = betterAuth({
@@ -66,7 +33,7 @@ export const auth = betterAuth({
     process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
     "http://localhost:3000",
   database: drizzleAdapter(db, {
-    provider: "sqlite",
+    provider: "pg",
     schema: {
       user: authUser,
       session: authSession,
@@ -81,16 +48,16 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 6,
     sendResetPassword: async ({ user, url }) => {
-      await sendEmail({
+      const message = buildResetPasswordEmail({
+        url,
+        userName: user.name,
+      });
+
+      await sendTransactionalEmail({
         to: user.email,
-        subject: "Reset your SleekSign password",
-        text: `Reset your SleekSign password by visiting ${url}`,
-        html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
-          <h2 style="margin:0 0 12px">Reset your SleekSign password</h2>
-          <p style="margin:0 0 12px">We received a request to reset your password.</p>
-          <p style="margin:0 0 16px"><a href="${url}" style="display:inline-block;padding:10px 14px;background:#111827;color:#ffffff;text-decoration:none">Reset Password</a></p>
-          <p style="margin:0;color:#4b5563">If you did not request this, you can ignore this email.</p>
-        </div>`,
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
       });
     },
   },
@@ -123,16 +90,17 @@ export const auth = betterAuth({
           getBaseUrl(),
         ).toString();
 
-        await sendEmail({
+        const message = buildInvitationEmail({
+          inviteUrl: url,
+          organizationName: organization.name,
+          inviterName: inviter.user.name,
+        });
+
+        await sendTransactionalEmail({
           to: email,
-          subject: `Join ${organization.name} on SleekSign`,
-          text: `${inviter.user.name} invited you to join ${organization.name} on SleekSign. Accept the invitation at ${url}`,
-          html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827">
-            <h2 style="margin:0 0 12px">Join ${organization.name}</h2>
-            <p style="margin:0 0 12px">${inviter.user.name} invited you to collaborate in SleekSign.</p>
-            <p style="margin:0 0 16px"><a href="${url}" style="display:inline-block;padding:10px 14px;background:#111827;color:#ffffff;text-decoration:none">Accept Invitation</a></p>
-            <p style="margin:0;color:#4b5563">This link opens the invitation acceptance flow for your workspace.</p>
-          </div>`,
+          subject: message.subject,
+          html: message.html,
+          text: message.text,
         });
       },
     }),
