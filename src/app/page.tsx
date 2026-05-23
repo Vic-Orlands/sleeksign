@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   NetworkIcon,
   ArrowRightIcon,
@@ -116,27 +116,85 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
-      {/* Features Outline */}
-      <section className="relative mx-auto w-[60%] max-w-4xl py-32 z-10">
-        <div className="grid gap-12 sm:grid-cols-3">
-          <Metric
-            label="Model selection"
-            value="Shared, private, or employer-first modes"
-            icon={NetworkIcon}
-            delay={0.2}
-          />
-          <Metric
-            label="Document control"
-            value="Archive, restore, review, and route intuitively"
-            icon={FolderKanbanIcon}
-            delay={0.4}
-          />
-          <Metric
-            label="Signer visibility"
-            value="Only the right collaborators see the right fields"
-            icon={ScanSearchIcon}
-            delay={0.6}
-          />
+      {/* Features and Use Cases Outline */}
+      <section className="relative z-10 w-full py-12 lg:py-18 mb-20 flex justify-center">
+        <div className="w-fit grid grid-cols-1 lg:grid-cols-2 items-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.8 }}
+            className="flex flex-col w-fit ml-auto lg:pr-10"
+          >
+            <div className="flex flex-col gap-6">
+              <Metric
+                label="Model selection"
+                value="Shared, private, or employer-first modes"
+                icon={NetworkIcon}
+                delay={0.2}
+              />
+              <Metric
+                label="Document control"
+                value="Archive, restore, review, and route intuitively"
+                icon={FolderKanbanIcon}
+                delay={0.4}
+              />
+              <Metric
+                label="Signer visibility"
+                value="Only the right collaborators see the right fields"
+                icon={ScanSearchIcon}
+                delay={0.6}
+              />
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-50px" }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="flex flex-col text-left lg:border-l lg:border-border/50 lg:pl-10"
+          >
+            <p className="text-[9px] uppercase tracking-[0.2em] text-orange-500/70 font-medium mb-8">
+              Use cases
+            </p>
+            <ul className="space-y-5 text-[14px] sm:text-[15px] leading-relaxed text-foreground/80 font-light list-none">
+              <UseCaseItem
+                title="Offer letters & contractor packs"
+                model="Collaborative"
+                detail="Multi-party signing on a single document."
+              />
+              <UseCaseItem
+                title="Onboarding forms"
+                model="Individual copies"
+                detail="Separate copies for each recipient."
+              />
+              <UseCaseItem
+                title="Strict NDA workflows"
+                model="Collaborative"
+                detail="Audit-ready shared agreement."
+              />
+              <UseCaseItem
+                title="Witness-based approvals"
+                model="Collaborative"
+                detail="HR, signer, and witness in one chain."
+              />
+              <UseCaseItem
+                title="Shared employer sign-off"
+                model="Shared-base"
+                detail="Employer signature feeds multiple copies."
+              />
+            </ul>
+            <div className="mt-4">
+              <a
+                href="/hr"
+                className="group inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] font-medium text-foreground hover:text-orange-500 transition-colors"
+              >
+                <ArrowRightIcon className="size-4 transition-transform group-hover:translate-x-1" />
+                Explore the dashboard
+              </a>
+            </div>
+          </motion.div>
         </div>
       </section>
 
@@ -225,7 +283,7 @@ export default function LandingPage() {
           transition={{ duration: 0.8 }}
           className="flex flex-col items-center max-w-3xl"
         >
-          <p className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground font-medium mb-6">
+          <p className="text-[9px] uppercase tracking-[0.2em] text-orange-500/70 font-medium mb-6">
             Built for operations
           </p>
           <h2 className="text-[26px] sm:text-[32px] font-light tracking-tight text-foreground leading-[1.2]">
@@ -235,7 +293,7 @@ export default function LandingPage() {
             </span>{" "}
             still lives inside the same system.
           </h2>
-          <p className="mt-8 max-w-xl text-[14px] leading-[1.8] text-muted-foreground font-light text-center relative mb-12">
+          <p className="mt-8 max-w-xl text-[14px] leading-[1.8] text-muted-foreground font-light text-center relative mb-6">
             <span className="absolute -left-4 -top-2 text-4xl font-cursive">
               &quot;
             </span>
@@ -247,35 +305,52 @@ export default function LandingPage() {
           </p>
         </motion.div>
       </section>
-
-      {/* Use Cases Section */}
-      <section className="relative z-10 mx-auto w-[80%] max-w-4xl mb-20 py-20 flex flex-col items-center text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
-          transition={{ duration: 0.8 }}
-        >
-          <p className="text-[9px] uppercase tracking-[0.2em] text-orange-500/70 font-medium mb-8">
-            Use cases
-          </p>
-          <p className="text-[14px] sm:text-[16px] leading-loose text-foreground/80 font-light tracking-wide">
-            Offer letters{" "}
-            <span className="text-muted-foreground/30 mx-2">/</span>
-            contractor packs{" "}
-            <span className="text-muted-foreground/30 mx-2">/</span>
-            onboarding forms{" "}
-            <span className="text-muted-foreground/30 mx-2">/</span>
-            NDA workflows{" "}
-            <span className="text-muted-foreground/30 mx-2">/</span>
-            <br className="hidden sm:block" />
-            witness-based approvals{" "}
-            <span className="text-muted-foreground/30 mx-2">/</span>
-            shared employer sign-off with private recipient copies
-          </p>
-        </motion.div>
-      </section>
     </main>
+  );
+}
+
+function UseCaseItem({
+  title,
+  model,
+  detail,
+}: {
+  title: string;
+  model: string;
+  detail: string;
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <li
+      className="relative flex items-center gap-3 cursor-default"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div className="size-1 rounded-full bg-orange-500/40" />
+      <span>{title}</span>
+
+      <AnimatePresence>
+        {isHovered && (
+          <motion.div
+            initial={{ opacity: 0, x: 5 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 5 }}
+            className="absolute left-full ml-3 z-50 w-fit min-w-35 p-3 rounded-xl bg-white border border-border shadow-xl backdrop-blur-sm pointer-events-none"
+          >
+            <div className="flex flex-col gap-1">
+              <span className="text-[9px] uppercase tracking-wider text-orange-500 font-bold whitespace-nowrap">
+                {model}
+              </span>
+              <span className="text-[12px] text-muted-foreground leading-tight font-light whitespace-nowrap">
+                {detail}
+              </span>
+            </div>
+            {/* Tooltip Arrow */}
+            <div className="absolute top-1/2 -left-1.5 -translate-y-1/2 border-y-[6px] border-y-transparent border-r-[6px] border-r-white" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </li>
   );
 }
 
@@ -296,15 +371,15 @@ function Metric({
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ delay, duration: 0.6 }}
-      className="flex flex-col items-center text-center"
+      className="flex flex-col items-center text-center lg:items-start lg:text-right"
     >
-      <div className="flex flex-col items-center gap-4 opacity-80">
-        <Icon className="size-5 text-muted-foreground/60" />
-        <p className="text-[9px] uppercase tracking-[0.15em] text-muted-foreground font-medium">
+      <div className="flex items-center ml-auto gap-2 opacity-80">
+        <Icon className="size-5 text-foreground" />
+        <p className="text-[10px] uppercase tracking-[0.15em] text-foreground font-medium">
           {label}
         </p>
       </div>
-      <p className="mt-4 text-[13px] font-light leading-[1.6] text-foreground/80 max-w-50">
+      <p className="mt-4 text-[13px] font-light leading-[1.6] text-muted-foreground max-w-50">
         {value}
       </p>
     </motion.div>

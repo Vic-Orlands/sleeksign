@@ -1,10 +1,12 @@
-import { drizzle } from "drizzle-orm/better-sqlite3"
-import Database from "better-sqlite3"
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 
-import * as schema from "./schema"
+import * as schema from "./schema";
 
-const sqlite = new Database("sqlite.db")
+const databaseUrl =
+  process.env.DATABASE_URL ||
+  "postgresql://postgres:postgres@127.0.0.1:5432/sleeksign";
 
-sqlite.pragma("foreign_keys = ON")
+const sql = neon(databaseUrl);
 
-export const db = drizzle(sqlite, { schema })
+export const db = drizzle(sql, { schema });

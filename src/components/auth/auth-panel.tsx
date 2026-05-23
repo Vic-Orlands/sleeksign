@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authClient, saveLastWorkspaceId } from "@/lib/auth-client";
 import { setCurrentWorkspaceId } from "@/lib/workspace-store";
+import Link from "next/link";
 
 type AuthPanelProps = {
   mode: AuthMode;
@@ -155,11 +156,13 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
   return (
     <main className="grid min-h-svh bg-[(--paper)] text-foreground lg:grid-cols-[minmax(0,0.95fr)_minmax(480px,1.05fr)]">
       <section className="hidden border-r border-border bg-background p-8 lg:flex lg:flex-col">
-        <div className="flex items-center gap-2">
-          <span className="text-3xl font-cursive text-foreground">
-            SleekSign
-          </span>
-        </div>
+        <Link href="/">
+          <div className="flex items-center gap-2">
+            <span className="text-3xl font-cursive text-foreground">
+              SleekSign
+            </span>
+          </div>
+        </Link>
 
         <div className="mt-auto max-w-xl">
           <p className="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">

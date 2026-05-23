@@ -103,6 +103,10 @@ async function fetchWorkspaceRequest<T>(path: string) {
   return response.json() as Promise<T>;
 }
 
+function filterPendingInvitations(invitations: WorkspaceInvitation[]) {
+  return invitations.filter((invitation) => invitation.status === "pending");
+}
+
 async function loadWorkspaceAccessSnapshot(workspaceId: string) {
   await authClient.$fetch("/organization/set-active", {
     method: "POST",
@@ -124,7 +128,9 @@ async function loadWorkspaceAccessSnapshot(workspaceId: string) {
   return {
     role: roleData.role || "member",
     members: memberData.members || [],
-    invitations: Array.isArray(invitationData) ? invitationData : [],
+    invitations: Array.isArray(invitationData)
+      ? filterPendingInvitations(invitationData)
+      : [],
   };
 }
 
@@ -603,7 +609,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
       const data = await loadWorkspaceAccessSnapshot(workspaceId);
       setActiveRole(data.role);
       setMembers(data.members);
-      setInvitations(data.invitations);
+      setInvitations(filterPendingInvitations(data.invitations));
     } catch {
       setActiveRole("member");
       setMembers([]);
@@ -627,7 +633,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         if (cancelled) return;
         setActiveRole(data.role);
         setMembers(data.members);
-        setInvitations(data.invitations);
+        setInvitations(filterPendingInvitations(data.invitations));
       } catch {
         if (cancelled) return;
         setActiveRole("member");
