@@ -153,10 +153,12 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
   }
 
   return (
-    <main className="grid min-h-svh bg-[var(--paper)] text-foreground lg:grid-cols-[minmax(0,0.95fr)_minmax(480px,1.05fr)]">
+    <main className="grid min-h-svh bg-[(--paper)] text-foreground lg:grid-cols-[minmax(0,0.95fr)_minmax(480px,1.05fr)]">
       <section className="hidden border-r border-border bg-background p-8 lg:flex lg:flex-col">
         <div className="flex items-center gap-2">
-          <span className="text-xl ruthie-regular">SleekSign</span>
+          <span className="text-3xl font-cursive text-foreground">
+            SleekSign
+          </span>
         </div>
 
         <div className="mt-auto max-w-xl">
@@ -164,11 +166,11 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
             Document Operations
           </p>
           <h1 className="mt-4 text-4xl font-semibold tracking-normal text-foreground">
-            <span className="text-orange-400">Prepare</span>,{" "}
-            <span className="text-orange-400">send</span>,{" "}
-            <span className="text-orange-400">sign</span>, and{" "}
-            <span className="text-orange-400">review</span> documents from one
-            focused workspace.
+            <span className="text-orange-400 font-roboto">Prepare,</span>{" "}
+            <span className="text-orange-400 font-roboto">send,</span>{" "}
+            <span className="text-orange-400 font-roboto">sign,</span> and{" "}
+            <span className="text-orange-400 font-roboto">review</span>{" "}
+            documents from one focused workspace.
           </h1>
           <div className="mt-8 flex flex-col -space-y-px">
             <AuthSignal
@@ -192,7 +194,7 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
           <div className="w-full max-w-md border border-border bg-background p-5 shadow-sm transition-[border-color,box-shadow] duration-200 ease-out sm:p-6">
             <div className="lg:hidden">
               <div className="flex items-center gap-2">
-                <span className="text-xl ruthie-regular">SleekSign</span>
+                <span className="text-xl font-cursive">SleekSign</span>
               </div>
             </div>
 
@@ -208,10 +210,7 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
               </p>
             </div>
 
-            <form
-              className="mt-6 flex flex-col gap-3"
-              onSubmit={submit}
-            >
+            <form className="mt-6 flex flex-col gap-3" onSubmit={submit}>
               {isSignUp ? (
                 <AuthField
                   icon={UserIcon}
@@ -269,7 +268,9 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
                   name="workspace"
                   autoComplete="organization"
                   placeholder={
-                    isInvitationFlow ? "Optional workspace name" : "Any Workspace"
+                    isInvitationFlow
+                      ? "Optional workspace name"
+                      : "Any Workspace"
                   }
                   required={!isInvitationFlow}
                 />

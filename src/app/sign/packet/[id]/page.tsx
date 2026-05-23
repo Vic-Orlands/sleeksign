@@ -246,7 +246,7 @@ export default function PacketSignerPortal() {
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="text-lg ruthie-regular">SleekSign</h1>
+            <h1 className="text-lg font-cursive">SleekSign</h1>
             <Badge
               variant="outline"
               className="rounded-none font-mono text-[9px] uppercase tracking-widest"
