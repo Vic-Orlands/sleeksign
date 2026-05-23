@@ -1,23 +1,32 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import {
+  boolean,
+  integer,
+  pgTable,
+  real,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
-export const documents = sqliteTable("documents", {
+export const documents = pgTable("documents", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   fileUrl: text("file_url").notNull(),
   workspaceId: text("workspace_id"),
-  signerRoles: text("signer_roles").notNull().default('["HR","Employee","Contractor"]'),
+  signerRoles: text("signer_roles")
+    .notNull()
+    .default('["HR","Employee","Contractor"]'),
   roleConfigs: text("role_configs")
     .notNull()
-    .default('[{"name":"HR","scope":"private"},{"name":"Employee","scope":"private"},{"name":"Contractor","scope":"private"}]'),
-  isTemplate: integer("is_template", { mode: "boolean" })
+    .default(
+      '[{"name":"HR","scope":"private"},{"name":"Employee","scope":"private"},{"name":"Contractor","scope":"private"}]',
+    ),
+  isTemplate: boolean("is_template").notNull().default(false),
+  archivedAt: timestamp("archived_at", { withTimezone: false }),
+  deletedAt: timestamp("deleted_at", { withTimezone: false }),
+  createdAt: timestamp("created_at", { withTimezone: false })
     .notNull()
-    .default(false),
-  archivedAt: integer("archived_at", { mode: "timestamp" }),
-  deletedAt: integer("deleted_at", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(new Date()),
+    .defaultNow(),
 });
 
 export const documentsRelations = relations(documents, ({ many }) => ({
@@ -26,21 +35,20 @@ export const documentsRelations = relations(documents, ({ many }) => ({
   packets: many(signingPackets),
 }));
 
-export const fields = sqliteTable("fields", {
+export const fields = pgTable("fields", {
   id: text("id").primaryKey(),
   documentId: text("document_id")
     .notNull()
     .references(() => documents.id, { onDelete: "cascade" }),
-  type: text("type", {
-    enum: ["signature", "text", "date", "checkbox"],
-  }).notNull(),
+  type: text("type")
+    .$type<"signature" | "text" | "date" | "checkbox">()
+    .notNull(),
   page: integer("page").notNull(),
-  // Storing as percentages (0-100) for responsive scaling
   x: real("x").notNull(),
   y: real("y").notNull(),
   width: real("width").notNull().default(20),
   height: real("height").notNull().default(5),
-  required: integer("required", { mode: "boolean" }).notNull().default(true),
+  required: boolean("required").notNull().default(true),
   assigneeRole: text("assignee_role").notNull().default("HR"),
 });
 
@@ -52,24 +60,22 @@ export const fieldsRelations = relations(fields, ({ one, many }) => ({
   signatures: many(signatures),
 }));
 
-export const sessions = sqliteTable("sessions", {
+export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   documentId: text("document_id")
     .notNull()
     .references(() => documents.id, { onDelete: "cascade" }),
-  status: text("status", { enum: ["pending", "completed"] })
-    .notNull()
-    .default("pending"),
+  status: text("status").$type<"pending" | "completed">().notNull().default("pending"),
   signerName: text("signer_name"),
   signerEmail: text("signer_email"),
   signerRole: text("signer_role"),
   signerIp: text("signer_ip"),
   signerUserAgent: text("signer_user_agent"),
-  completedAt: integer("completed_at", { mode: "timestamp" }),
-  deletedAt: integer("deleted_at", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" })
+  completedAt: timestamp("completed_at", { withTimezone: false }),
+  deletedAt: timestamp("deleted_at", { withTimezone: false }),
+  createdAt: timestamp("created_at", { withTimezone: false })
     .notNull()
-    .default(new Date()),
+    .defaultNow(),
 });
 
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
@@ -80,7 +86,7 @@ export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   signatures: many(signatures),
 }));
 
-export const signatures = sqliteTable("signatures", {
+export const signatures = pgTable("signatures", {
   id: text("id").primaryKey(),
   sessionId: text("session_id")
     .notNull()
@@ -102,31 +108,39 @@ export const signaturesRelations = relations(signatures, ({ one }) => ({
   }),
 }));
 
-export const signingPackets = sqliteTable("signing_packets", {
+export const signingPackets = pgTable("signing_packets", {
   id: text("id").primaryKey(),
   documentId: text("document_id")
     .notNull()
     .references(() => documents.id, { onDelete: "cascade" }),
-  mode: text("mode").notNull(),
+  mode: text("mode")
+    .$type<"collaborative" | "individual" | "shared-base">()
+    .notNull(),
   roleConfigs: text("role_configs").notNull(),
-  status: text("status").notNull().default("active"),
-  finalizedFileUrl: text("finalized_file_url"),
-  completedAt: integer("completed_at", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" })
+  status: text("status")
+    .$type<"active" | "completed">()
     .notNull()
-    .default(new Date()),
+    .default("active"),
+  finalizedFileUrl: text("finalized_file_url"),
+  completedAt: timestamp("completed_at", { withTimezone: false }),
+  createdAt: timestamp("created_at", { withTimezone: false })
+    .notNull()
+    .defaultNow(),
 });
 
-export const signingPacketsRelations = relations(signingPackets, ({ one, many }) => ({
-  document: one(documents, {
-    fields: [signingPackets.documentId],
-    references: [documents.id],
+export const signingPacketsRelations = relations(
+  signingPackets,
+  ({ one, many }) => ({
+    document: one(documents, {
+      fields: [signingPackets.documentId],
+      references: [documents.id],
+    }),
+    copies: many(signingPacketCopies),
+    values: many(signingPacketValues),
   }),
-  copies: many(signingPacketCopies),
-  values: many(signingPacketValues),
-}));
+);
 
-export const signingPacketCopies = sqliteTable("signing_packet_copies", {
+export const signingPacketCopies = pgTable("signing_packet_copies", {
   id: text("id").primaryKey(),
   packetId: text("packet_id")
     .notNull()
@@ -134,12 +148,12 @@ export const signingPacketCopies = sqliteTable("signing_packet_copies", {
   roleName: text("role_name").notNull(),
   signerName: text("signer_name"),
   signerEmail: text("signer_email"),
-  status: text("status").notNull().default("pending"),
+  status: text("status").$type<"pending" | "completed">().notNull().default("pending"),
   finalizedFileUrl: text("finalized_file_url"),
-  completedAt: integer("completed_at", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" })
+  completedAt: timestamp("completed_at", { withTimezone: false }),
+  createdAt: timestamp("created_at", { withTimezone: false })
     .notNull()
-    .default(new Date()),
+    .defaultNow(),
 });
 
 export const signingPacketCopiesRelations = relations(
@@ -153,7 +167,7 @@ export const signingPacketCopiesRelations = relations(
   }),
 );
 
-export const signingPacketValues = sqliteTable("signing_packet_values", {
+export const signingPacketValues = pgTable("signing_packet_values", {
   id: text("id").primaryKey(),
   packetId: text("packet_id")
     .notNull()
@@ -168,13 +182,13 @@ export const signingPacketValues = sqliteTable("signing_packet_values", {
   value: text("value").notNull(),
   signerName: text("signer_name"),
   signerEmail: text("signer_email"),
-  completedAt: integer("completed_at", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" })
+  completedAt: timestamp("completed_at", { withTimezone: false }),
+  createdAt: timestamp("created_at", { withTimezone: false })
     .notNull()
-    .default(new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: false })
     .notNull()
-    .default(new Date()),
+    .defaultNow(),
 });
 
 export const signingPacketValuesRelations = relations(
@@ -195,23 +209,23 @@ export const signingPacketValuesRelations = relations(
   }),
 );
 
-export const authUser = sqliteTable("user", {
+export const authUser = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
+  emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
   lastWorkspaceId: text("last_workspace_id"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: false }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: false }).notNull(),
 });
 
-export const authSession = sqliteTable("session", {
+export const authSession = pgTable("session", {
   id: text("id").primaryKey(),
-  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: false }).notNull(),
   token: text("token").notNull().unique(),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: false }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: false }).notNull(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   userId: text("user_id")
@@ -220,7 +234,7 @@ export const authSession = sqliteTable("session", {
   activeOrganizationId: text("active_organization_id"),
 });
 
-export const authAccount = sqliteTable("account", {
+export const authAccount = pgTable("account", {
   id: text("id").primaryKey(),
   accountId: text("account_id").notNull(),
   providerId: text("provider_id").notNull(),
@@ -230,33 +244,37 @@ export const authAccount = sqliteTable("account", {
   accessToken: text("access_token"),
   refreshToken: text("refresh_token"),
   idToken: text("id_token"),
-  accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp" }),
-  refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp" }),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", {
+    withTimezone: false,
+  }),
+  refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
+    withTimezone: false,
+  }),
   scope: text("scope"),
   password: text("password"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: false }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: false }).notNull(),
 });
 
-export const authVerification = sqliteTable("verification", {
+export const authVerification = pgTable("verification", {
   id: text("id").primaryKey(),
   identifier: text("identifier").notNull(),
   value: text("value").notNull(),
-  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }),
-  updatedAt: integer("updated_at", { mode: "timestamp" }),
+  expiresAt: timestamp("expires_at", { withTimezone: false }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: false }),
+  updatedAt: timestamp("updated_at", { withTimezone: false }),
 });
 
-export const authOrganization = sqliteTable("organization", {
+export const authOrganization = pgTable("organization", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   logo: text("logo"),
   metadata: text("metadata"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: false }).notNull(),
 });
 
-export const authMember = sqliteTable("member", {
+export const authMember = pgTable("member", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
@@ -265,10 +283,10 @@ export const authMember = sqliteTable("member", {
     .notNull()
     .references(() => authUser.id, { onDelete: "cascade" }),
   role: text("role").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: false }).notNull(),
 });
 
-export const authInvitation = sqliteTable("invitation", {
+export const authInvitation = pgTable("invitation", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
@@ -276,9 +294,9 @@ export const authInvitation = sqliteTable("invitation", {
   email: text("email").notNull(),
   role: text("role").notNull(),
   status: text("status").notNull(),
-  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: false }).notNull(),
   inviterId: text("inviter_id")
     .notNull()
     .references(() => authUser.id, { onDelete: "cascade" }),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: false }).notNull(),
 });

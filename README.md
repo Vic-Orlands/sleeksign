@@ -106,19 +106,54 @@ After assignment:
 - Next.js 16
 - React 19
 - Drizzle ORM
-- SQLite
+- Neon Postgres
 - Tailwind CSS
 - pdf-lib
 - opentype.js
 - react-rnd
+- Resend
 
 ## Getting Started
 
 1. `npm install`
-2. `npx drizzle-kit push`
-3. `npm run dev`
-4. Open `/`
-5. Open the dashboard from the homepage or go directly to `/hr/documents`
+2. Copy `.env.example` to `.env.local`
+3. Set `DATABASE_URL` to your Neon connection string
+4. Run `npx drizzle-kit generate`
+5. Run your Neon migration command or apply the generated SQL
+6. `npm run dev`
+7. Open `/`
+8. Open the dashboard from the homepage or go directly to `/hr/documents`
+
+## Environment Variables
+
+- `DATABASE_URL`: Neon Postgres connection string
+- `BETTER_AUTH_SECRET`: Better Auth application secret
+- `BETTER_AUTH_URL`: canonical app URL for auth links
+- `NEXT_PUBLIC_BETTER_AUTH_URL`: public auth base URL
+- `GOOGLE_CLIENT_ID`: Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET`: Google OAuth client secret
+- `RESEND_API_KEY`: Resend API key
+- `RESEND_FROM_EMAIL`: verified sender email for app mail
+
+## Email System
+
+SleekSign now sends auth and workspace emails through one shared app-level HTML template.
+
+- Password reset emails and workspace invitations use the same branded shell
+- Only the message content changes per use case
+- Email rendering lives in `src/lib/email/`
+- Resend delivery is handled in-app without any external template configuration
+
+## Production Database Migration
+
+The codebase now targets Neon Postgres. Legacy SQLite migrations are archived under `drizzle/sqlite-legacy/`.
+
+To move your existing local data into Neon:
+
+1. Configure `DATABASE_URL`
+2. Apply the Postgres schema from `drizzle/`
+3. Run `node scripts/migrate-sqlite-to-neon.mjs`
+4. Start the app and verify auth, documents, invitations, and packet flows
 
 ## Notes
 

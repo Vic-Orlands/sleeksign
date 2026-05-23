@@ -103,7 +103,7 @@ const packetModels: PacketModel[] = [
       edge("collab-hr", "collab-doc", "fills HR fields"),
       edge("collab-employee", "collab-doc", "fills employee fields"),
       edge("collab-witness", "collab-doc", "fills witness fields"),
-      edge("collab-doc", "collab-final"),
+      edge("collab-doc", "collab-final", "single final artifact"),
     ],
   },
   {
@@ -285,7 +285,7 @@ export function PacketModelShowcase() {
     <>
       <div className="flex text-center justify-center w-full">
         <div>
-          <p className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground font-medium mb-2">
+          <p className="text-[9px] uppercase tracking-[0.2em] text-orange-500/70 font-medium mb-2">
             Relationship graph
           </p>
           <h3 className="text-[18px] font-light text-foreground tracking-tight">

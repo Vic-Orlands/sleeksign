@@ -1,10 +1,13 @@
-import type { Config } from 'drizzle-kit';
+import "dotenv/config";
+import type { Config } from "drizzle-kit";
 
 export default {
-  schema: './src/db/schema.ts',
-  out: './drizzle',
-  dialect: 'sqlite',
+  schema: "./src/db/schema.ts",
+  out: "./drizzle",
+  dialect: "postgresql",
   dbCredentials: {
-    url: 'sqlite.db',
+    url:
+      process.env.DATABASE_URL ||
+      "postgresql://postgres:postgres@127.0.0.1:5432/sleeksign",
   },
 } satisfies Config;
