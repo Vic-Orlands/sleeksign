@@ -435,7 +435,7 @@ function HrSidebar({
             className="flex min-w-0 items-center gap-2 text-left"
             onClick={() => onNavigate("/hr/documents")}
           >
-            <span className="truncate text-xl ruthie-regular transition-opacity duration-200">
+            <span className="truncate text-xl font-cursive transition-opacity duration-200">
               SleekSign
             </span>
           </button>
