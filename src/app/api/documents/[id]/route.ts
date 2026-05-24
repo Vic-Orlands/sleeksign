@@ -11,6 +11,7 @@ import {
   serializeSignerRoles,
 } from "@/lib/field-utils";
 import { serializeDocumentActivity } from "@/lib/dashboard-activity";
+import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
 
 function serializeDocumentRecord(doc: Record<string, unknown>) {
   const roleConfigs = parseRoleConfigs(doc.roleConfigs as string | null | undefined);
@@ -82,7 +83,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    await requireDocumentAccess(req.headers, id, "manage");
+    const access = await requireDocumentAccess(req.headers, id, "manage");
     const { type, page, x, y, width, height, required, assigneeRole } =
       await req.json();
     const fieldId = nanoid();
@@ -98,6 +99,19 @@ export async function POST(
       height,
       required: required ?? true,
       assigneeRole: typeof assigneeRole === "string" ? assigneeRole : "",
+    });
+
+    await emitAuditEvent({
+      organizationId: access.workspaceId,
+      teamId: access.document.teamId,
+      workspaceId: access.workspaceId,
+      documentId: id,
+      actorType: "user",
+      actorId: access.membership.userId,
+      eventType: "field.created",
+      chainKey: `document:${id}`,
+      payload: { fieldId, type, page, assigneeRole: assigneeRole || "" },
+      ...getRequestAuditContext(req.headers),
     });
 
     return NextResponse.json({ id: fieldId });
@@ -119,11 +133,23 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    await requireDocumentAccess(req.headers, id, "manage");
+    const access = await requireDocumentAccess(req.headers, id, "manage");
     const body = await req.json().catch(() => ({}));
 
     if (body.fieldId) {
       await db.delete(fields).where(eq(fields.id, body.fieldId));
+      await emitAuditEvent({
+        organizationId: access.workspaceId,
+        teamId: access.document.teamId,
+        workspaceId: access.workspaceId,
+        documentId: id,
+        actorType: "user",
+        actorId: access.membership.userId,
+        eventType: "field.deleted",
+        chainKey: `document:${id}`,
+        payload: { fieldId: body.fieldId },
+        ...getRequestAuditContext(req.headers),
+      });
       return NextResponse.json({ success: true });
     }
 
@@ -134,6 +160,19 @@ export async function DELETE(
         archivedAt: null,
       })
       .where(eq(documents.id, id));
+
+    await emitAuditEvent({
+      organizationId: access.workspaceId,
+      teamId: access.document.teamId,
+      workspaceId: access.workspaceId,
+      documentId: id,
+      actorType: "user",
+      actorId: access.membership.userId,
+      eventType: "document.deleted",
+      chainKey: `document:${id}`,
+      payload: { deletedAt: new Date().toISOString() },
+      ...getRequestAuditContext(req.headers),
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -157,12 +196,15 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
-    await requireDocumentAccess(req.headers, id, "manage");
-    const { name, signerRoles, roleConfigs } = await req.json();
+    const access = await requireDocumentAccess(req.headers, id, "manage");
+    const { name, signerRoles, roleConfigs, teamId, requireOtp } = await req.json();
     const updateData: {
       name?: string;
       signerRoles?: string;
       roleConfigs?: string;
+      teamId?: string | null;
+      requireOtp?: boolean;
+      updatedAt?: Date;
     } = {};
 
     if (typeof name === "string" && name.trim()) {
@@ -180,7 +222,35 @@ export async function PUT(
       updateData.signerRoles = serializeSignerRoles(signerRoles);
     }
 
+    if (typeof teamId === "string" || teamId === null) {
+      updateData.teamId = teamId;
+    }
+
+    if (typeof requireOtp === "boolean") {
+      updateData.requireOtp = requireOtp;
+    }
+
+    updateData.updatedAt = new Date();
+
     await db.update(documents).set(updateData).where(eq(documents.id, id));
+    await emitAuditEvent({
+      organizationId: access.workspaceId,
+      teamId: updateData.teamId ?? access.document.teamId,
+      workspaceId: access.workspaceId,
+      documentId: id,
+      actorType: "user",
+      actorId: access.membership.userId,
+      eventType: "document.updated",
+      chainKey: `document:${id}`,
+      payload: {
+        name: updateData.name,
+        signerRoles,
+        roleConfigs,
+        teamId: updateData.teamId,
+        requireOtp: updateData.requireOtp,
+      },
+      ...getRequestAuditContext(req.headers),
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     if (error instanceof AccessError) {
@@ -223,28 +293,60 @@ export async function PATCH(
         );
       }
 
-      await requireDocumentAccess(req.headers, documentId, "manage");
-      await db
-        .update(fields)
-        .set({
+        const access = await requireDocumentAccess(req.headers, documentId, "manage");
+        await db
+          .update(fields)
+          .set({
           x,
           y,
           width,
           height,
           required,
           assigneeRole: typeof assigneeRole === "string" ? assigneeRole : "",
-        })
-        .where(eq(fields.id, fieldId));
-      return NextResponse.json({ success: true });
-    }
+          })
+          .where(eq(fields.id, fieldId));
+        await emitAuditEvent({
+          organizationId: access.workspaceId,
+          teamId: access.document.teamId,
+          workspaceId: access.workspaceId,
+          documentId,
+          actorType: "user",
+          actorId: access.membership.userId,
+          eventType: "field.updated",
+          chainKey: `document:${documentId}`,
+          payload: {
+            fieldId,
+            x,
+            y,
+            width,
+            height,
+            required,
+            assigneeRole: assigneeRole || "",
+          },
+          ...getRequestAuditContext(req.headers),
+        });
+        return NextResponse.json({ success: true });
+      }
 
-    await requireDocumentAccess(req.headers, id, "manage");
+    const access = await requireDocumentAccess(req.headers, id, "manage");
 
     if (body.action === "archive") {
       await db
         .update(documents)
         .set({ archivedAt: new Date(), deletedAt: null })
         .where(eq(documents.id, id));
+      await emitAuditEvent({
+        organizationId: access.workspaceId,
+        teamId: access.document.teamId,
+        workspaceId: access.workspaceId,
+        documentId: id,
+        actorType: "user",
+        actorId: access.membership.userId,
+        eventType: "document.archived",
+        chainKey: `document:${id}`,
+        payload: {},
+        ...getRequestAuditContext(req.headers),
+      });
       return NextResponse.json({ success: true });
     }
 
@@ -253,6 +355,18 @@ export async function PATCH(
         .update(documents)
         .set({ archivedAt: null, deletedAt: null })
         .where(eq(documents.id, id));
+      await emitAuditEvent({
+        organizationId: access.workspaceId,
+        teamId: access.document.teamId,
+        workspaceId: access.workspaceId,
+        documentId: id,
+        actorType: "user",
+        actorId: access.membership.userId,
+        eventType: "document.restored",
+        chainKey: `document:${id}`,
+        payload: {},
+        ...getRequestAuditContext(req.headers),
+      });
       return NextResponse.json({ success: true });
     }
 

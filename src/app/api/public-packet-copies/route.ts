@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createPacketCopy, getPacket } from "@/lib/signing-workflows";
 import { getStorageScopeForRole } from "@/lib/signing-workflows";
+import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,6 +37,26 @@ export async function POST(req: NextRequest) {
       roleName,
       signerName,
       signerEmail,
+      teamId: packet.teamId,
+    });
+
+    await emitAuditEvent({
+      organizationId: packet.workspaceId,
+      teamId: packet.teamId,
+      workspaceId: packet.workspaceId,
+      documentId: packet.document.id,
+      packetId: packet.id,
+      packetCopyId: copyId,
+      actorType: "signer",
+      actorEmail: signerEmail || null,
+      eventType: "packet-copy.created",
+      chainKey: `packet-copy:${copyId}`,
+      payload: {
+        roleName,
+        signerName: signerName || null,
+        signerEmail: signerEmail || null,
+      },
+      ...getRequestAuditContext(req.headers),
     });
 
     return NextResponse.json({ copyId, shared: false });

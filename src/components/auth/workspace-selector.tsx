@@ -133,24 +133,20 @@ function WorkspaceSelector({ nextPath }: WorkspaceSelectorProps) {
 
           <div className="space-y-3 px-5 py-4">
             {workspaces.length === 0 ? (
-              <div className="space-y-3 border border-dashed border-border bg-background p-4">
-                <div className="flex items-start gap-3">
-                  <span className="mt-0.5 flex size-8 items-center justify-center border border-border bg-muted">
-                    <Building2Icon className="size-4" />
-                  </span>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-foreground">
-                      No workspaces yet
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Your account signed in successfully. Continue to your
-                      dashboard and create a workspace from the account menu.
-                    </p>
-                  </div>
+              <div className="border border-dashed border-border bg-background p-4">
+                <div className="flex items-center gap-1 mb-2">
+                  <Building2Icon className="size-4" />
+                  <p className="text-sm font-medium text-foreground">
+                    No workspaces yet
+                  </p>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Your account signed in successfully. Continue to your
+                  dashboard and create a workspace from the account menu.
+                </p>
 
                 <Button
-                  className="w-full gap-2"
+                  className="w-full gap-2 mt-3"
                   onClick={continueWithoutWorkspace}
                   disabled={isContinuingWithoutWorkspace}
                 >

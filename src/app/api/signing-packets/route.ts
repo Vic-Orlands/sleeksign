@@ -11,6 +11,7 @@ import {
   type WorkflowMode,
 } from "@/lib/field-utils";
 import { desc, eq } from "drizzle-orm";
+import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
   try {
@@ -76,13 +77,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await requireDocumentAccess(req.headers, documentId, "manage");
+    const access = await requireDocumentAccess(req.headers, documentId, "manage");
 
     const packetId = await createSigningPacket(
       documentId,
       mode,
       parseRoleConfigs(JSON.stringify(roleConfigs || DEFAULT_ROLE_CONFIGS)),
+      {
+        workspaceId: access.workspaceId,
+        teamId: access.document.teamId,
+        requireOtp: access.document.requireOtp,
+      },
     );
+
+    await emitAuditEvent({
+      organizationId: access.workspaceId,
+      teamId: access.document.teamId,
+      workspaceId: access.workspaceId,
+      documentId,
+      packetId,
+      actorType: "user",
+      actorId: access.membership.userId,
+      eventType: "packet.created",
+      chainKey: `packet:${packetId}`,
+      payload: {
+        mode,
+        roleConfigs,
+        requireOtp: access.document.requireOtp,
+      },
+      ...getRequestAuditContext(req.headers),
+    });
 
     return NextResponse.json({ packetId });
   } catch (error) {

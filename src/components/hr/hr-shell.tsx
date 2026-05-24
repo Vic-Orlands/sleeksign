@@ -145,7 +145,7 @@ type HrShellProps = {
     documentName?: string;
     detail?: string;
   };
-  activeView?: "documents" | "shared" | "signers" | "signed";
+  activeView?: "documents" | "shared" | "signers" | "signed" | "admin";
   headerMode?: "documents" | "minimal" | "none";
   onSharedActivityClick?: () => void;
   onSignersClick?: () => void;
@@ -385,7 +385,7 @@ function HrSidebar({
   onNavigate,
 }: {
   pathname: string;
-  activeView?: "documents" | "shared" | "signers" | "signed";
+  activeView?: "documents" | "shared" | "signers" | "signed" | "admin";
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   pendingCount: number;
@@ -402,6 +402,7 @@ function HrSidebar({
   const isShared = activeView === "shared";
   const isSigners = activeView === "signers";
   const isSigned = activeView === "signed" || pathname.startsWith("/hr/signed");
+  const isAdmin = activeView === "admin" || pathname.startsWith("/hr/admin");
 
   function showSharedActivity() {
     onSharedActivityClick();
@@ -479,6 +480,13 @@ function HrSidebar({
           >
             <CheckCircle2Icon />
             <span className={cn(collapsed && "sr-only")}>Signed Docs</span>
+          </SidebarMenuButton>
+          <SidebarMenuButton
+            active={isAdmin}
+            onClick={() => onNavigate("/hr/admin")}
+          >
+            <SettingsIcon />
+            <span className={cn(collapsed && "sr-only")}>Enterprise</span>
           </SidebarMenuButton>
         </SidebarGroup>
         <div

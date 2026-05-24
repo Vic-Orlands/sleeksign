@@ -43,14 +43,23 @@ async function createSigningPacket(
   documentId: string,
   mode: WorkflowMode,
   roleConfigs: RoleConfig[],
+  options?: {
+    workspaceId?: string;
+    teamId?: string | null;
+    requireOtp?: boolean;
+  },
 ) {
   const packetId = nanoid();
 
   await db.insert(signingPackets).values({
     id: packetId,
     documentId,
+    workspaceId: options?.workspaceId || "",
+    teamId: options?.teamId || null,
     mode,
     roleConfigs: JSON.stringify(roleConfigs),
+    requireOtp: options?.requireOtp ?? false,
+    verificationMode: options?.requireOtp ? "email-otp" : "none",
   });
 
   return packetId;
@@ -61,15 +70,21 @@ async function createPacketCopy(input: {
   roleName: string;
   signerName?: string;
   signerEmail?: string;
+  teamId?: string | null;
+  bulkSendJobId?: string | null;
+  bulkSendRowId?: string | null;
 }) {
   const copyId = nanoid();
 
   await db.insert(signingPacketCopies).values({
     id: copyId,
     packetId: input.packetId,
+    teamId: input.teamId || null,
     roleName: input.roleName,
     signerName: input.signerName || null,
     signerEmail: input.signerEmail || null,
+    bulkSendJobId: input.bulkSendJobId || null,
+    bulkSendRowId: input.bulkSendRowId || null,
   });
 
   return copyId;

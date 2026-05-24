@@ -1,13 +1,26 @@
-import { and, eq } from "drizzle-orm";
+import { eq, inArray, isNull, or } from "drizzle-orm";
 import { headers as nextHeaders } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { authMember, documents, sessions } from "@/db/schema";
+import {
+  documents,
+  sessions,
+  signingPackets,
+  type authMember,
+} from "@/db/schema";
+import {
+  type AppPermission,
+  hasAppPermission,
+  hasWorkspaceManageRole,
+  hasWorkspaceOwnerRole,
+  resolveWorkspaceAccess,
+  type ResolvedAccess,
+} from "@/lib/enterprise-access";
 
 type AuthSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
-type WorkspacePermission = "read" | "manage" | "owner";
+type WorkspacePermission = "read" | "manage" | "owner" | AppPermission;
 
 class AccessError extends Error {
   status: number;
@@ -18,29 +31,39 @@ class AccessError extends Error {
   }
 }
 
-function hasManageRole(role?: string | null) {
-  return Boolean(
-    role
-      ?.split(",")
-      .map((value) => value.trim())
-      .some((value) => value === "owner" || value === "admin"),
-  );
+function mapPermission(permission: WorkspacePermission): AppPermission | null {
+  if (permission === "read") return "documents:view";
+  if (permission === "manage") return "documents:manage";
+  if (permission === "owner") return null;
+  return permission;
 }
 
-function hasOwnerRole(role?: string | null) {
-  return Boolean(
-    role
-      ?.split(",")
-      .map((value) => value.trim())
-      .some((value) => value === "owner"),
-  );
-}
+function assertPermission(
+  access: Pick<ResolvedAccess, "membership" | "permissions">,
+  permission: WorkspacePermission,
+) {
+  if (permission === "owner") {
+    if (hasWorkspaceOwnerRole(access.membership.role)) return;
+    throw new AccessError("Forbidden", 403);
+  }
 
-function assertPermission(role: string | null, permission: WorkspacePermission) {
-  if (permission === "read") return;
-  if (permission === "manage" && hasManageRole(role)) return;
-  if (permission === "owner" && hasOwnerRole(role)) return;
+  const mappedPermission = mapPermission(permission);
+  if (!mappedPermission || hasAppPermission(access, mappedPermission)) return;
   throw new AccessError("Forbidden", 403);
+}
+
+function buildTeamScopeCondition(
+  teamId: string | null | undefined,
+  access: ResolvedAccess,
+  viewAllPermission: AppPermission,
+) {
+  if (!teamId) return undefined;
+  if (hasAppPermission(access, viewAllPermission)) return undefined;
+  if (access.teamIds.length === 0) {
+    throw new AccessError("Forbidden", 403);
+  }
+
+  return or(inArray((teamId as never), access.teamIds), isNull((teamId as never)));
 }
 
 async function getSessionFromHeaders(input: HeadersInit) {
@@ -51,15 +74,6 @@ async function requireSessionFromHeaders(input: HeadersInit): Promise<AuthSessio
   const session = await getSessionFromHeaders(input);
   if (!session) throw new AccessError("Unauthorized", 401);
   return session;
-}
-
-async function findMembership(userId: string, workspaceId: string) {
-  return db.query.authMember.findFirst({
-    where: and(
-      eq(authMember.userId, userId),
-      eq(authMember.organizationId, workspaceId),
-    ),
-  });
 }
 
 async function requireWorkspaceAccess(
@@ -75,14 +89,22 @@ async function requireWorkspaceAccess(
     throw new AccessError("No active workspace", 400);
   }
 
-  const membership = await findMembership(session.user.id, workspaceId);
-  if (!membership) {
+  const resolved = await resolveWorkspaceAccess(session.user.id, workspaceId);
+  if (!resolved) {
     throw new AccessError("Forbidden", 403);
   }
 
-  assertPermission(membership.role, permission);
+  assertPermission(resolved, permission);
 
-  return { session, workspaceId, membership };
+  return {
+    session,
+    workspaceId,
+    membership: resolved.membership,
+    teamIds: resolved.teamIds,
+    permissions: resolved.permissions,
+    defaultTeamId: resolved.defaultTeamId,
+    workspace: resolved.workspace,
+  };
 }
 
 async function requireDocumentAccess(
@@ -103,6 +125,14 @@ async function requireDocumentAccess(
     document.workspaceId,
     permission,
   );
+
+  if (
+    document.teamId &&
+    !hasAppPermission(access, "documents:view_all") &&
+    !access.teamIds.includes(document.teamId)
+  ) {
+    throw new AccessError("Forbidden", 403);
+  }
 
   return { ...access, document };
 }
@@ -129,7 +159,48 @@ async function requireSigningSessionAccess(
     permission,
   );
 
+  if (
+    signingSession.document.teamId &&
+    !hasAppPermission(access, "signers:view_all") &&
+    !access.teamIds.includes(signingSession.document.teamId)
+  ) {
+    throw new AccessError("Forbidden", 403);
+  }
+
   return { ...access, signingSession };
+}
+
+async function requirePacketAccess(
+  input: HeadersInit,
+  packetId: string,
+  permission: WorkspacePermission = "read",
+) {
+  const packet = await db.query.signingPackets.findFirst({
+    where: eq(signingPackets.id, packetId),
+    with: {
+      document: true,
+    },
+  });
+
+  if (!packet?.document) {
+    throw new AccessError("Packet not found", 404);
+  }
+
+  const access = await requireWorkspaceAccess(
+    input,
+    packet.workspaceId,
+    permission === "read" ? "documents:view" : permission,
+  );
+
+  if (
+    packet.teamId &&
+    !hasAppPermission(access, "packets:view_all") &&
+    !access.teamIds.includes(packet.teamId)
+  ) {
+    throw new AccessError("Forbidden", 403);
+  }
+
+  return { ...access, packet };
 }
 
 async function requireHrSession() {
@@ -141,14 +212,21 @@ async function requireHrSession() {
   return session;
 }
 
+function canManageWorkspaceMembers(member: typeof authMember.$inferSelect | null) {
+  return hasWorkspaceManageRole(member?.role);
+}
+
 export {
   AccessError,
   assertPermission,
+  buildTeamScopeCondition,
+  canManageWorkspaceMembers,
   getSessionFromHeaders,
-  hasManageRole,
-  hasOwnerRole,
+  hasWorkspaceManageRole as hasManageRole,
+  hasWorkspaceOwnerRole as hasOwnerRole,
   requireDocumentAccess,
   requireHrSession,
+  requirePacketAccess,
   requireSessionFromHeaders,
   requireSigningSessionAccess,
   requireWorkspaceAccess,
