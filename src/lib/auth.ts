@@ -13,6 +13,7 @@ import {
   authUser,
   authVerification,
 } from "@/db/schema";
+import { getOrganizationBranding, getWorkspaceBaseUrl } from "@/lib/branding";
 import { buildInvitationEmail, buildResetPasswordEmail } from "@/lib/email/messages";
 import { sendTransactionalEmail } from "@/lib/email/send-email";
 
@@ -48,9 +49,15 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 6,
     sendResetPassword: async ({ user, url }) => {
+      const lastWorkspaceId = (user as { lastWorkspaceId?: string | null })
+        .lastWorkspaceId;
+      const branding = lastWorkspaceId
+        ? await getOrganizationBranding(lastWorkspaceId).catch(() => undefined)
+        : undefined;
       const message = buildResetPasswordEmail({
         url,
         userName: user.name,
+        branding,
       });
 
       await sendTransactionalEmail({
@@ -58,6 +65,7 @@ export const auth = betterAuth({
         subject: message.subject,
         html: message.html,
         text: message.text,
+        fromName: branding?.senderName,
       });
     },
   },
@@ -85,15 +93,31 @@ export const auth = betterAuth({
   plugins: [
     organization({
       sendInvitationEmail: async ({ id, email, organization, inviter }) => {
+        const branding = await getOrganizationBranding(organization.id).catch(
+          () => undefined,
+        );
         const url = new URL(
           `/accept-invitation/${id}`,
-          getBaseUrl(),
+          getWorkspaceBaseUrl(branding || {
+            logoUrl: null,
+            primaryColor: "#18181b",
+            secondaryColor: "#f97316",
+            neutralColor: "#f7f5f1",
+            accentColor: "#ea580c",
+            bodyFont: "Roboto",
+            signatureFont: "Ruthie",
+            senderName: organization.name,
+            supportEmail: null,
+            supportLabel: "Support",
+            domain: null,
+          }, getBaseUrl()),
         ).toString();
 
         const message = buildInvitationEmail({
           inviteUrl: url,
           organizationName: organization.name,
           inviterName: inviter.user.name,
+          branding,
         });
 
         await sendTransactionalEmail({
@@ -101,6 +125,7 @@ export const auth = betterAuth({
           subject: message.subject,
           html: message.html,
           text: message.text,
+          fromName: branding?.senderName || organization.name,
         });
       },
     }),

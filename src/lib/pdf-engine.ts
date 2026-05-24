@@ -1,6 +1,7 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { db } from "@/db";
 import {
+  auditLogs,
   documents,
   fields,
   signatures,
@@ -8,16 +9,68 @@ import {
   signingPacketValues,
   sessions,
 } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import fs from "fs/promises";
 import path from "path";
 import { format } from "date-fns";
+import crypto from "crypto";
 import {
   areRoleFieldsComplete,
   getMergedValuesForSigner,
   getPacket,
 } from "@/lib/signing-workflows";
 import { decodeSignatureVector } from "@/lib/field-utils";
+import { parseAuditPayload } from "@/lib/audit";
+
+type EvidenceSnapshot = {
+  certificateId: string;
+  evidenceHash: string;
+  eventCount: number;
+  timeline: Array<{
+    eventType: string;
+    actorEmail: string | null;
+    createdAt: string;
+    ipAddress: string | null;
+  }>;
+};
+
+function createEvidenceHash(value: unknown) {
+  return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+async function buildEvidenceSnapshot(chainKey: string) {
+  const logs = await db.query.auditLogs.findMany({
+    where: eq(auditLogs.chainKey, chainKey),
+    orderBy: [asc(auditLogs.createdAt)],
+  });
+
+  const timeline = logs.map((log) => ({
+    eventType: log.eventType,
+    actorEmail: log.actorEmail || null,
+    createdAt: log.createdAt.toISOString(),
+    ipAddress: log.ipAddress || null,
+    payload: parseAuditPayload(log.payload),
+  }));
+
+  const certificateId = `cert_${chainKey.replace(/[^a-zA-Z0-9]+/g, "_")}`;
+  const evidenceHash = createEvidenceHash({
+    chainKey,
+    eventHashes: logs.map((log) => log.eventHash),
+    timeline,
+  });
+
+  return {
+    certificateId,
+    evidenceHash,
+    eventCount: logs.length,
+    timeline: timeline.map((entry) => ({
+      eventType: entry.eventType,
+      actorEmail: entry.actorEmail,
+      createdAt: entry.createdAt,
+      ipAddress: entry.ipAddress,
+    })),
+  } satisfies EvidenceSnapshot;
+}
 
 export async function finalizeDocument(sessionId: string) {
   const session = await db.query.sessions.findFirst({
@@ -50,6 +103,7 @@ export async function finalizeDocument(sessionId: string) {
     values: Object.fromEntries(
       sessionSignatures.map((signature) => [signature.fieldId, signature.value]),
     ),
+    evidenceSnapshot: await buildEvidenceSnapshot(`session:${session.id}`),
     certificateDetails: [
       { label: "Document Name", value: docData.name },
       { label: "Document ID", value: docData.id },
@@ -64,7 +118,20 @@ export async function finalizeDocument(sessionId: string) {
 
   await db
     .update(sessions)
-    .set({ status: "completed", completedAt: new Date() })
+    .set({
+      status: "completed",
+      completedAt: new Date(),
+      finalizedFileUrl: finalizedPath,
+      evidenceSnapshot: JSON.stringify(
+        await buildEvidenceSnapshot(`session:${session.id}`),
+      ),
+      certificateId: `cert_session_${session.id}`,
+      certificateHash: createEvidenceHash({
+        documentId: docData.id,
+        sessionId: session.id,
+        finalizedPath,
+      }),
+    })
     .where(eq(sessions.id, sessionId));
 
   return finalizedPath;
@@ -76,6 +143,7 @@ async function renderFinalizedDocument(input: {
   fields: Array<typeof fields.$inferSelect>;
   values: Record<string, string>;
   certificateDetails: Array<{ label: string; value: string }>;
+  evidenceSnapshot?: EvidenceSnapshot;
 }) {
   const pdfBytes = await fs.readFile(
     path.join(process.cwd(), "public", input.fileUrl),
@@ -221,6 +289,46 @@ async function renderFinalizedDocument(input: {
     currentY -= 25;
   });
 
+  if (input.evidenceSnapshot) {
+    certPage.drawText("Chain of custody", {
+      x: 50,
+      y: currentY - 10,
+      size: 12,
+      font: fontBold,
+    });
+
+    currentY -= 36;
+    certPage.drawText(`Certificate ID: ${input.evidenceSnapshot.certificateId}`, {
+      x: 50,
+      y: currentY,
+      size: 9,
+      font: fontRegular,
+    });
+    currentY -= 16;
+    certPage.drawText(`Evidence Hash: ${input.evidenceSnapshot.evidenceHash}`, {
+      x: 50,
+      y: currentY,
+      size: 8,
+      font: fontRegular,
+      maxWidth: 500,
+    });
+    currentY -= 20;
+
+    input.evidenceSnapshot.timeline.slice(0, 8).forEach((entry) => {
+      certPage.drawText(
+        `${entry.createdAt} • ${entry.eventType} • ${entry.actorEmail || "system"} • ${entry.ipAddress || "N/A"}`,
+        {
+          x: 50,
+          y: currentY,
+          size: 8,
+          font: fontRegular,
+          maxWidth: 500,
+        },
+      );
+      currentY -= 14;
+    });
+  }
+
   certPage.drawText(
     "This document was electronically signed via SleekSign. The signatures and metadata above provide a secure and verifiable audit trail of the agreement.",
     {
@@ -277,6 +385,7 @@ export async function finalizeSigningPacket(input: {
     fileNameSeed: `packet_${packet.id}`,
     fields: packet.document.fields,
     values: packetValues,
+    evidenceSnapshot: await buildEvidenceSnapshot(`packet:${packet.id}`),
     certificateDetails: [
       { label: "Document Name", value: packet.document.name },
       { label: "Document ID", value: packet.document.id },
@@ -333,6 +442,7 @@ export async function finalizeSigningPacketCopy(input: {
     fileNameSeed: `copy_${copy.id}`,
     fields: visibleFields,
     values,
+    evidenceSnapshot: await buildEvidenceSnapshot(`packet-copy:${copy.id}`),
     certificateDetails: [
       { label: "Document Name", value: packet.document.name },
       { label: "Document ID", value: packet.document.id },

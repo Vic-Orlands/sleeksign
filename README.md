@@ -1,6 +1,6 @@
 # SleekSign
 
-SleekSign is a self-hosted document-signing workspace for HR teams and internal operators. It combines a visual document setup editor, role-aware field assignment, signer identity capture, audit trails, and multiple packet-sharing models in one Next.js app.
+SleekSign is a self-hosted document-signing workspace for HR teams and internal operators. It combines a visual document setup editor, role-aware field assignment, signer identity capture, enterprise audit evidence, white-labeled signing flows, and multiple packet-sharing models in one Next.js app.
 
 ## Features
 
@@ -23,10 +23,18 @@ SleekSign is a self-hosted document-signing workspace for HR teams and internal 
   - PDF finalization
   - Certificate of completion pages
   - Signer metadata capture
+  - Append-only enterprise audit logs
+  - Evidence hashes and chain-of-custody snapshots
 - Workflow packets:
   - Collaborative packet
   - Individual copies
   - Shared-base plus recipient copies
+- Enterprise controls:
+  - Team isolation inside one workspace
+  - Granular permission-role assignments
+  - Email OTP before signer document access
+  - Workspace branding and custom signing domains
+  - Bulk send via CSV upload
 
 ## Workflow Models
 
@@ -101,6 +109,56 @@ After assignment:
 3. Create or reuse a packet for that model
 4. Copy role-specific links for the intended signers
 
+## Enterprise Controls
+
+### Audit Trail
+
+- Every important admin and signer action is recorded in `audit_logs`
+- Packet and packet-copy completions now carry evidence snapshots and certificate hashes
+- Completed PDFs include a certificate page with timeline, IP, email, and evidence metadata
+
+### Teams and Permissions
+
+- Workspaces now get a default `General` team plus enterprise roles on first access
+- Team membership controls which documents, packets, signers, audits, and bulk jobs are visible
+- Permission roles layer on top of Better Auth workspace roles for granular access like:
+  - `documents:manage`
+  - `templates:manage`
+  - `audit:view`
+  - `branding:manage`
+  - `billing:manage`
+
+### Signer Verification
+
+- Documents can require email OTP before the signer can view any page
+- OTP challenges are logged, rate-limited, and stored against the packet or recipient copy
+
+### White-Label Branding
+
+- Workspace admins can configure sender name, logo URL, support email, and brand colors
+- Recipient emails, OTP emails, and signing pages use one shared SleekSign HTML shell with workspace tokens injected
+- Custom domain records and verification tokens are managed from the enterprise admin surface
+
+### Bulk Send
+
+- Upload a CSV, map `name`, `email`, and `role` columns, preview recipients, then either:
+  - create a draft job
+  - create and send immediately
+- Bulk send jobs generate packet copies, deliver branded emails, and track per-row status
+
+## Admin Surfaces
+
+- `/hr/admin`
+  - team creation
+  - permission role assignment
+  - branding configuration
+  - custom domain verification
+- Document detail panel
+  - team assignment
+  - email OTP toggle
+  - bulk send upload
+  - audit history
+
 ## Tech Stack
 
 - Next.js 16
@@ -118,11 +176,14 @@ After assignment:
 1. `npm install`
 2. Copy `.env.example` to `.env.local`
 3. Set `DATABASE_URL` to your Neon connection string
-4. Run `npx drizzle-kit generate`
-5. Run your Neon migration command or apply the generated SQL
+4. Run `npx drizzle-kit generate` when the schema changes
+5. Apply migrations to Neon
+   - `npx drizzle-kit migrate`
+   - if you are recovering from a partially applied migration, apply the SQL manually and update `drizzle.__drizzle_migrations`
 6. `npm run dev`
 7. Open `/`
 8. Open the dashboard from the homepage or go directly to `/hr/documents`
+9. Open `/hr/admin` for branding, teams, and enterprise access management
 
 ## License
 

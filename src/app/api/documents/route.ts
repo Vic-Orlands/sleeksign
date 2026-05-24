@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { db } from "@/db";
@@ -6,6 +6,7 @@ import { documents } from "@/db/schema";
 import { AccessError, requireWorkspaceAccess } from "@/lib/server-access";
 import { deriveSignerRoles, parseRoleConfigs } from "@/lib/field-utils";
 import { serializeDocumentActivity } from "@/lib/dashboard-activity";
+import { hasAppPermission } from "@/lib/enterprise-access";
 
 export async function GET(req: Request) {
   try {
@@ -16,15 +17,21 @@ export async function GET(req: Request) {
       new URL(req.url).searchParams.get("includeArchived") === "true";
     const includeDeleted =
       new URL(req.url).searchParams.get("includeDeleted") === "true";
-    const { workspaceId } = await requireWorkspaceAccess(
+    const access = await requireWorkspaceAccess(
       req.headers,
       requestedWorkspaceId,
       "read",
     );
+    const { workspaceId } = access;
 
     const docs = await db.query.documents.findMany({
       where: and(
         eq(documents.workspaceId, workspaceId),
+        hasAppPermission(access, "documents:view_all")
+          ? undefined
+          : access.teamIds.length > 0
+            ? or(inArray(documents.teamId, access.teamIds), isNull(documents.teamId))
+            : isNull(documents.teamId),
         includeArchived ? undefined : isNull(documents.archivedAt),
         includeDeleted ? undefined : isNull(documents.deletedAt),
       ),

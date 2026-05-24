@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
 import { db } from "@/db";
-import { signingPacketCopies, signingPacketValues } from "@/db/schema";
+import { bulkSendJobs, bulkSendRows, signingPacketCopies, signingPacketValues } from "@/db/schema";
 import {
   areRoleFieldsComplete,
   completePacket,
@@ -14,6 +14,9 @@ import {
   upsertPacketValue,
 } from "@/lib/signing-workflows";
 import { finalizeSigningPacket, finalizeSigningPacketCopy } from "@/lib/pdf-engine";
+import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
+import { getOtpRecipientEmail, isOtpVerified } from "@/lib/signer-otp";
+import { getOrganizationBranding } from "@/lib/branding";
 
 export async function GET(
   req: NextRequest,
@@ -51,16 +54,82 @@ export async function GET(
           where: eq(signingPacketCopies.id, copyId),
         })
       : null;
+    const branding = await getOrganizationBranding(packet.workspaceId);
+
+    if (packet.requireOtp) {
+      const verified = await isOtpVerified({
+        packetId: packet.id,
+        copyId: copyId || null,
+        roleName,
+      });
+
+      if (!verified) {
+        return NextResponse.json(
+          {
+            error: "Verification required",
+            verificationRequired: true,
+            recipientEmail:
+              copy?.signerEmail ||
+              (await getOtpRecipientEmail({
+                packetId: packet.id,
+                copyId: copyId || null,
+              })),
+          },
+          { status: 403 },
+        );
+      }
+    }
+
+    await emitAuditEvent({
+      organizationId: packet.workspaceId,
+      teamId: packet.teamId,
+      workspaceId: packet.workspaceId,
+      documentId: packet.document.id,
+      packetId: packet.id,
+      packetCopyId: copyId || null,
+      actorType: "signer",
+      actorEmail: copy?.signerEmail || null,
+      eventType: "signer.viewed",
+      chainKey: copyId ? `packet-copy:${copyId}` : `packet:${packet.id}`,
+      payload: { roleName },
+      ...getRequestAuditContext(req.headers),
+    });
+
+    if (copyId) {
+      const row = await db.query.bulkSendRows.findFirst({
+        where: eq(bulkSendRows.packetCopyId, copyId),
+      });
+      if (row && row.status !== "signed" && row.status !== "viewed") {
+        await db
+          .update(bulkSendRows)
+          .set({ status: "viewed", updatedAt: new Date() })
+          .where(eq(bulkSendRows.id, row.id));
+      }
+      if (row) {
+        const viewCount = await db.query.bulkSendRows.findMany({
+          where: eq(bulkSendRows.jobId, row.jobId),
+        });
+        await db
+          .update(bulkSendJobs)
+          .set({
+            viewedCount: viewCount.filter((entry) => entry.status === "viewed" || entry.status === "signed").length,
+            updatedAt: new Date(),
+          })
+          .where(eq(bulkSendJobs.id, row.jobId));
+      }
+    }
 
     return NextResponse.json(
       {
         packetId: packet.id,
         mode: packet.mode,
         status: packet.status,
+        requireOtp: packet.requireOtp,
         roleName,
         copyId: copyId || null,
         signerName: copy?.signerName || null,
         signerEmail: copy?.signerEmail || null,
+        branding,
         document: packet.document,
         fields: visibleFields,
         values,
@@ -110,6 +179,19 @@ export async function PATCH(
     }
 
     const packet = await getPacket(id);
+    if (
+      packet.requireOtp &&
+      !(await isOtpVerified({
+        packetId: packet.id,
+        copyId: copyId || null,
+        roleName,
+      }))
+    ) {
+      return NextResponse.json(
+        { error: "Verification required" },
+        { status: 403 },
+      );
+    }
     const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
 
     await upsertPacketValue({
@@ -120,6 +202,24 @@ export async function PATCH(
       value,
       signerName,
       signerEmail,
+    });
+
+    await emitAuditEvent({
+      organizationId: packet.workspaceId,
+      teamId: packet.teamId,
+      workspaceId: packet.workspaceId,
+      documentId: packet.document.id,
+      packetId: packet.id,
+      packetCopyId: scope === "shared" ? null : copyId || null,
+      actorType: "signer",
+      actorEmail: signerEmail || null,
+      eventType: "field.completed",
+      chainKey:
+        scope === "shared"
+          ? `packet:${packet.id}`
+          : `packet-copy:${copyId || ""}`,
+      payload: { fieldId, roleName },
+      ...getRequestAuditContext(req.headers),
     });
 
     return NextResponse.json({ success: true });
@@ -158,6 +258,19 @@ export async function POST(
     }
 
     const packet = await getPacket(id);
+    if (
+      packet.requireOtp &&
+      !(await isOtpVerified({
+        packetId: packet.id,
+        copyId: copyId || null,
+        roleName,
+      }))
+    ) {
+      return NextResponse.json(
+        { error: "Verification required" },
+        { status: 403 },
+      );
+    }
     const visibleFields = getVisibleFieldsForSigner({
       fields: packet.document.fields,
       roleConfigs: packet.roleConfigs,
@@ -195,6 +308,19 @@ export async function POST(
 
       if (packetUrl) {
         await completePacket(packet.id, packetUrl);
+        await emitAuditEvent({
+          organizationId: packet.workspaceId,
+          teamId: packet.teamId,
+          workspaceId: packet.workspaceId,
+          documentId: packet.document.id,
+          packetId: packet.id,
+          actorType: "signer",
+          actorEmail: signerEmail || null,
+          eventType: "packet.finalized",
+          chainKey: `packet:${packet.id}`,
+          payload: { roleName, url: packetUrl },
+          ...getRequestAuditContext(req.headers),
+        });
         return NextResponse.json({ status: "completed", url: packetUrl });
       }
 
@@ -220,6 +346,44 @@ export async function POST(
     });
 
     await completePacketCopy(copyId, finalizedUrl);
+    const row = await db.query.bulkSendRows.findFirst({
+      where: eq(bulkSendRows.packetCopyId, copyId),
+    });
+    if (row) {
+      await db
+        .update(bulkSendRows)
+        .set({
+          status: "signed",
+          updatedAt: new Date(),
+        })
+        .where(eq(bulkSendRows.id, row.id));
+
+      const jobRows = await db.query.bulkSendRows.findMany({
+        where: eq(bulkSendRows.jobId, row.jobId),
+      });
+      await db
+        .update(bulkSendJobs)
+        .set({
+          signedCount: jobRows.filter((entry) => entry.status === "signed").length,
+          updatedAt: new Date(),
+        })
+        .where(eq(bulkSendJobs.id, row.jobId));
+    }
+
+    await emitAuditEvent({
+      organizationId: packet.workspaceId,
+      teamId: packet.teamId,
+      workspaceId: packet.workspaceId,
+      documentId: packet.document.id,
+      packetId: packet.id,
+      packetCopyId: copyId,
+      actorType: "signer",
+      actorEmail: signerEmail || null,
+      eventType: "packet-copy.finalized",
+      chainKey: `packet-copy:${copyId}`,
+      payload: { roleName, url: finalizedUrl },
+      ...getRequestAuditContext(req.headers),
+    });
 
     return NextResponse.json({ status: "completed", url: finalizedUrl });
   } catch (error) {

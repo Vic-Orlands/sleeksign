@@ -9,6 +9,7 @@ type SendTransactionalEmailInput = {
   subject: string;
   html: string;
   text: string;
+  fromName?: string;
 };
 
 export async function sendTransactionalEmail({
@@ -16,6 +17,7 @@ export async function sendTransactionalEmail({
   subject,
   html,
   text,
+  fromName,
 }: SendTransactionalEmailInput) {
   const from = process.env.RESEND_FROM_EMAIL;
 
@@ -28,7 +30,7 @@ export async function sendTransactionalEmail({
   }
 
   const response = await resend.emails.send({
-    from,
+    from: fromName ? `${fromName} <${from}>` : from,
     to,
     subject,
     html,

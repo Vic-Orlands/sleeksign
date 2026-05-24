@@ -22,6 +22,8 @@ export type DocumentRecord = {
   id: string
   name: string
   fileUrl: string
+  teamId?: string | null
+  requireOtp?: boolean
   createdAt: string | number | Date
   archivedAt?: string | number | Date | null
   deletedAt?: string | number | Date | null

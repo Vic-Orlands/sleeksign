@@ -6,6 +6,7 @@ import { nanoid } from "nanoid";
 import { db } from "@/db";
 import { documents } from "@/db/schema";
 import { AccessError, requireWorkspaceAccess } from "@/lib/server-access";
+import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
@@ -38,7 +39,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { workspaceId: authorizedWorkspaceId } = await requireWorkspaceAccess(
+    const {
+      workspaceId: authorizedWorkspaceId,
+      defaultTeamId,
+      membership,
+    } = await requireWorkspaceAccess(
       req.headers,
       workspaceId || undefined,
       "manage",
@@ -65,6 +70,23 @@ export async function POST(req: NextRequest) {
       name: originalName,
       fileUrl: `/uploads/${fileName}`,
       workspaceId: authorizedWorkspaceId,
+      teamId: defaultTeamId,
+    });
+
+    await emitAuditEvent({
+      organizationId: authorizedWorkspaceId,
+      teamId: defaultTeamId,
+      workspaceId: authorizedWorkspaceId,
+      documentId: docId,
+      actorType: "user",
+      actorId: membership.userId,
+      eventType: "document.created",
+      chainKey: `document:${docId}`,
+      payload: {
+        name: originalName,
+        fileUrl: `/uploads/${fileName}`,
+      },
+      ...getRequestAuditContext(req.headers),
     });
 
     return NextResponse.json({ id: docId, name: originalName, url: `/uploads/${fileName}` });

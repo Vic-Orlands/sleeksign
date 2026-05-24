@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CopyIcon, Edit3Icon, LinkIcon, SendIcon, XIcon } from "lucide-react"
+import { CopyIcon, Edit3Icon, LinkIcon, SendIcon, ShieldCheckIcon, UploadIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { SignerTimeline } from "@/components/hr/signer-timeline"
@@ -11,12 +11,44 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { areRoleConfigsEqual, type WorkflowMode } from "@/lib/field-utils"
+import { useCurrentWorkspaceId } from "@/lib/workspace-store"
 
 type PacketSummary = {
   id: string
   mode: WorkflowMode
   status: string
   roleConfigs: Array<{ name: string; scope: "shared" | "private" }>
+}
+
+type TeamRecord = {
+  id: string
+  name: string
+}
+
+type AuditRecord = {
+  id: string
+  eventType: string
+  actorEmail?: string | null
+  createdAt: string
+  ipAddress?: string | null
+}
+
+type BulkSendJob = {
+  id: string
+  status: string
+  totalRows: number
+  createdCount: number
+  sentCount: number
+  signedCount: number
+  failedCount: number
+  rows?: Array<{
+    id: string
+    signerName?: string | null
+    signerEmail: string
+    roleName: string
+    status: string
+    shareUrl?: string | null
+  }>
 }
 
 function DocumentDetailPanel({
@@ -33,6 +65,27 @@ function DocumentDetailPanel({
   const [packets, setPackets] = useState<PacketSummary[]>([])
   const [isCreatingPacket, setIsCreatingPacket] = useState(false)
   const [selectedMode, setSelectedMode] = useState<WorkflowMode>("shared-base")
+  const [teams, setTeams] = useState<TeamRecord[]>([])
+  const [auditLogs, setAuditLogs] = useState<AuditRecord[]>([])
+  const [jobs, setJobs] = useState<BulkSendJob[]>([])
+  const [documentOverrides, setDocumentOverrides] = useState<{
+    documentId: string
+    teamId: string | null
+    requireOtp: boolean | null
+  }>({
+    documentId: "",
+    teamId: null,
+    requireOtp: null,
+  })
+  const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [csvPreview, setCsvPreview] = useState<Array<Record<string, unknown>>>([])
+  const [csvText, setCsvText] = useState("")
+  const [nameColumn, setNameColumn] = useState("name")
+  const [emailColumn, setEmailColumn] = useState("email")
+  const [roleColumn, setRoleColumn] = useState("role")
+  const [defaultRoleName, setDefaultRoleName] = useState("")
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const workspaceId = useCurrentWorkspaceId()
 
   useEffect(() => {
     if (!document) return
@@ -44,6 +97,36 @@ function DocumentDetailPanel({
       })
       .catch(() => undefined)
   }, [document])
+
+  useEffect(() => {
+    if (!document) return
+    if (!workspaceId) return
+
+    fetch(`/api/audit?documentId=${encodeURIComponent(document.id)}&workspaceId=${encodeURIComponent(workspaceId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setAuditLogs(Array.isArray(data) ? data : [])
+      })
+      .catch(() => setAuditLogs([]))
+
+    fetch(`/api/bulk-send/jobs?documentId=${encodeURIComponent(document.id)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setJobs(Array.isArray(data) ? data : [])
+      })
+      .catch(() => setJobs([]))
+  }, [document, workspaceId])
+
+  useEffect(() => {
+    if (!workspaceId) return
+
+    fetch(`/api/teams?workspaceId=${encodeURIComponent(workspaceId)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setTeams(Array.isArray(data?.teams) ? data.teams : [])
+      })
+      .catch(() => setTeams([]))
+  }, [workspaceId])
 
   const roleConfigs = useMemo(
     () => document?.roleConfigs || [],
@@ -75,6 +158,105 @@ function DocumentDetailPanel({
   const publicUrl = typeof window === "undefined" ? "" : `${window.location.origin}/sign/p/${document.id}`
   const counts = getDocumentCounts(document)
   const status = getDocumentStatus(document)
+  const privateRoles = roleConfigs.filter((role) => role.scope === "private")
+  const selectedTeamId =
+    documentOverrides.documentId === document.id
+      ? documentOverrides.teamId ?? document.teamId ?? ""
+      : document.teamId ?? ""
+  const requireOtp =
+    documentOverrides.documentId === document.id
+      ? documentOverrides.requireOtp ?? Boolean(document.requireOtp)
+      : Boolean(document.requireOtp)
+
+  async function persistDocumentSettings(next: {
+    teamId?: string | null
+    requireOtp?: boolean
+  }) {
+    if (!document) return
+
+    try {
+      const res = await fetch(`/api/documents/${document.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          teamId: next.teamId ?? selectedTeamId ?? null,
+          requireOtp: typeof next.requireOtp === "boolean" ? next.requireOtp : requireOtp,
+        }),
+      })
+      if (!res.ok) throw new Error("Unable to update document")
+      toast.success("Document settings updated")
+    } catch {
+      toast.error("Unable to update document settings")
+    }
+  }
+
+  async function parseCsvPreview() {
+    if (!csvFile || !document) {
+      toast.error("Choose a CSV file first")
+      return
+    }
+
+    const formData = new FormData()
+    formData.append("file", csvFile)
+    formData.append("documentId", document.id)
+    formData.append("nameColumn", nameColumn)
+    formData.append("emailColumn", emailColumn)
+    formData.append("roleColumn", roleColumn)
+    formData.append("defaultRoleName", defaultRoleName)
+
+    setBulkBusy(true)
+    try {
+      const res = await fetch("/api/bulk-send/parse", {
+        method: "POST",
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Unable to parse CSV")
+      setCsvPreview(Array.isArray(data.preview?.recipients) ? data.preview.recipients : [])
+      setCsvText(String(data.csvText || ""))
+      toast.success("CSV parsed")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to parse CSV")
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function createBulkJob(sendImmediately: boolean) {
+    if (!csvText || !document) {
+      toast.error("Parse a CSV file before creating a bulk send job")
+      return
+    }
+
+    setBulkBusy(true)
+    try {
+      const res = await fetch("/api/bulk-send/jobs", {
+        method: "POST",
+        body: JSON.stringify({
+          documentId: document.id,
+          mode: selectedMode,
+          csvText,
+          csvFileName: csvFile?.name || "recipients.csv",
+          mapping: {
+            nameColumn,
+            emailColumn,
+            roleColumn: roleColumn || undefined,
+            defaultRoleName: defaultRoleName || undefined,
+          },
+          sendImmediately,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Unable to create job")
+      toast.success(sendImmediately ? "Bulk send started" : "Bulk draft created")
+      const jobsRes = await fetch(`/api/bulk-send/jobs?documentId=${encodeURIComponent(document.id)}`)
+      const jobsData = await jobsRes.json()
+      setJobs(Array.isArray(jobsData) ? jobsData : [])
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create job")
+    } finally {
+      setBulkBusy(false)
+    }
+  }
 
   function guardShareAction(action: () => void) {
     if (!canShare) {
@@ -150,10 +332,11 @@ function DocumentDetailPanel({
 
       <div className="min-h-0 overflow-auto p-4">
         <Tabs defaultValue="overview" className="min-w-0 flex flex-col gap-4">
-          <TabsList className="grid w-full min-w-0 grid-cols-2 sm:grid-cols-4">
+          <TabsList className="grid w-full min-w-0 grid-cols-2 sm:grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="link">Link</TabsTrigger>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
+            <TabsTrigger value="bulk">Bulk Send</TabsTrigger>
+            <TabsTrigger value="activity">Audit</TabsTrigger>
             <TabsTrigger value="details">Details</TabsTrigger>
           </TabsList>
           <TabsContent value="overview" className="m-0 flex flex-col gap-5">
@@ -162,6 +345,65 @@ function DocumentDetailPanel({
               <PanelMetric label="Fields" value={`${counts.fields}`} />
               <PanelMetric label="Pending" value={`${counts.pending}/${Math.max(counts.total, 1)}`} />
               <PanelMetric label="Completed" value={`${counts.completed}/${Math.max(counts.total, 1)}`} />
+            </div>
+            <div className="grid gap-3 border border-border bg-background p-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheckIcon className="size-4 text-orange-500" />
+                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Enterprise controls
+                </p>
+              </div>
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium">Team ownership</span>
+                <select
+                  value={selectedTeamId}
+                  onChange={(event) => {
+                    const nextTeamId = event.target.value
+                    setDocumentOverrides((current) => ({
+                      documentId: document.id,
+                      teamId: nextTeamId,
+                      requireOtp:
+                        current.documentId === document.id
+                          ? current.requireOtp
+                          : Boolean(document.requireOtp),
+                    }))
+                    void persistDocumentSettings({ teamId: nextTeamId || null })
+                  }}
+                  className="border border-border bg-background px-3 py-2"
+                >
+                  <option value="">Unassigned</option>
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center justify-between gap-3 border border-border px-3 py-3 text-sm">
+                <div>
+                  <p className="font-medium">Require email OTP before viewing</p>
+                  <p className="text-muted-foreground">
+                    Signers must verify a 6-digit email code before the document loads.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={requireOtp}
+                  onChange={(event) => {
+                    const nextValue = event.target.checked
+                    setDocumentOverrides((current) => ({
+                      documentId: document.id,
+                      teamId:
+                        current.documentId === document.id
+                          ? current.teamId
+                          : document.teamId ?? "",
+                      requireOtp: nextValue,
+                    }))
+                    void persistDocumentSettings({ requireOtp: nextValue })
+                  }}
+                  className="size-4"
+                />
+              </label>
             </div>
             <div className="border border-border bg-background p-4">
               <div className="flex items-start gap-3">
@@ -276,8 +518,124 @@ function DocumentDetailPanel({
             ) : null}
           </TabsContent>
 
+          <TabsContent value="bulk" className="m-0 flex flex-col gap-4">
+            <div className="border border-border bg-background p-4">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                CSV upload
+              </p>
+              <div className="mt-3 grid gap-3">
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(event) => setCsvFile(event.target.files?.[0] || null)}
+                  className="text-sm"
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    value={nameColumn}
+                    onChange={(event) => setNameColumn(event.target.value)}
+                    placeholder="Name column"
+                    className="border border-border bg-background px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={emailColumn}
+                    onChange={(event) => setEmailColumn(event.target.value)}
+                    placeholder="Email column"
+                    className="border border-border bg-background px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={roleColumn}
+                    onChange={(event) => setRoleColumn(event.target.value)}
+                    placeholder="Role column"
+                    className="border border-border bg-background px-3 py-2 text-sm"
+                  />
+                  <select
+                    value={defaultRoleName}
+                    onChange={(event) => setDefaultRoleName(event.target.value)}
+                    className="border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Default role (optional)</option>
+                    {privateRoles.map((role) => (
+                      <option key={role.name} value={role.name}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" disabled={bulkBusy} onClick={() => void parseCsvPreview()}>
+                    <UploadIcon data-icon="inline-start" />
+                    Parse CSV
+                  </Button>
+                  <Button disabled={bulkBusy || !csvText} onClick={() => void createBulkJob(true)}>
+                    Send now
+                  </Button>
+                  <Button variant="outline" disabled={bulkBusy || !csvText} onClick={() => void createBulkJob(false)}>
+                    Save draft
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {csvPreview.length > 0 ? (
+              <div className="border border-border bg-background p-4">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Preview
+                </p>
+                <div className="mt-3 grid gap-2">
+                  {csvPreview.slice(0, 5).map((row, index) => (
+                    <div key={`${String(row.signerEmail || index)}-${index}`} className="border border-border px-3 py-2 text-sm">
+                      {String(row.signerName || "Recipient")} · {String(row.roleName || "Role")} · {String(row.signerEmail || "")}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="border border-border bg-background p-4">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Job status
+              </p>
+              <div className="mt-3 grid gap-2">
+                {jobs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No bulk send jobs yet.</p>
+                ) : (
+                  jobs.map((job) => (
+                    <div key={job.id} className="border border-border p-3">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                        {job.status}
+                      </p>
+                      <p className="mt-2 text-sm">
+                        {job.createdCount}/{job.totalRows} created · {job.sentCount} sent · {job.failedCount} failed
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
           <TabsContent value="activity" className="m-0 flex flex-col gap-4">
             <div>
+              <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest">Audit trail</h3>
+              <div className="grid gap-2">
+                {auditLogs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No audit events yet.</p>
+                ) : (
+                  auditLogs.slice(0, 20).map((log) => (
+                    <div key={log.id} className="border border-border bg-background p-3">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                        {log.eventType}
+                      </p>
+                      <p className="mt-1 text-sm">
+                        {log.actorEmail || "system"} · {new Date(log.createdAt).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">IP {log.ipAddress || "N/A"}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+              <Separator className="my-4" />
               <h3 className="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest">Signer Timeline</h3>
               <SignerTimeline sessions={document.sessions || []} />
             </div>
@@ -286,6 +644,8 @@ function DocumentDetailPanel({
           <TabsContent value="details" className="m-0 flex flex-col gap-4">
             <PanelMetric label="Document ID" value={document.id.slice(0, 10)} />
             <PanelMetric label="File type" value={document.name.split(".").pop()?.toUpperCase() || "PDF"} />
+            <PanelMetric label="Team" value={teams.find((team) => team.id === selectedTeamId)?.name || "Unassigned"} />
+            <PanelMetric label="Verification" value={requireOtp ? "Email OTP required" : "No OTP"} />
             <Separator />
             <Button variant="outline" onClick={onEdit}>
               <Edit3Icon data-icon="inline-start" />

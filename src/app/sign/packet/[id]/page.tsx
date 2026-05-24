@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import {
@@ -29,10 +30,19 @@ type PacketContext = {
   packetId: string;
   mode: string;
   status: string;
+  requireOtp?: boolean;
   roleName: string;
   copyId?: string | null;
   signerName?: string | null;
   signerEmail?: string | null;
+  branding?: {
+    logoUrl?: string | null;
+    primaryColor?: string;
+    secondaryColor?: string;
+    neutralColor?: string;
+    accentColor?: string;
+    senderName?: string;
+  };
   document: {
     id: string;
     name: string;
@@ -76,6 +86,7 @@ export default function PacketSignerPortal() {
   const roleName = searchParams.get("role") || "";
   const copyId = searchParams.get("copyId") || "";
   const savedSigner = getSavedSigner();
+  const savedSignerEmail = savedSigner.signerEmail;
   const [context, setContext] = useState<PacketContext | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFinalizing, setIsFinalizing] = useState(false);
@@ -85,6 +96,11 @@ export default function PacketSignerPortal() {
   const [finalPdfUrl, setFinalPdfUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [completionMessage, setCompletionMessage] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpEmail, setOtpEmail] = useState(savedSigner.signerEmail || "");
+  const [otpRequired, setOtpRequired] = useState(false);
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
 
   useEffect(() => {
     fetch(
@@ -92,17 +108,91 @@ export default function PacketSignerPortal() {
         copyId ? `&copyId=${encodeURIComponent(copyId)}` : ""
       }`,
     )
-      .then((res) => res.json())
+      .then(async (res) => ({ status: res.status, body: await res.json() }))
       .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setContext(data);
-        setValues(data.values || {});
+        if (data.status === 403 && data.body?.verificationRequired) {
+          setOtpRequired(true);
+          setOtpEmail(data.body.recipientEmail || savedSignerEmail || "");
+          return;
+        }
+
+        if (data.body.error) throw new Error(data.body.error);
+        setContext(data.body);
+        setValues(data.body.values || {});
+        setOtpRequired(false);
       })
       .catch((error) =>
         setLoadError(error.message || "Failed to load document"),
       )
       .finally(() => setIsLoading(false));
-  }, [copyId, id, roleName]);
+  }, [copyId, id, roleName, savedSignerEmail]);
+
+  async function sendOtpCode() {
+    if (!otpEmail.trim()) {
+      toast.error("Enter the recipient email first");
+      return;
+    }
+
+    setOtpBusy(true);
+    try {
+      const res = await fetch(`/api/public-packets/${id}/otp`, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "send",
+          roleName,
+          copyId: copyId || null,
+          recipientEmail: otpEmail.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Unable to send code");
+      setOtpSent(true);
+      toast.success("Verification code sent");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to send code");
+    } finally {
+      setOtpBusy(false);
+    }
+  }
+
+  async function verifyOtpCode() {
+    if (!otpCode.trim()) {
+      toast.error("Enter the verification code");
+      return;
+    }
+
+    setOtpBusy(true);
+    try {
+      const res = await fetch(`/api/public-packets/${id}/otp`, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "verify",
+          roleName,
+          copyId: copyId || null,
+          code: otpCode.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Invalid code");
+      setOtpRequired(false);
+      setOtpEmail(data.email || otpEmail);
+      setLoadError(null);
+      const next = await fetch(
+        `/api/public-packets/${id}/context?role=${encodeURIComponent(roleName)}${
+          copyId ? `&copyId=${encodeURIComponent(copyId)}` : ""
+        }`,
+      );
+      const nextData = await next.json();
+      if (!next.ok) throw new Error(nextData.error || "Unable to open document");
+      setContext(nextData);
+      setValues(nextData.values || {});
+      toast.success("Identity verified");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to verify code");
+    } finally {
+      setOtpBusy(false);
+    }
+  }
 
   const fields = useMemo(() => context?.fields || [], [context?.fields]);
   const requiredFields = useMemo(
@@ -207,6 +297,50 @@ export default function PacketSignerPortal() {
   }
 
   if (loadError || !context) {
+    if (otpRequired) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-[var(--paper)] p-6">
+          <div className="w-full max-w-md border border-border bg-background p-8 shadow-xl">
+            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-orange-500">
+              Signer verification
+            </p>
+            <h1 className="mt-3 text-2xl font-semibold">Verify before viewing</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Enter or confirm the recipient email, then use the 6-digit code we send before accessing this document.
+            </p>
+            <div className="mt-6 space-y-3">
+              <input
+                value={otpEmail}
+                onChange={(event) => setOtpEmail(event.target.value)}
+                placeholder="Recipient email"
+                className="w-full border border-border bg-background px-3 py-2 text-sm outline-none"
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  disabled={otpBusy}
+                  onClick={sendOtpCode}
+                >
+                  {otpBusy ? "Sending..." : otpSent ? "Resend code" : "Send code"}
+                </Button>
+              </div>
+              <input
+                value={otpCode}
+                onChange={(event) => setOtpCode(event.target.value)}
+                placeholder="6-digit code"
+                className="w-full border border-border bg-background px-3 py-2 text-sm outline-none"
+              />
+              <Button type="button" className="w-full" disabled={otpBusy} onClick={verifyOtpCode}>
+                {otpBusy ? "Verifying..." : "Verify and continue"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center">
         <AlertCircle className="size-12 text-destructive" />
@@ -242,11 +376,22 @@ export default function PacketSignerPortal() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-[var(--paper)]">
+    <div
+      className="flex h-screen flex-col bg-[var(--paper)]"
+      style={
+        context.branding
+          ? ({
+              ["--paper" as string]: context.branding.neutralColor || "#f7f5f1",
+            } as CSSProperties)
+          : undefined
+      }
+    >
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-cursive">SleekSign</h1>
+            <h1 className="text-lg font-cursive">
+              {context.branding?.senderName || "SleekSign"}
+            </h1>
             <Badge
               variant="outline"
               className="rounded-none font-mono text-[9px] uppercase tracking-widest"
