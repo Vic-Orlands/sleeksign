@@ -2,6 +2,7 @@ type UploadDocumentResult = {
   id: string;
   name: string;
   url: string;
+  createdAt?: string;
 };
 
 function getUploadErrorMessage(data: unknown, fallback = "Upload failed") {
@@ -13,10 +14,12 @@ function getUploadErrorMessage(data: unknown, fallback = "Upload failed") {
   return fallback;
 }
 
-async function uploadDocument(file: File, workspaceId: string) {
+async function uploadDocument(file: File, workspaceId?: string) {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("workspaceId", workspaceId);
+  if (workspaceId?.trim()) {
+    formData.append("workspaceId", workspaceId);
+  }
 
   const response = await fetch("/api/upload", {
     method: "POST",
@@ -30,6 +33,23 @@ async function uploadDocument(file: File, workspaceId: string) {
 
   if (!data || typeof data !== "object" || typeof (data as UploadDocumentResult).id !== "string") {
     throw new Error("Upload failed");
+  }
+
+  if (typeof window !== "undefined") {
+    const uploadedDocument = data as UploadDocumentResult;
+    window.sessionStorage.setItem(
+      `sleeksign:uploaded-document:${uploadedDocument.id}`,
+      JSON.stringify({
+        id: uploadedDocument.id,
+        name: uploadedDocument.name,
+        fileUrl: uploadedDocument.url,
+        createdAt: uploadedDocument.createdAt || new Date().toISOString(),
+        fields: [],
+        sessions: [],
+        roleConfigs: [],
+        signerRoles: [],
+      }),
+    );
   }
 
   return data as UploadDocumentResult;

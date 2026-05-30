@@ -2,15 +2,12 @@
 
 import type { ReactNode } from "react"
 import { useEffect, useMemo, useState } from "react"
-import { format } from "date-fns"
-import { MailIcon, Trash2Icon, UsersIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { DocumentTable } from "@/components/hr/document-table"
 import { HrShell } from "@/components/hr/hr-shell"
-import { StatusBadge } from "@/components/hr/status-badge"
-import type { DocumentRecord, DocumentSetupStatus, SessionRecord } from "@/components/hr/types"
+import type { DocumentRecord, DocumentSetupStatus } from "@/components/hr/types"
 import { getDocumentSetupStatus, getDocumentStatus } from "@/components/hr/types"
 import { Button } from "@/components/ui/button"
 import {
@@ -22,60 +19,69 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
-import { uploadDocument } from "@/lib/upload-document"
+import { nanoid } from "nanoid"
+import { backgroundUploadStore } from "@/lib/background-upload-store"
 import { useCurrentWorkspaceId } from "@/lib/workspace-store"
 
-type TableFilter = "all" | "archived" | "shared" | "signers" | DocumentSetupStatus
+type TableFilter = "all" | "archived" | "shared" | DocumentSetupStatus
 
 export default function HRDocuments() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
   const [query, setQuery] = useState("")
   const [tableFilter, setTableFilter] = useState<TableFilter>("all")
   const [isLoading, setIsLoading] = useState(true)
-  const [uploadingDocumentName, setUploadingDocumentName] = useState<string | null>(null)
+  const [documentAction, setDocumentAction] = useState<"" | "archive" | "delete" | "restore">("")
   const [documentToDelete, setDocumentToDelete] = useState<DocumentRecord | null>(null)
   const [documentToArchive, setDocumentToArchive] = useState<DocumentRecord | null>(null)
   const [documentToRestore, setDocumentToRestore] = useState<DocumentRecord | null>(null)
-  const [signerToDelete, setSignerToDelete] = useState<(SessionRecord & { documentName: string }) | null>(null)
+
   const workspaceId = useCurrentWorkspaceId()
   const router = useRouter()
   const visibleDocuments = useMemo(() => (workspaceId ? documents : []), [documents, workspaceId])
-  const showLoading = Boolean(workspaceId) && isLoading
+  const showLoading = isLoading
 
   function normalizeDocuments(data: unknown) {
     return Array.isArray(data) ? (data as DocumentRecord[]) : []
   }
 
   useEffect(() => {
-    if (!workspaceId) return
-
-    function loadDocuments(options?: { background?: boolean }) {
-      if (!options?.background) setIsLoading(true)
-      fetch(
-        `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}&includeArchived=true&includeDeleted=true`,
-      )
-        .then((res) => res.json())
-        .then((data: unknown) => {
-          setDocuments(normalizeDocuments(data))
-        })
-        .finally(() => {
-          if (!options?.background) setIsLoading(false)
-        })
+    if (!workspaceId) {
+      queueMicrotask(() => {
+        setDocuments([])
+        setIsLoading(false)
+      })
+      return
     }
 
-    loadDocuments()
-    const interval = window.setInterval(() => loadDocuments({ background: true }), 5000)
+    async function loadDocuments(options?: { background?: boolean }) {
+      if (!options?.background) setIsLoading(true)
+      try {
+        const response = await fetch(
+          `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}&includeArchived=true&includeDeleted=true`,
+        )
+        const data: unknown = await response.json()
+        setDocuments(normalizeDocuments(data))
+      } finally {
+        if (!options?.background) setIsLoading(false)
+      }
+    }
+
+    void loadDocuments()
+
+    const interval = window.setInterval(() => {
+      void loadDocuments({ background: true })
+    }, 5000)
+
     return () => window.clearInterval(interval)
   }, [workspaceId])
 
   useEffect(() => {
     queueMicrotask(() => {
       if (window.location.search.includes("view=shared")) setTableFilter("shared")
-      if (window.location.search.includes("view=signers")) setTableFilter("signers")
     })
   }, [])
 
-  function fetchDocuments(options?: { background?: boolean }) {
+  async function fetchDocuments(options?: { background?: boolean }) {
     if (!workspaceId) {
       setDocuments([])
       if (!options?.background) setIsLoading(false)
@@ -83,77 +89,66 @@ export default function HRDocuments() {
     }
 
     if (!options?.background) setIsLoading(true)
-    fetch(
+    try {
+      const response = await fetch(
       `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}&includeArchived=true&includeDeleted=true`,
-    )
-      .then((res) => res.json())
-      .then((data: unknown) => {
-        setDocuments(normalizeDocuments(data))
-      })
-      .finally(() => {
-        if (!options?.background) setIsLoading(false)
-      })
+      )
+      const data: unknown = await response.json()
+      setDocuments(normalizeDocuments(data))
+    } finally {
+      if (!options?.background) setIsLoading(false)
+    }
   }
 
-  const filteredDocuments = useMemo(
+  const scopedDocuments = useMemo(
     () =>
       visibleDocuments.filter((document) => {
-        const matchesQuery = document.name.toLowerCase().includes(query.trim().toLowerCase())
-        if (!matchesQuery) return false
         if (document.archivedAt) {
-          return tableFilter === "archived" || tableFilter === "signers"
+          return tableFilter === "archived"
         }
         if (document.deletedAt) {
-          return tableFilter === "signers"
+          return false
         }
         if (tableFilter === "all") return true
         if (tableFilter === "archived") return false
         if (tableFilter === "shared") return Boolean(document.sessions?.length)
-        if (tableFilter === "signers") return true
         return getDocumentSetupStatus(document) === tableFilter
       }),
-    [visibleDocuments, query, tableFilter],
+    [visibleDocuments, tableFilter],
   )
 
-  const allSessions = visibleDocuments.flatMap((document) => document.sessions || [])
-  const signerRows = visibleDocuments.flatMap((document) =>
-    (document.sessions || []).map((session) => ({
-      ...session,
-      documentName: document.name,
-    })),
+  const filteredDocuments = useMemo(
+    () =>
+      scopedDocuments.filter((document) =>
+        document.name.toLowerCase().includes(query.trim().toLowerCase()),
+      ),
+    [scopedDocuments, query],
   )
-  const filteredSigners = signerRows.filter((session) => {
-    const needle = query.trim().toLowerCase()
-    if (!needle) return true
-    return [session.signerName, session.signerEmail, session.documentName]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(needle))
-  })
+  const documentCountLabel = query.trim()
+    ? `${filteredDocuments.length} of ${scopedDocuments.length} documents`
+    : `${filteredDocuments.length} documents`
+
+  const allSessions = visibleDocuments.flatMap((document) => document.sessions || [])
   const completedCount = allSessions.filter((session) => session.status === "completed").length
   const pendingCount = allSessions.filter((session) => session.status === "pending").length
   const inProgressCount = visibleDocuments.filter((document) => getDocumentStatus(document) === "In Progress").length
 
   async function handleUpload(file: File) {
     if (!workspaceId) {
-      toast.error("Select or create a workspace before uploading")
+      toast.error("No active workspace selected")
       return
     }
 
-    setUploadingDocumentName(file.name)
-
-    try {
-      const data = await uploadDocument(file, workspaceId)
-      toast.success("Document uploaded")
-      router.push(`/hr/documents/${data.id}`)
-    } catch (error) {
-      setUploadingDocumentName(null)
-      toast.error(error instanceof Error ? error.message : "Upload failed")
-    }
+    const docId = nanoid()
+    backgroundUploadStore.startUpload(file, workspaceId, docId)
+    toast.success("Uploading document in background...")
+    router.push(`/hr/documents/${docId}`)
   }
 
   async function deleteDocument() {
     if (!documentToDelete) return
 
+    setDocumentAction("delete")
     try {
       const res = await fetch(`/api/documents/${documentToDelete.id}`, {
         method: "DELETE",
@@ -164,12 +159,15 @@ export default function HRDocuments() {
       await fetchDocuments()
     } catch {
       toast.error("Failed to delete document")
+    } finally {
+      setDocumentAction("")
     }
   }
 
   async function archiveDocument() {
     if (!documentToArchive) return
 
+    setDocumentAction("archive")
     try {
       const res = await fetch(`/api/documents/${documentToArchive.id}`, {
         method: "PATCH",
@@ -181,28 +179,15 @@ export default function HRDocuments() {
       await fetchDocuments()
     } catch {
       toast.error("Failed to archive document")
-    }
-  }
-
-  async function deleteSigner() {
-    if (!signerToDelete) return
-
-    try {
-      const res = await fetch(`/api/signers/${signerToDelete.id}`, {
-        method: "DELETE",
-      })
-      if (!res.ok) throw new Error("Delete failed")
-      toast.success("Signer deleted")
-      setSignerToDelete(null)
-      await fetchDocuments()
-    } catch {
-      toast.error("Failed to delete signer")
+    } finally {
+      setDocumentAction("")
     }
   }
 
   async function restoreDocument() {
     if (!documentToRestore) return
 
+    setDocumentAction("restore")
     try {
       const res = await fetch(`/api/documents/${documentToRestore.id}`, {
         method: "PATCH",
@@ -214,6 +199,8 @@ export default function HRDocuments() {
       await fetchDocuments()
     } catch {
       toast.error("Failed to restore document")
+    } finally {
+      setDocumentAction("")
     }
   }
 
@@ -224,14 +211,11 @@ export default function HRDocuments() {
         onQueryChange={setQuery}
         onUpload={handleUpload}
         actionOverlay={{
-          visible: Boolean(uploadingDocumentName),
-          title: "Uploading document",
-          documentName: uploadingDocumentName || undefined,
-          detail: "Preparing for setup.",
+          visible: false,
+          title: "",
         }}
-        activeView={tableFilter === "shared" ? "shared" : tableFilter === "signers" ? "signers" : "documents"}
+        activeView={tableFilter === "shared" ? "shared" : "documents"}
         onSharedActivityClick={() => setTableFilter("shared")}
-        onSignersClick={() => setTableFilter("signers")}
         onDocumentsClick={() => {
           setTableFilter("all")
           router.push("/hr/documents")
@@ -240,86 +224,75 @@ export default function HRDocuments() {
         inProgressCount={inProgressCount}
         completedCount={completedCount}
       >
-        <section className="min-h-0 overflow-auto bg-[var(--paper)]">
-        <div className="flex flex-col gap-4 border-b border-border bg-background px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="font-mono text-xs font-semibold uppercase tracking-widest">
-              {tableFilter === "signers"
-                ? "Signer Management"
-                : tableFilter === "shared"
+        <section className="min-h-0 overflow-auto bg-[(--paper)]">
+          <div className="flex flex-col gap-4 border-b border-border bg-background px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="font-mono text-xs font-semibold uppercase tracking-widest">
+                {tableFilter === "shared"
                   ? "Shared Activity"
                   : tableFilter === "archived"
                     ? "Archived Docs"
                     : "All Documents"}
-            </h1>
-            <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-              {tableFilter === "signers"
-                ? `${filteredSigners.length} of ${signerRows.length} signers`
-                : workspaceId
-                  ? `${filteredDocuments.length} of ${visibleDocuments.length} documents`
+              </h1>
+              <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+                {workspaceId
+                  ? documentCountLabel
                   : "Select a workspace to view documents"}
-            </p>
+              </p>
+            </div>
+            {tableFilter === "shared" ? null : (
+              <div className="flex overflow-x-auto border border-border bg-card">
+                <FilterButton value="all" tableFilter={tableFilter} onSelect={setTableFilter}>
+                  All
+                </FilterButton>
+                <FilterButton value="archived" tableFilter={tableFilter} onSelect={setTableFilter}>
+                  Archived
+                </FilterButton>
+                <FilterButton value="Needs Setup" tableFilter={tableFilter} onSelect={setTableFilter}>
+                  Needs Setup
+                </FilterButton>
+                <FilterButton value="Edited" tableFilter={tableFilter} onSelect={setTableFilter}>
+                  Edited
+                </FilterButton>
+              </div>
+            )}
           </div>
-          {tableFilter === "signers" ? (
-            <Button variant="outline">
-              <UsersIcon data-icon="inline-start" />
-              New Signer
-            </Button>
-          ) : tableFilter === "shared" ? null : (
-            <div className="flex overflow-x-auto border border-border bg-card">
-              <FilterButton value="all" tableFilter={tableFilter} onSelect={setTableFilter}>
-                All
-              </FilterButton>
-              <FilterButton value="archived" tableFilter={tableFilter} onSelect={setTableFilter}>
-                Archived
-              </FilterButton>
-              <FilterButton value="Needs Setup" tableFilter={tableFilter} onSelect={setTableFilter}>
-                Needs Setup
-              </FilterButton>
-              <FilterButton value="Edited" tableFilter={tableFilter} onSelect={setTableFilter}>
-                Edited
-              </FilterButton>
+          {showLoading ? (
+            <div className="flex flex-col gap-2 px-5 py-5">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <Skeleton key={index} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : !workspaceId ? (
+            <div className="mx-5 my-5 flex h-52 items-center justify-center border border-dashed border-border bg-card px-4 text-center font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+              Select or create a workspace from the account menu.
+            </div>
+          ) : filteredDocuments.length === 0 ? (
+            <div className="mx-5 my-5 flex h-52 items-center justify-center border border-dashed border-border bg-card font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+              No documents match this search.
+            </div>
+          ) : (
+            <div className="overflow-x-auto px-4 py-4 sm:px-5">
+              <DocumentTable
+                documents={filteredDocuments}
+                variant={tableFilter === "shared" ? "shared" : "documents"}
+                onSelectDocument={(document) => router.push(`/hr/documents/${document.id}`)}
+                onDeleteDocument={tableFilter === "shared" ? undefined : setDocumentToDelete}
+                onArchiveDocument={
+                  tableFilter === "shared" || tableFilter === "archived"
+                    ? undefined
+                    : setDocumentToArchive
+                }
+                onRestoreDocument={
+                  tableFilter === "archived" ? setDocumentToRestore : undefined
+                }
+              />
             </div>
           )}
-        </div>
-        {showLoading ? (
-          <div className="flex flex-col gap-2 px-5 py-5">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <Skeleton key={index} className="h-12 w-full" />
-            ))}
-          </div>
-        ) : tableFilter === "signers" ? (
-          <SignerTable sessions={filteredSigners} onDeleteSigner={setSignerToDelete} />
-        ) : !workspaceId ? (
-          <div className="mx-5 my-5 flex h-52 items-center justify-center border border-dashed border-border bg-card px-4 text-center font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            Select or create a workspace from the account menu.
-          </div>
-        ) : filteredDocuments.length === 0 ? (
-          <div className="mx-5 my-5 flex h-52 items-center justify-center border border-dashed border-border bg-card font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            No documents match this search.
-          </div>
-        ) : (
-          <div className="overflow-x-auto px-4 py-4 sm:px-5">
-            <DocumentTable
-              documents={filteredDocuments}
-              variant={tableFilter === "shared" ? "shared" : "documents"}
-              onSelectDocument={(document) => router.push(`/hr/documents/${document.id}`)}
-              onDeleteDocument={tableFilter === "shared" ? undefined : setDocumentToDelete}
-              onArchiveDocument={
-                tableFilter === "shared" || tableFilter === "archived"
-                  ? undefined
-                  : setDocumentToArchive
-              }
-              onRestoreDocument={
-                tableFilter === "archived" ? setDocumentToRestore : undefined
-              }
-            />
-          </div>
-        )}
         </section>
       </HrShell>
 
-      <Dialog open={Boolean(documentToDelete)} onOpenChange={(open) => !open && setDocumentToDelete(null)}>
+      <Dialog open={Boolean(documentToDelete)} onOpenChange={(open) => !open && !documentAction && setDocumentToDelete(null)}>
         <DialogContent className="rounded-none border-border bg-popover shadow-sm">
           <DialogHeader>
             <DialogTitle className="font-mono text-xs uppercase tracking-widest">Delete document?</DialogTitle>
@@ -331,17 +304,17 @@ export default function HRDocuments() {
             {documentToDelete?.name}
           </div>
           <DialogFooter className="rounded-none border-border">
-            <Button variant="outline" onClick={() => setDocumentToDelete(null)}>
+            <Button variant="outline" disabled={documentAction === "delete"} onClick={() => setDocumentToDelete(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={deleteDocument}>
-              Delete
+            <Button variant="destructive" disabled={documentAction === "delete"} onClick={deleteDocument}>
+              {documentAction === "delete" ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(documentToArchive)} onOpenChange={(open) => !open && setDocumentToArchive(null)}>
+      <Dialog open={Boolean(documentToArchive)} onOpenChange={(open) => !open && !documentAction && setDocumentToArchive(null)}>
         <DialogContent className="rounded-none border-border bg-popover shadow-sm">
           <DialogHeader>
             <DialogTitle className="font-mono text-xs uppercase tracking-widest">Archive document?</DialogTitle>
@@ -353,17 +326,17 @@ export default function HRDocuments() {
             {documentToArchive?.name}
           </div>
           <DialogFooter className="rounded-none border-border">
-            <Button variant="outline" onClick={() => setDocumentToArchive(null)}>
+            <Button variant="outline" disabled={documentAction === "archive"} onClick={() => setDocumentToArchive(null)}>
               Cancel
             </Button>
-            <Button onClick={archiveDocument}>
-              Archive
+            <Button disabled={documentAction === "archive"} onClick={archiveDocument}>
+              {documentAction === "archive" ? "Archiving..." : "Archive"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(documentToRestore)} onOpenChange={(open) => !open && setDocumentToRestore(null)}>
+      <Dialog open={Boolean(documentToRestore)} onOpenChange={(open) => !open && !documentAction && setDocumentToRestore(null)}>
         <DialogContent className="rounded-none border-border bg-popover shadow-sm">
           <DialogHeader>
             <DialogTitle className="font-mono text-xs uppercase tracking-widest">Restore document?</DialogTitle>
@@ -375,108 +348,16 @@ export default function HRDocuments() {
             {documentToRestore?.name}
           </div>
           <DialogFooter className="rounded-none border-border">
-            <Button variant="outline" onClick={() => setDocumentToRestore(null)}>
+            <Button variant="outline" disabled={documentAction === "restore"} onClick={() => setDocumentToRestore(null)}>
               Cancel
             </Button>
-            <Button onClick={restoreDocument}>
-              Restore
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(signerToDelete)} onOpenChange={(open) => !open && setSignerToDelete(null)}>
-        <DialogContent className="rounded-none border-border bg-popover shadow-sm">
-          <DialogHeader>
-            <DialogTitle className="font-mono text-xs uppercase tracking-widest">Delete signer?</DialogTitle>
-            <DialogDescription>
-              This removes the signer record from signer management and signed document history.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="border border-border bg-background p-3 text-sm">
-            {signerToDelete?.signerName || "Anonymous signer"} · {signerToDelete?.documentName}
-          </div>
-          <DialogFooter className="rounded-none border-border">
-            <Button variant="outline" onClick={() => setSignerToDelete(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={deleteSigner}>
-              Delete
+            <Button disabled={documentAction === "restore"} onClick={restoreDocument}>
+              {documentAction === "restore" ? "Restoring..." : "Restore"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
-  )
-}
-
-function SignerTable({
-  sessions,
-  onDeleteSigner,
-}: {
-  sessions: Array<SessionRecord & { documentName: string }>
-  onDeleteSigner?: (session: SessionRecord & { documentName: string }) => void
-}) {
-  return (
-    <div className="overflow-x-auto px-4 py-4 sm:px-5">
-      <div className="min-w-[760px] border border-border bg-background text-[11px]">
-          <div className="grid grid-cols-12 gap-4 border-b border-border bg-secondary p-4 font-mono uppercase tracking-tight text-muted-foreground">
-          <div className="col-span-3">Name / Role</div>
-          <div className="col-span-4">Contact</div>
-          <div className="col-span-2">Docs Signed</div>
-          <div className="col-span-2 text-right">Status</div>
-          <div className="col-span-1 text-right">Action</div>
-        </div>
-
-        {sessions.length === 0 ? (
-          <div className="flex h-52 items-center justify-center border border-dashed border-border m-4 font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            No current signers.
-          </div>
-        ) : (
-          sessions.map((session) => (
-            <div
-              key={session.id}
-              className="grid grid-cols-12 items-center gap-4 border-b border-border p-4 transition-colors hover:bg-secondary"
-            >
-              <div className="col-span-3">
-                <div className="text-[13px] font-bold text-foreground">{session.signerName || "Anonymous signer"}</div>
-                <div className="mt-1 truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {session.documentName}
-                </div>
-              </div>
-              <div className="col-span-4 space-y-1 font-mono text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <MailIcon className="size-3 text-muted-foreground" />
-                  {session.signerEmail || "No email"}
-                </div>
-                <div className="text-[10px] uppercase tracking-widest">
-                  Started {format(new Date(session.createdAt), "PP")}
-                </div>
-              </div>
-              <div className="col-span-2 font-mono text-[13px] text-foreground">
-                {session.status === "completed" ? "1" : "0"}
-              </div>
-              <div className="col-span-2 text-right">
-                <StatusBadge status={session.status} />
-              </div>
-              <div className="col-span-1 flex justify-end">
-                {onDeleteSigner ? (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-muted-foreground hover:bg-red-500/10 hover:text-red-300"
-                    aria-label={`Delete ${session.signerName || "signer"}`}
-                    onClick={() => onDeleteSigner(session)}
-                  >
-                    <Trash2Icon />
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
   )
 }
 
@@ -495,7 +376,7 @@ function FilterButton({
     <Button
       variant={tableFilter === value ? "secondary" : "ghost"}
       size="sm"
-      className="shrink-0 border-0"
+      className="shrink-0 border-0 rounded-none!"
       onClick={() => onSelect(value)}
     >
       {children}

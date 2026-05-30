@@ -24,9 +24,8 @@ import {
 import { toast } from "sonner";
 
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +35,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -56,7 +54,9 @@ import { authClient } from "@/lib/auth-client";
 import { saveLastWorkspaceId } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import {
+  setCurrentTeamId,
   setCurrentWorkspaceId,
+  useCurrentTeamId,
   useCurrentWorkspaceId,
 } from "@/lib/workspace-store";
 
@@ -66,28 +66,12 @@ type WorkspaceSummary = {
   slug: string;
 };
 
-type WorkspaceRole = "owner" | "admin" | "member" | string;
-
-type WorkspaceMember = {
+type TeamSummary = {
   id: string;
-  organizationId: string;
-  role: WorkspaceRole;
-  userId: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    image?: string;
-  };
-};
-
-type WorkspaceInvitation = {
-  id: string;
-  email: string;
-  role: WorkspaceRole;
-  status: string;
-  expiresAt: string;
-  createdAt: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  isDefault?: boolean;
 };
 
 async function fetchWorkspaceRequest<T>(path: string) {
@@ -101,37 +85,6 @@ async function fetchWorkspaceRequest<T>(path: string) {
   }
 
   return response.json() as Promise<T>;
-}
-
-function filterPendingInvitations(invitations: WorkspaceInvitation[]) {
-  return invitations.filter((invitation) => invitation.status === "pending");
-}
-
-async function loadWorkspaceAccessSnapshot(workspaceId: string) {
-  await authClient.$fetch("/organization/set-active", {
-    method: "POST",
-    body: { organizationId: workspaceId },
-  });
-
-  const [roleData, memberData, invitationData] = await Promise.all([
-    fetchWorkspaceRequest<{ role?: string }>(
-      "/api/auth/organization/get-active-member-role",
-    ),
-    fetchWorkspaceRequest<{ members: WorkspaceMember[] }>(
-      `/api/auth/organization/list-members?organizationId=${encodeURIComponent(workspaceId)}`,
-    ),
-    fetchWorkspaceRequest<WorkspaceInvitation[]>(
-      `/api/auth/organization/list-invitations?organizationId=${encodeURIComponent(workspaceId)}`,
-    ),
-  ]);
-
-  return {
-    role: roleData.role || "member",
-    members: memberData.members || [],
-    invitations: Array.isArray(invitationData)
-      ? filterPendingInvitations(invitationData)
-      : [],
-  };
 }
 
 type HrShellProps = {
@@ -400,9 +353,8 @@ function HrSidebar({
     ? activeView === "documents"
     : pathname.startsWith("/hr/documents");
   const isShared = activeView === "shared";
-  const isSigners = activeView === "signers";
+  const isSigners = activeView === "signers" || pathname.startsWith("/hr/signers");
   const isSigned = activeView === "signed" || pathname.startsWith("/hr/signed");
-  const isAdmin = activeView === "admin" || pathname.startsWith("/hr/admin");
 
   function showSharedActivity() {
     onSharedActivityClick();
@@ -414,7 +366,7 @@ function HrSidebar({
       return;
     }
 
-    onNavigate("/hr/documents?view=signers");
+    onNavigate("/hr/signers");
   }
 
   function showDocuments() {
@@ -481,13 +433,6 @@ function HrSidebar({
             <CheckCircle2Icon />
             <span className={cn(collapsed && "sr-only")}>Signed Docs</span>
           </SidebarMenuButton>
-          <SidebarMenuButton
-            active={isAdmin}
-            onClick={() => onNavigate("/hr/admin")}
-          >
-            <SettingsIcon />
-            <span className={cn(collapsed && "sr-only")}>Enterprise</span>
-          </SidebarMenuButton>
         </SidebarGroup>
         <div
           className={cn(
@@ -527,39 +472,34 @@ function HrSidebar({
 function AccountMenu({ collapsed }: { collapsed: boolean }) {
   const [open, setOpen] = React.useState(false);
   const [workspaceOpen, setWorkspaceOpen] = React.useState(false);
+  const [createWorkspaceOpen, setCreateWorkspaceOpen] = React.useState(false);
+  const [createTeamOpen, setCreateTeamOpen] = React.useState(false);
   const [confirmSignOutOpen, setConfirmSignOutOpen] = React.useState(false);
-  const [confirmDeleteWorkspaceOpen, setConfirmDeleteWorkspaceOpen] =
-    React.useState(false);
-  const [confirmDeleteAccountOpen, setConfirmDeleteAccountOpen] =
-    React.useState(false);
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = React.useState("");
-  const [activeRole, setActiveRole] = React.useState<WorkspaceRole>("member");
-  const [members, setMembers] = React.useState<WorkspaceMember[]>([]);
-  const [invitations, setInvitations] = React.useState<WorkspaceInvitation[]>(
-    [],
-  );
-  const [inviteEmail, setInviteEmail] = React.useState("");
-  const [inviteRole, setInviteRole] = React.useState<WorkspaceRole>("member");
-  const [workspaceDataLoading, setWorkspaceDataLoading] = React.useState(false);
-  const [workspaceBusy, setWorkspaceBusy] = React.useState<
-    "" | "creating" | "renaming" | "deleting"
-  >("");
-  const [memberBusyId, setMemberBusyId] = React.useState("");
-  const [invitationBusyId, setInvitationBusyId] = React.useState("");
+  const [newTeamName, setNewTeamName] = React.useState("");
+  const [workspaceBusy, setWorkspaceBusy] =
+    React.useState<"" | "creating">("");
+  const [teamBusy, setTeamBusy] = React.useState(false);
   const [workspaceTransitionVisible, setWorkspaceTransitionVisible] =
     React.useState(false);
-  const [optimisticWorkspaceNames, setOptimisticWorkspaceNames] =
-    React.useState<Record<string, { name: string; slug: string }>>({});
-  const [optimisticDeletedWorkspaceIds, setOptimisticDeletedWorkspaceIds] =
-    React.useState<string[]>([]);
+  const [optimisticWorkspaceNames] = React.useState<
+    Record<string, { name: string; slug: string }>
+  >({});
+  const [optimisticDeletedWorkspaceIds] = React.useState<string[]>([]);
   const [optimisticCreatedWorkspaces, setOptimisticCreatedWorkspaces] =
     React.useState<WorkspaceSummary[]>([]);
+  const [workspaceForTeams, setWorkspaceForTeams] = React.useState("");
+  const [workspaceTeams, setWorkspaceTeams] = React.useState<TeamSummary[]>([]);
+  const [workspaceTeamsById, setWorkspaceTeamsById] = React.useState<
+    Record<string, TeamSummary[]>
+  >({});
+  const [teamsLoading, setTeamsLoading] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { data: session } = authClient.useSession();
   const { data: authOrganizations } = authClient.useListOrganizations();
   const selectedWorkspaceId = useCurrentWorkspaceId();
+  const selectedTeamId = useCurrentTeamId();
   const workspaces = React.useMemo(
     () => (Array.isArray(authOrganizations) ? authOrganizations : []),
     [authOrganizations],
@@ -590,11 +530,26 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
   const userName = user?.name || "Signed in user";
   const userEmail = user?.email || "No email";
   const userInitials = getInitials(userName);
-  const canManageWorkspace = activeRole === "owner" || activeRole === "admin";
-  const canDeleteWorkspace = activeRole === "owner";
-  const inviteRoleOptions = canDeleteWorkspace
-    ? ["member", "admin", "owner"]
-    : ["member", "admin"];
+  const sessionWorkspaceId =
+    getSessionWorkspaceId(session) ||
+    getLastWorkspaceId(user) ||
+    workspaces[0]?.id ||
+    "";
+  const viewedWorkspaceId = workspaceForTeams || selectedWorkspaceId;
+  const viewedWorkspace =
+    workspaceItems.find((item) => item.id === viewedWorkspaceId) || null;
+
+  React.useEffect(() => {
+    if (!sessionWorkspaceId) return;
+    if (selectedWorkspaceId === sessionWorkspaceId) return;
+
+    const selectedWorkspaceIsKnown = workspaceItems.some(
+      (workspace) => workspace.id === selectedWorkspaceId,
+    );
+    if (selectedWorkspaceIsKnown) return;
+
+    setCurrentWorkspaceId(sessionWorkspaceId);
+  }, [selectedWorkspaceId, sessionWorkspaceId, workspaceItems]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -609,58 +564,6 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [open]);
-
-  async function loadWorkspaceData(workspaceId: string) {
-    setWorkspaceDataLoading(true);
-
-    try {
-      const data = await loadWorkspaceAccessSnapshot(workspaceId);
-      setActiveRole(data.role);
-      setMembers(data.members);
-      setInvitations(filterPendingInvitations(data.invitations));
-    } catch {
-      setActiveRole("member");
-      setMembers([]);
-      setInvitations([]);
-      toast.error("Unable to load workspace access details");
-    } finally {
-      setWorkspaceDataLoading(false);
-    }
-  }
-
-  React.useEffect(() => {
-    if (!settingsOpen || !selectedWorkspaceId) return;
-
-    let cancelled = false;
-
-    async function syncWorkspaceData() {
-      setWorkspaceDataLoading(true);
-
-      try {
-        const data = await loadWorkspaceAccessSnapshot(selectedWorkspaceId);
-        if (cancelled) return;
-        setActiveRole(data.role);
-        setMembers(data.members);
-        setInvitations(filterPendingInvitations(data.invitations));
-      } catch {
-        if (cancelled) return;
-        setActiveRole("member");
-        setMembers([]);
-        setInvitations([]);
-        toast.error("Unable to load workspace access details");
-      } finally {
-        if (!cancelled) {
-          setWorkspaceDataLoading(false);
-        }
-      }
-    }
-
-    syncWorkspaceData().catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedWorkspaceId, settingsOpen]);
 
   async function playWorkspaceTransition(task: () => Promise<void> | void) {
     setWorkspaceTransitionVisible(true);
@@ -679,7 +582,46 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
     }
   }
 
-  async function switchWorkspace(nextWorkspaceId: string) {
+  function sortTeams(teams: TeamSummary[]) {
+    return [...teams].sort((left, right) => {
+      if (left.isDefault) return -1;
+      if (right.isDefault) return 1;
+      return left.name.localeCompare(right.name);
+    });
+  }
+
+  async function loadWorkspaceTeams(
+    workspaceId: string,
+    options?: { force?: boolean },
+  ) {
+    const cachedTeams = workspaceTeamsById[workspaceId];
+    if (cachedTeams && !options?.force) {
+      setWorkspaceTeams(cachedTeams);
+      return cachedTeams;
+    }
+
+    setTeamsLoading(true);
+    try {
+      const data = await fetchWorkspaceRequest<{ teams?: TeamSummary[] }>(
+        `/api/teams?workspaceId=${encodeURIComponent(workspaceId)}&summary=1`,
+      );
+      const teams = sortTeams(Array.isArray(data.teams) ? data.teams : []);
+      setWorkspaceTeams(teams);
+      setWorkspaceTeamsById((current) => ({
+        ...current,
+        [workspaceId]: teams,
+      }));
+      return teams;
+    } catch {
+      toast.error("Unable to load teams");
+      setWorkspaceTeams([]);
+      return [];
+    } finally {
+      setTeamsLoading(false);
+    }
+  }
+
+  async function switchWorkspace(nextWorkspaceId: string, nextTeamId?: string) {
     await playWorkspaceTransition(async () => {
       setCurrentWorkspaceId(nextWorkspaceId);
       await Promise.allSettled([
@@ -689,6 +631,21 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         }),
         saveLastWorkspaceId(nextWorkspaceId),
       ]);
+
+      let resolvedTeamId = nextTeamId;
+      if (!resolvedTeamId) {
+        const data = await fetchWorkspaceRequest<{ teams?: TeamSummary[] }>(
+          `/api/teams?workspaceId=${encodeURIComponent(nextWorkspaceId)}&summary=1`,
+        );
+        const teams = sortTeams(Array.isArray(data.teams) ? data.teams : []);
+        setWorkspaceTeamsById((current) => ({
+          ...current,
+          [nextWorkspaceId]: teams,
+        }));
+        resolvedTeamId =
+          teams.find((team) => team.isDefault)?.id || teams[0]?.id || "";
+      }
+      setCurrentTeamId(resolvedTeamId || "");
     });
   }
 
@@ -715,9 +672,14 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
             slug: organization.data.slug,
           },
         ]);
-        await switchWorkspace(organization.data.id);
+        const createdTeams = await loadWorkspaceTeams(organization.data.id);
+        const defaultTeamId =
+          createdTeams.find((team) => team.isDefault)?.id || createdTeams[0]?.id;
+        await switchWorkspace(organization.data.id, defaultTeamId);
+        setWorkspaceForTeams(organization.data.id);
       }
       toast.success("Workspace created");
+      setCreateWorkspaceOpen(false);
     } catch {
       toast.error("Sign in before creating a workspace");
     } finally {
@@ -727,226 +689,45 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
     setNewWorkspaceName("");
   }
 
-  async function deleteWorkspace(workspaceId: string) {
-    const currentWorkspace = workspaceItems.find(
-      (item) => item.id === workspaceId,
-    );
-    const fallbackWorkspace =
-      workspaceItems.find((item) => item.id !== workspaceId)?.id || "";
-
-    try {
-      setWorkspaceBusy("deleting");
-      setOptimisticDeletedWorkspaceIds((current) => [
-        ...new Set([...current, workspaceId]),
-      ]);
-      await authClient.$fetch("/organization/delete", {
-        method: "POST",
-        body: { organizationId: workspaceId },
-      });
-      if (workspaceId === selectedWorkspaceId) {
-        setCurrentWorkspaceId(fallbackWorkspace);
-        if (fallbackWorkspace) {
-          await switchWorkspace(fallbackWorkspace);
-        } else {
-          await saveLastWorkspaceId(null);
-        }
-      }
-      setConfirmDeleteWorkspaceOpen(false);
-      setSettingsOpen(Boolean(fallbackWorkspace));
-      toast.success("Workspace deleted");
-    } catch {
-      if (currentWorkspace) {
-        setOptimisticDeletedWorkspaceIds((current) =>
-          current.filter((item) => item !== currentWorkspace.id),
-        );
-      }
-      toast.error("Unable to delete workspace");
-    } finally {
-      setWorkspaceBusy("");
-    }
+  async function handleWorkspaceClick(workspaceId: string) {
+    setWorkspaceForTeams(workspaceId);
+    void loadWorkspaceTeams(workspaceId);
   }
 
-  async function updateProfile(event: React.FormEvent<HTMLFormElement>) {
+  async function createTeam(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const name = String(formData.get("name") || "").trim();
-    const image = String(formData.get("image") || "").trim();
+    const name = newTeamName.trim();
+    if (!viewedWorkspaceId || !name) return;
 
     try {
-      await authClient.updateUser({
-        name,
-        image: image || null,
-      });
-      toast.success("Profile updated");
-    } catch {
-      toast.error("Unable to update profile");
-    }
-  }
-
-  async function renameWorkspace(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const name = String(formData.get("workspaceName") || "").trim();
-    if (!selectedWorkspaceId || !name || !activeWorkspace) return;
-
-    try {
-      setWorkspaceBusy("renaming");
-      const slug = name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "");
-      setOptimisticWorkspaceNames((current) => ({
-        ...current,
-        [selectedWorkspaceId]: { name, slug },
-      }));
-      await authClient.$fetch("/organization/update", {
+      setTeamBusy(true);
+      const response = await fetch("/api/teams", {
         method: "POST",
-        body: {
-          organizationId: selectedWorkspaceId,
-          data: {
-            name,
-            slug,
-          },
-        },
+        body: JSON.stringify({
+          workspaceId: viewedWorkspaceId,
+          name,
+        }),
       });
-      router.refresh();
-      toast.success("Workspace renamed");
-    } catch {
-      setOptimisticWorkspaceNames((current) => {
-        const next = { ...current };
-        delete next[selectedWorkspaceId];
-        return next;
-      });
-      toast.error("Unable to rename workspace");
-    } finally {
-      setWorkspaceBusy("");
-    }
-  }
-
-  async function deleteAccount() {
-    try {
-      await authClient.deleteUser({
-        callbackURL: "/signin",
-      });
-      setConfirmDeleteAccountOpen(false);
-      setSettingsOpen(false);
-      setCurrentWorkspaceId("");
-      router.push("/signin");
-    } catch {
-      toast.error("Unable to delete account");
-    }
-  }
-
-  async function inviteMember(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedWorkspaceId || !inviteEmail.trim()) return;
-
-    try {
-      await authClient.$fetch("/organization/invite-member", {
-        method: "POST",
-        body: {
-          email: inviteEmail.trim(),
-          role: inviteRole,
-          organizationId: selectedWorkspaceId,
-        },
-      });
-      setInviteEmail("");
-      setInviteRole("member");
-      await loadWorkspaceData(selectedWorkspaceId);
-      toast.success("Invitation sent");
-    } catch {
-      toast.error("Unable to invite this member");
-    }
-  }
-
-  async function cancelInvitation(invitationId: string) {
-    if (!selectedWorkspaceId) return;
-
-    const snapshot = invitations;
-
-    try {
-      setInvitationBusyId(invitationId);
-      setInvitations((current) =>
-        current.filter((item) => item.id !== invitationId),
-      );
-      await authClient.$fetch("/organization/cancel-invitation", {
-        method: "POST",
-        body: { invitationId },
-      });
-      toast.success("Invitation cancelled");
-    } catch {
-      setInvitations(snapshot);
-      toast.error("Unable to cancel invitation");
-    } finally {
-      setInvitationBusyId("");
-    }
-  }
-
-  async function updateMemberRole(
-    member: WorkspaceMember,
-    role: WorkspaceRole,
-  ) {
-    if (!selectedWorkspaceId) return;
-    const snapshot = members;
-
-    try {
-      setMemberBusyId(member.id);
-      setMembers((current) =>
-        current.map((item) =>
-          item.id === member.id ? { ...item, role } : item,
-        ),
-      );
-      await authClient.$fetch("/organization/update-member-role", {
-        method: "POST",
-        body: {
-          memberId: member.id,
-          role,
-          organizationId: selectedWorkspaceId,
-        },
-      });
-      if (member.userId === user?.id) {
-        setActiveRole(role);
+      const data = (await response.json()) as { id?: string; error?: string };
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to create team");
       }
-      toast.success(
-        role === "owner" ? "Ownership transferred" : "Member role updated",
+
+      const teams = await loadWorkspaceTeams(viewedWorkspaceId, { force: true });
+      const createdTeamId = data.id || teams.find((team) => team.name === name)?.id;
+      if (createdTeamId) {
+        await switchWorkspace(viewedWorkspaceId, createdTeamId);
+      }
+      setNewTeamName("");
+      toast.success("Team created");
+      setCreateTeamOpen(false);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to create team",
       );
-      await loadWorkspaceData(selectedWorkspaceId);
-    } catch {
-      setMembers(snapshot);
-      toast.error("Unable to update role");
     } finally {
-      setMemberBusyId("");
+      setTeamBusy(false);
     }
-  }
-
-  async function removeMember(member: WorkspaceMember) {
-    if (!selectedWorkspaceId) return;
-    const snapshot = members;
-
-    try {
-      setMemberBusyId(member.id);
-      setMembers((current) => current.filter((item) => item.id !== member.id));
-      await authClient.$fetch("/organization/remove-member", {
-        method: "POST",
-        body: {
-          memberIdOrEmail: member.id,
-          organizationId: selectedWorkspaceId,
-        },
-      });
-      toast.success("Member removed");
-    } catch {
-      setMembers(snapshot);
-      toast.error("Unable to remove member");
-    } finally {
-      setMemberBusyId("");
-    }
-  }
-
-  function canManageMember(member: WorkspaceMember) {
-    if (member.userId === user?.id) return false;
-    if (activeRole === "owner") return true;
-    if (activeRole === "admin") return member.role === "member";
-    return false;
   }
 
   return (
@@ -960,6 +741,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         aria-expanded={open}
       >
         <Avatar className="size-8 rounded-none">
+          <AvatarImage src={user?.image || undefined} alt={userName} className="rounded-none" />
           <AvatarFallback className="rounded-none bg-sidebar-primary font-mono text-[10px] text-sidebar-primary-foreground">
             {userInitials}
           </AvatarFallback>
@@ -988,23 +770,57 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
               </p>
             </div>
 
-            <button
-              className="mt-2 flex h-8 w-full items-center gap-2 border-b border-border px-2 pb-2 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => setWorkspaceOpen((current) => !current)}
-              aria-expanded={workspaceOpen}
+            <div className="mt-2 border-b border-border pb-2">
+              <p className="px-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Workspaces
+              </p>
+              <div className="mt-2 flex max-h-44 flex-col overflow-auto">
+                {workspaceItems.map((item) => (
+                  <button
+                    key={item.id}
+                    className={cn(
+                      "flex h-8 w-full items-center gap-2 px-2 text-left font-mono text-[10px] uppercase tracking-widest transition-colors hover:bg-muted hover:text-foreground",
+                      item.id === selectedWorkspaceId
+                        ? "text-foreground"
+                        : "text-muted-foreground",
+                    )}
+                      onClick={() => {
+                        setWorkspaceOpen(true);
+                        void handleWorkspaceClick(item.id);
+                    }}
+                  >
+                    <Building2Icon className="size-3.5" />
+                    <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                    {item.id === selectedWorkspaceId ? (
+                      <CheckIcon className="size-3.5 text-emerald-400" />
+                    ) : null}
+                    <ChevronRightIcon className="size-3.5" />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Button
+              size="sm"
+              className="mt-2 w-full justify-start gap-2"
+              type="button"
+              onClick={() => setCreateWorkspaceOpen(true)}
             >
-              <Building2Icon className="size-3.5" />
-              <span className="min-w-0 flex-1 truncate">Workspace</span>
-              <ChevronRightIcon className="size-3.5" />
-            </button>
+              <PlusIcon data-icon="inline-start" />
+              Create Workspace
+            </Button>
 
             <ThemeToggle
               showLabel
-              className="mt-1 h-8 w-full justify-start border-0 px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="mt-2 h-8 w-full justify-start border-0 px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
             />
             <button
               className="flex h-8 w-full items-center gap-2 px-2 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => {
+                setOpen(false);
+                setWorkspaceOpen(false);
+                router.push("/hr/settings");
+              }}
             >
               <SettingsIcon className="size-3.5" />
               Settings
@@ -1020,15 +836,14 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
       </AnimatePresence>
 
       <AnimatePresence>
-        {open && workspaceOpen ? (
-          <WorkspacePopover
-            activeWorkspaceId={selectedWorkspaceId}
-            workspaces={workspaceItems}
-            newWorkspaceName={newWorkspaceName}
-            onNewWorkspaceNameChange={setNewWorkspaceName}
-            onCreateWorkspace={createWorkspace}
-            onSelectWorkspace={switchWorkspace}
-            creating={workspaceBusy === "creating"}
+        {open && workspaceOpen && viewedWorkspace ? (
+          <TeamPopover
+            workspace={viewedWorkspace}
+            teams={workspaceTeams}
+            selectedTeamId={selectedWorkspaceId === viewedWorkspace.id ? selectedTeamId : ""}
+            loading={teamsLoading}
+            onCreateTeamClick={() => setCreateTeamOpen(true)}
+            onSelectTeam={(teamId) => switchWorkspace(viewedWorkspace.id, teamId)}
           />
         ) : null}
       </AnimatePresence>
@@ -1067,416 +882,69 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={confirmDeleteAccountOpen}
-        onOpenChange={setConfirmDeleteAccountOpen}
-      >
+      <Dialog open={createWorkspaceOpen} onOpenChange={setCreateWorkspaceOpen}>
         <DialogContent className="rounded-none border-border bg-popover shadow-sm">
           <DialogHeader>
             <DialogTitle className="font-mono text-xs uppercase tracking-widest">
-              Delete account?
+              Create workspace
             </DialogTitle>
             <DialogDescription>
-              This permanently removes your SleekSign account. Workspace
-              documents may remain until workspace owners remove them.
+              Start a new workspace and provision its default General team.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="rounded-none border-border">
-            <Button
-              variant="outline"
-              onClick={() => setConfirmDeleteAccountOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={deleteAccount}>
-              Delete Account
-            </Button>
-          </DialogFooter>
+          <form className="grid gap-4" onSubmit={createWorkspace}>
+            <Input
+              value={newWorkspaceName}
+              onChange={(event) => setNewWorkspaceName(event.target.value)}
+              placeholder="Workspace name"
+              className="h-9"
+            />
+            <DialogFooter className="rounded-none border-border">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateWorkspaceOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={workspaceBusy === "creating"}>
+                {workspaceBusy === "creating" ? "Creating..." : "Create Workspace"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={confirmDeleteWorkspaceOpen}
-        onOpenChange={setConfirmDeleteWorkspaceOpen}
-      >
+      <Dialog open={createTeamOpen} onOpenChange={setCreateTeamOpen}>
         <DialogContent className="rounded-none border-border bg-popover shadow-sm">
           <DialogHeader>
             <DialogTitle className="font-mono text-xs uppercase tracking-widest">
-              Delete workspace?
+              Create team
             </DialogTitle>
             <DialogDescription>
-              This removes {activeWorkspace?.name || "this workspace"} and its
-              team access from your workspace list.
+              Add a team inside {viewedWorkspace?.name || "this workspace"}.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="rounded-none border-border">
-            <Button
-              variant="outline"
-              onClick={() => setConfirmDeleteWorkspaceOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={!selectedWorkspaceId || workspaceBusy === "deleting"}
-              onClick={() =>
-                selectedWorkspaceId && deleteWorkspace(selectedWorkspaceId)
-              }
-            >
-              Delete Workspace
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="rounded-none border-border bg-popover p-0 shadow-sm sm:max-w-3xl">
-          <div className="grid max-h-[82vh] overflow-hidden sm:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="border-b border-border bg-secondary p-5 sm:border-b-0 sm:border-r">
-              <DialogHeader>
-                <DialogTitle className="font-mono text-xs uppercase tracking-widest">
-                  Settings
-                </DialogTitle>
-                <DialogDescription className="text-sm">
-                  Manage your profile, workspace, and interface preferences.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="mt-5 flex items-center gap-3">
-                <Avatar className="size-9 rounded-none">
-                  <AvatarFallback className="rounded-none bg-sidebar-primary font-mono text-[10px] text-sidebar-primary-foreground">
-                    {userInitials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{userName}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {userEmail}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="overflow-auto p-5">
-              <section className="border border-border bg-background p-4">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  User Profile
-                </p>
-                <form className="mt-3 grid gap-3" onSubmit={updateProfile}>
-                  <label className="grid gap-1.5">
-                    <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Name
-                    </span>
-                    <Input
-                      name="name"
-                      defaultValue={user?.name || ""}
-                      placeholder="Your name"
-                    />
-                  </label>
-                  <label className="grid gap-1.5">
-                    <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Avatar URL
-                    </span>
-                    <Input
-                      name="image"
-                      defaultValue={user?.image || ""}
-                      placeholder="https://..."
-                    />
-                  </label>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm text-muted-foreground">
-                      {userEmail}
-                    </p>
-                    <Button type="submit" size="sm">
-                      Save Profile
-                    </Button>
-                  </div>
-                </form>
-              </section>
-
-              <section className="border border-border bg-background p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Appearance
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Keep the workspace comfortable for review sessions.
-                    </p>
-                  </div>
-                  <ThemeToggle showLabel className="justify-start" />
-                </div>
-              </section>
-
-              <section className="mt-4 border border-border bg-background p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Workspace Management
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      The active workspace controls which documents, members,
-                      and invitations you can manage.
-                    </p>
-                  </div>
-                  {activeWorkspace ? (
-                    <Badge variant="outline">{activeRole}</Badge>
-                  ) : null}
-                </div>
-
-                <div className="mt-3 grid gap-2">
-                  {workspaceItems.length === 0 ? (
-                    <div className="border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      No workspaces yet. Create one from the account workspace
-                      menu.
-                    </div>
-                  ) : (
-                    workspaceItems.map((item) => (
-                      <button
-                        key={item.id}
-                        className={cn(
-                          "flex items-center gap-2 border border-border px-3 py-2 text-left transition-colors hover:bg-muted/60",
-                          item.id === selectedWorkspaceId && "bg-secondary",
-                        )}
-                        onClick={() => {
-                          void switchWorkspace(item.id);
-                        }}
-                      >
-                        <Building2Icon className="size-3.5 text-muted-foreground" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">
-                            {item.name}
-                          </p>
-                          <p className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                            {item.slug}
-                          </p>
-                        </div>
-                        {item.id === selectedWorkspaceId ? (
-                          <CheckIcon className="size-3.5 text-emerald-400" />
-                        ) : null}
-                      </button>
-                    ))
-                  )}
-                </div>
-
-                {activeWorkspace ? (
-                  <form
-                    className="mt-4 grid gap-3 border border-border bg-secondary p-3"
-                    onSubmit={renameWorkspace}
-                  >
-                    <label className="grid gap-1.5">
-                      <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                        Active Workspace
-                      </span>
-                      <Input
-                        key={selectedWorkspaceId}
-                        name="workspaceName"
-                        defaultValue={activeWorkspace.name}
-                        placeholder="Workspace name"
-                        disabled={
-                          !canManageWorkspace || workspaceBusy === "renaming"
-                        }
-                      />
-                    </label>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs text-muted-foreground">
-                        {canManageWorkspace
-                          ? "Owners and admins can rename this workspace."
-                          : "Only owners and admins can rename this workspace."}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="submit"
-                          size="sm"
-                          disabled={
-                            !canManageWorkspace || workspaceBusy === "renaming"
-                          }
-                        >
-                          Save Workspace
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={!canDeleteWorkspace}
-                          onClick={() => setConfirmDeleteWorkspaceOpen(true)}
-                        >
-                          Delete Workspace
-                        </Button>
-                      </div>
-                    </div>
-                  </form>
-                ) : null}
-              </section>
-
-              <section className="mt-4 border border-border bg-background p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Workspace Members
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Owners can transfer ownership. Admins can manage members.
-                      Members can review access.
-                    </p>
-                  </div>
-                  {workspaceDataLoading ? (
-                    <Badge variant="secondary">Syncing</Badge>
-                  ) : null}
-                </div>
-
-                <form
-                  className="mt-3 grid gap-2 border border-border bg-secondary p-3 sm:grid-cols-[minmax(0,1fr)_120px_auto]"
-                  onSubmit={inviteMember}
-                >
-                  <Input
-                    value={inviteEmail}
-                    onChange={(event) => setInviteEmail(event.target.value)}
-                    placeholder="Invite by email"
-                    disabled={!canManageWorkspace || !selectedWorkspaceId}
-                  />
-                  <Select
-                    value={inviteRole}
-                    onChange={(event) => setInviteRole(event.target.value)}
-                    disabled={!canManageWorkspace || !selectedWorkspaceId}
-                  >
-                    {inviteRoleOptions.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </Select>
-                  <Button
-                    type="submit"
-                    disabled={!canManageWorkspace || !selectedWorkspaceId}
-                  >
-                    Invite
-                  </Button>
-                </form>
-
-                <div className="mt-3 grid gap-2">
-                  {members.length === 0 ? (
-                    <div className="border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      No workspace members yet.
-                    </div>
-                  ) : (
-                    members.map((member) => (
-                      <div
-                        key={member.id}
-                        className="grid gap-3 border border-border px-3 py-3 sm:grid-cols-[minmax(0,1fr)_110px_auto] sm:items-center"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {member.user.name}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {member.user.email}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="justify-center">
-                          {member.role}
-                        </Badge>
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                          {canManageMember(member) ? (
-                            <>
-                              <Select
-                                className="w-[112px]"
-                                value={member.role}
-                                disabled={memberBusyId === member.id}
-                                onChange={(event) =>
-                                  updateMemberRole(member, event.target.value)
-                                }
-                              >
-                                <option value="member">member</option>
-                                <option value="admin">admin</option>
-                                {canDeleteWorkspace ? (
-                                  <option value="owner">owner</option>
-                                ) : null}
-                              </Select>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-muted-foreground hover:bg-red-500/10 hover:text-red-300"
-                                disabled={memberBusyId === member.id}
-                                onClick={() => removeMember(member)}
-                              >
-                                Remove
-                              </Button>
-                            </>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              {member.userId === user?.id ? "You" : "Read only"}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-
-              <section className="mt-4 border border-border bg-background p-4">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Pending Invitations
-                </p>
-                <div className="mt-3 grid gap-2">
-                  {invitations.length === 0 ? (
-                    <div className="border border-dashed border-border p-4 text-sm text-muted-foreground">
-                      No pending invitations for this workspace.
-                    </div>
-                  ) : (
-                    invitations.map((invitation) => (
-                      <div
-                        key={invitation.id}
-                        className="grid gap-2 border border-border px-3 py-3 sm:grid-cols-[minmax(0,1fr)_100px_auto] sm:items-center"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {invitation.email}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Status: {invitation.status}
-                          </p>
-                        </div>
-                        <Badge variant="outline" className="justify-center">
-                          {invitation.role}
-                        </Badge>
-                        <div className="flex justify-end">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={
-                              !canManageWorkspace ||
-                              invitationBusyId === invitation.id
-                            }
-                            onClick={() => cancelInvitation(invitation.id)}
-                          >
-                            Cancel Invite
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-
-              <section className="mt-4 border border-red-500/30 bg-red-500/5 p-4">
-                <p className="font-mono text-[10px] uppercase tracking-widest text-red-300">
-                  Danger Zone
-                </p>
-                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    Delete your account and end your current session.
-                  </p>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setConfirmDeleteAccountOpen(true)}
-                  >
-                    Delete Account
-                  </Button>
-                </div>
-              </section>
-            </div>
-          </div>
+          <form className="grid gap-4" onSubmit={createTeam}>
+            <Input
+              value={newTeamName}
+              onChange={(event) => setNewTeamName(event.target.value)}
+              placeholder="Team name"
+              className="h-9"
+            />
+            <DialogFooter className="rounded-none border-border">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateTeamOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={teamBusy}>
+                {teamBusy ? "Creating..." : "Create Team"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -1501,27 +969,21 @@ function WorkspaceTransitionOverlay() {
   );
 }
 
-function WorkspacePopover({
-  activeWorkspaceId,
-  workspaces,
-  newWorkspaceName,
-  onNewWorkspaceNameChange,
-  onCreateWorkspace,
-  onSelectWorkspace,
-  creating,
+function TeamPopover({
+  workspace,
+  teams,
+  selectedTeamId,
+  loading,
+  onCreateTeamClick,
+  onSelectTeam,
 }: {
-  activeWorkspaceId: string;
-  workspaces: Array<{ id: string; name: string; slug: string }>;
-  newWorkspaceName: string;
-  onNewWorkspaceNameChange: (value: string) => void;
-  onCreateWorkspace: (event: React.FormEvent<HTMLFormElement>) => void;
-  onSelectWorkspace: (workspaceId: string) => void;
-  creating: boolean;
+  workspace: WorkspaceSummary;
+  teams: TeamSummary[];
+  selectedTeamId: string;
+  loading: boolean;
+  onCreateTeamClick: () => void;
+  onSelectTeam: (teamId: string) => void;
 }) {
-  const activeWorkspace = workspaces.find(
-    (item) => item.id === activeWorkspaceId,
-  );
-
   return (
     <motion.div
       initial={{ opacity: 0, x: -8, scale: 0.98 }}
@@ -1532,28 +994,33 @@ function WorkspacePopover({
     >
       <div className="border-b border-border px-2 py-2">
         <p className="font-mono text-[10px] font-semibold uppercase tracking-widest">
-          Switch workspace
+          Teams
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          {activeWorkspace?.name || "No workspace selected"}
+          {workspace.name}
         </p>
       </div>
 
       <div className="max-h-52 overflow-auto py-2">
-        {workspaces.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center gap-2 px-2 py-4 text-sm text-muted-foreground">
+            <LoaderCircleIcon className="size-4 animate-spin" />
+            Loading teams...
+          </div>
+        ) : teams.length === 0 ? (
           <div className="px-2 py-4 text-sm text-muted-foreground">
-            No workspaces yet.
+            No teams yet.
           </div>
         ) : (
-          workspaces.map((item) => (
+          teams.map((team) => (
             <button
-              key={item.id}
+              key={team.id}
               className="flex h-9 w-full items-center gap-2 px-2 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => onSelectWorkspace(item.id)}
+              onClick={() => onSelectTeam(team.id)}
             >
-              <Building2Icon className="size-3.5" />
-              <span className="min-w-0 flex-1 truncate">{item.name}</span>
-              {activeWorkspaceId === item.id ? (
+              <UsersIcon className="size-3.5" />
+              <span className="min-w-0 flex-1 truncate">{team.name}</span>
+              {selectedTeamId === team.id ? (
                 <CheckIcon className="size-3.5 text-emerald-400" />
               ) : null}
             </button>
@@ -1561,26 +1028,17 @@ function WorkspacePopover({
         )}
       </div>
 
-      <form
-        className="grid gap-2 border-t border-border pt-2"
-        onSubmit={onCreateWorkspace}
-      >
-        <Input
-          value={newWorkspaceName}
-          onChange={(event) => onNewWorkspaceNameChange(event.target.value)}
-          placeholder="New workspace"
-          className="h-8"
-        />
+      <div className="border-t border-border pt-2">
         <Button
           size="sm"
-          className="justify-start gap-2"
-          type="submit"
-          disabled={creating}
+          className="w-full justify-start gap-2"
+          type="button"
+          onClick={onCreateTeamClick}
         >
           <PlusIcon data-icon="inline-start" />
-          Create Workspace
+          Create Team
         </Button>
-      </form>
+      </div>
     </motion.div>
   );
 }
@@ -1594,6 +1052,20 @@ function getInitials(name: string) {
       .map((part) => part[0]?.toUpperCase())
       .join("") || "U"
   );
+}
+
+function getLastWorkspaceId(user: unknown) {
+  if (!user || typeof user !== "object") return "";
+  const value = (user as { lastWorkspaceId?: unknown }).lastWorkspaceId;
+  return typeof value === "string" ? value : "";
+}
+
+function getSessionWorkspaceId(session: unknown) {
+  if (!session || typeof session !== "object") return "";
+  const value = (
+    session as { session?: { activeOrganizationId?: unknown } }
+  ).session?.activeOrganizationId;
+  return typeof value === "string" ? value : "";
 }
 
 function StatusLine({

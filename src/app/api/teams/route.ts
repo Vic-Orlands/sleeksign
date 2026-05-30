@@ -19,8 +19,21 @@ import { AccessError, requireWorkspaceAccess } from "@/lib/server-access";
 
 export async function GET(req: NextRequest) {
   try {
-    const workspaceId = new URL(req.url).searchParams.get("workspaceId") || "";
+    const searchParams = new URL(req.url).searchParams;
+    const workspaceId = searchParams.get("workspaceId") || "";
+    const summaryOnly = searchParams.get("summary") === "1";
     const access = await requireWorkspaceAccess(req.headers, workspaceId, "read");
+
+    if (summaryOnly) {
+      const teamRows = await db.query.teams.findMany({
+        where: eq(teams.organizationId, access.workspaceId),
+      });
+
+      return NextResponse.json({
+        teams: teamRows,
+        permissions: Array.from(access.permissions),
+      });
+    }
 
     const [teamRows, teamMemberships, members, roles, assignments, rolePermissions] =
       await Promise.all([
@@ -108,16 +121,30 @@ export async function POST(req: NextRequest) {
     }
 
     const access = await requireWorkspaceAccess(req.headers, workspaceId, "teams:manage");
+    const normalizedName = name.trim();
+    const normalizedSlug = normalizedName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+    const existingTeams = await db.query.teams.findMany({
+      where: eq(teams.organizationId, workspaceId),
+    });
+
+    if (
+      normalizedSlug === "general" ||
+      existingTeams.some((team) => team.slug === normalizedSlug)
+    ) {
+      return NextResponse.json(
+        { error: "That team already exists in this workspace" },
+        { status: 409 },
+      );
+    }
     const id = nanoid();
     await db.insert(teams).values({
       id,
       organizationId: workspaceId,
-      name: name.trim(),
-      slug: name
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, ""),
+      name: normalizedName,
+      slug: normalizedSlug,
       description: description?.trim() || null,
     });
 
@@ -128,7 +155,7 @@ export async function POST(req: NextRequest) {
       actorId: access.membership.userId,
       eventType: "team.created",
       chainKey: `workspace:${workspaceId}`,
-      payload: { teamId: id, name: name.trim() },
+      payload: { teamId: id, name: normalizedName },
       ...getRequestAuditContext(req.headers),
     });
 

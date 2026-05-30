@@ -42,10 +42,18 @@ export function PdfCanvasViewer({
 }: PdfCanvasViewerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const onDocumentLoadRef = useRef(onDocumentLoad);
-  const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
-  const [pageCount, setPageCount] = useState(0);
+  const [documentState, setDocumentState] = useState<{
+    fileUrl: string;
+    pdf: PDFDocumentProxy | null;
+    pageCount: number;
+    error: string | null;
+  }>({
+    fileUrl: "",
+    pdf: null,
+    pageCount: 0,
+    error: null,
+  });
   const [hostWidth, setHostWidth] = useState(maxPageWidth);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -70,12 +78,23 @@ export function PdfCanvasViewer({
     task.promise
       .then((doc) => {
         if (cancelled) return;
-        setPdf(doc);
-        setPageCount(doc.numPages);
+        setDocumentState({
+          fileUrl,
+          pdf: doc,
+          pageCount: doc.numPages,
+          error: null,
+        });
         onDocumentLoadRef.current?.(doc.numPages);
       })
       .catch(() => {
-        if (!cancelled) setError("Unable to load this PDF.");
+        if (!cancelled) {
+          setDocumentState({
+            fileUrl,
+            pdf: null,
+            pageCount: 0,
+            error: "Unable to load this PDF.",
+          });
+        }
       });
 
     return () => {
@@ -83,6 +102,10 @@ export function PdfCanvasViewer({
       task.destroy();
     };
   }, [fileUrl]);
+
+  const pdf = documentState.fileUrl === fileUrl ? documentState.pdf : null;
+  const pageCount = documentState.fileUrl === fileUrl ? documentState.pageCount : 0;
+  const error = documentState.fileUrl === fileUrl ? documentState.error : null;
 
   const pages = useMemo(
     () => Array.from({ length: pageCount }, (_, index) => index),
@@ -139,18 +162,69 @@ function PdfPageCanvas({
   const pageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [metrics, setMetrics] = useState<PageMetrics | null>(null);
+  const [shouldRender, setShouldRender] = useState(pageIndex === 0);
 
   useEffect(() => {
     let cancelled = false;
-    let renderTask: RenderTask | null = null;
 
-    async function renderPage() {
+    async function loadMetrics() {
       const page: PDFPageProxy = await pdf.getPage(pageIndex + 1);
       if (cancelled) return;
 
       const baseViewport = page.getViewport({ scale: 1 });
       const scale = targetWidth / baseViewport.width;
       const viewport = page.getViewport({ scale });
+      setMetrics({
+        width: viewport.width,
+        height: viewport.height,
+        scale,
+      });
+    }
+
+    void loadMetrics();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pdf, pageIndex, targetWidth]);
+
+  useEffect(() => {
+    const node = pageRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setShouldRender(true);
+          }
+          if (entry.intersectionRatio >= 0.55) {
+            onVisiblePageChange?.(pageIndex);
+          }
+        }
+      },
+      {
+        rootMargin: "1200px 0px",
+        threshold: [0, 0.55],
+      },
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [onVisiblePageChange, pageIndex]);
+
+  useEffect(() => {
+    if (!metrics || !shouldRender) return;
+
+    let cancelled = false;
+    let renderTask: RenderTask | null = null;
+    const nextMetrics = metrics;
+
+    async function renderPage() {
+      const page: PDFPageProxy = await pdf.getPage(pageIndex + 1);
+      if (cancelled) return;
+
+      const viewport = page.getViewport({ scale: nextMetrics.scale });
       const canvas = canvasRef.current;
       const context = canvas?.getContext("2d");
       if (!canvas || !context) return;
@@ -164,44 +238,15 @@ function PdfPageCanvas({
 
       renderTask = page.render({ canvasContext: context, viewport });
       await renderTask.promise;
-
-      if (!cancelled) {
-        setMetrics({
-          width: viewport.width,
-          height: viewport.height,
-          scale,
-        });
-      }
     }
 
-    renderPage();
+    void renderPage();
 
     return () => {
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [pdf, pageIndex, targetWidth]);
-
-  useEffect(() => {
-    const node = pageRef.current;
-    if (!node || !onVisiblePageChange) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            onVisiblePageChange(pageIndex);
-          }
-        }
-      },
-      {
-        threshold: 0.55,
-      },
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [onVisiblePageChange, pageIndex]);
+  }, [metrics, pageIndex, pdf, shouldRender]);
 
   return (
     <div
@@ -210,11 +255,16 @@ function PdfPageCanvas({
       data-pdf-page={pageIndex}
       style={{
         width: metrics?.width ?? targetWidth,
-        height: metrics?.height,
+        height: metrics?.height ?? Math.max(targetWidth * 1.3, 420),
       }}
     >
       <canvas ref={canvasRef} className="block bg-white" />
-      {metrics ? (
+      {!shouldRender ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/65 text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+        </div>
+      ) : null}
+      {metrics && shouldRender ? (
         <div
           className="absolute inset-0"
           onClick={(event) => {

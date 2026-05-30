@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   NetworkIcon,
@@ -14,6 +14,13 @@ import { PacketModelShowcase } from "@/components/marketing/packet-model-showcas
 
 export default function LandingPage() {
   const [activeGalleryTab, setActiveGalleryTab] = useState(0);
+
+  useEffect(() => {
+    document.body.classList.add("landing-page");
+    return () => {
+      document.body.classList.remove("landing-page");
+    };
+  }, []);
 
   const galleryItems = [
     {

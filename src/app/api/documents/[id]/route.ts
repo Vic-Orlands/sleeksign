@@ -84,9 +84,22 @@ export async function POST(
   try {
     const { id } = await params;
     const access = await requireDocumentAccess(req.headers, id, "manage");
-    const { type, page, x, y, width, height, required, assigneeRole } =
+    const {
+      id: requestedFieldId,
+      type,
+      page,
+      x,
+      y,
+      width,
+      height,
+      required,
+      assigneeRole,
+    } =
       await req.json();
-    const fieldId = nanoid();
+    const fieldId =
+      typeof requestedFieldId === "string" && requestedFieldId.trim()
+        ? requestedFieldId
+        : nanoid();
 
     await db.insert(fields).values({
       id: fieldId,

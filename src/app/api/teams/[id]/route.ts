@@ -35,11 +35,19 @@ export async function PATCH(
       return NextResponse.json({ error: "Team not found" }, { status: 404 });
     }
 
+    const nextName = name?.trim() || team.name;
+    if (team.isDefault && nextName.toLowerCase() !== "general") {
+      return NextResponse.json(
+        { error: "The default General team cannot be renamed" },
+        { status: 400 },
+      );
+    }
+
     await db
       .update(teams)
       .set({
-        name: name?.trim() || team.name,
-        slug: (name?.trim() || team.name)
+        name: nextName,
+        slug: nextName
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/(^-|-$)/g, ""),
@@ -87,7 +95,7 @@ export async function PATCH(
       actorId: access.membership.userId,
       eventType: "team.updated",
       chainKey: `workspace:${workspaceId}`,
-      payload: { teamId: id, name: name?.trim() || team.name },
+      payload: { teamId: id, name: nextName },
       ...getRequestAuditContext(req.headers),
     });
 

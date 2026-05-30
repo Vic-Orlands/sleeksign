@@ -60,11 +60,15 @@ function DocumentSetupDock({
   onFieldsChange,
   onRoleConfigsChange,
   fullHeight = false,
+  isUploading = false,
+  uploadProgress = 0,
 }: {
   document: DocumentRecord;
   onFieldsChange?: (documentId: string, fields: Field[]) => void;
   onRoleConfigsChange?: (documentId: string, roleConfigs: RoleConfig[]) => void;
   fullHeight?: boolean;
+  isUploading?: boolean;
+  uploadProgress?: number;
 }) {
   const [fields, setFields] = useState<Field[]>(document.fields || []);
   const [roleConfigs, setRoleConfigs] = useState<RoleConfig[]>(
@@ -80,8 +84,21 @@ function DocumentSetupDock({
   const [currentPage, setCurrentPage] = useState(0);
   const [fitMode, setFitMode] = useState<"width" | "page">("width");
   const viewerRef = useRef<HTMLDivElement>(null);
+  const fieldsRef = useRef(fields);
 
   const selectedField = fields.find((field) => field.id === selectedFieldId);
+  const fieldsByPage = useMemo(() => {
+    const pageMap = new Map<number, Field[]>();
+    for (const field of fields) {
+      const pageFields = pageMap.get(field.page);
+      if (pageFields) {
+        pageFields.push(field);
+      } else {
+        pageMap.set(field.page, [field]);
+      }
+    }
+    return pageMap;
+  }, [fields]);
   const fieldCounts = useMemo(
     () => ({
       signature: fields.filter((field) => field.type === "signature").length,
@@ -93,10 +110,19 @@ function DocumentSetupDock({
   );
 
   async function addField(page: number, point: { x: number; y: number }) {
+    if (isUploading) {
+      toast.error("Please wait for the document to finish uploading");
+      return;
+    }
     if (selectedType === "select") return;
 
     const defaults = fieldDefaults[selectedType];
+    const fieldId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `field-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const draft = clampField({
+      id: fieldId,
       type: selectedType,
       page,
       x: point.x,
@@ -107,21 +133,42 @@ function DocumentSetupDock({
       assigneeRole: UNASSIGNED_ROLE,
     });
 
-    const res = await fetch(`/api/documents/${document.id}`, {
-      method: "POST",
-      body: JSON.stringify({
-        ...draft,
-        assigneeRole: draft.assigneeRole,
-      }),
-    });
-    const data = await res.json();
-    const field = { ...draft, id: data.id } as Field;
-    updateLocalFields([...fields, field]);
+    const field = draft as Field;
+    const previousSelection = selectedFieldId;
+    updateLocalFields([...fieldsRef.current, field]);
     setSelectedFieldId(field.id);
     toast.success(`${selectedType} field placed`);
+
+    try {
+      const res = await fetch(`/api/documents/${document.id}`, {
+        method: "POST",
+        body: JSON.stringify({
+          ...draft,
+          assigneeRole: draft.assigneeRole,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(data?.error || "Failed to add field");
+      }
+    } catch (error) {
+      updateLocalFields(
+        fieldsRef.current.filter((existingField) => existingField.id !== field.id),
+      );
+      setSelectedFieldId((current) =>
+        current === field.id ? previousSelection : current,
+      );
+      toast.error(
+        error instanceof Error ? error.message : "Failed to add field",
+      );
+    }
   }
 
   function updateLocalFields(nextFields: Field[]) {
+    fieldsRef.current = nextFields;
     setFields(nextFields);
     onFieldsChange?.(document.id, nextFields);
   }
@@ -209,15 +256,35 @@ function DocumentSetupDock({
   }
 
   async function deleteField(fieldId: string) {
-    await fetch(`/api/documents/${document.id}`, {
-      method: "DELETE",
-      body: JSON.stringify({ fieldId }),
-    });
-    const nextFields = fields.filter((field) => field.id !== fieldId);
+    const previousFields = fieldsRef.current;
+    const nextFields = previousFields.filter((field) => field.id !== fieldId);
+    const previousSelection = selectedFieldId;
+
     updateLocalFields(nextFields);
-    if (selectedFieldId === fieldId)
+    if (selectedFieldId === fieldId) {
       setSelectedFieldId(nextFields[0]?.id || null);
+    }
     toast.success("Field removed");
+
+    try {
+      const response = await fetch(`/api/documents/${document.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ fieldId }),
+      });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(data?.error || "Failed to remove field");
+      }
+    } catch (error) {
+      updateLocalFields(previousFields);
+      setSelectedFieldId(previousSelection);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to remove field",
+      );
+    }
   }
 
   return (
@@ -237,11 +304,30 @@ function DocumentSetupDock({
               Select a field type, then click the PDF to place it.
             </p>
           </div>
-          <FieldPalette
-            selectedType={selectedType}
-            fieldCounts={fieldCounts}
-            onSelectType={setSelectedType}
-          />
+          {isUploading ? (
+            <div className="mt-4 border border-border bg-card p-4 space-y-3 lg:w-auto sm:w-48">
+              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground font-bold">Background Upload</p>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-mono text-[10px] text-foreground font-semibold">Uploading PDF...</span>
+                <span className="font-mono text-[10px] text-amber-500 font-bold">{uploadProgress}%</span>
+              </div>
+              <div className="h-1.5 bg-muted overflow-hidden relative">
+                <div 
+                  className="h-full bg-amber-500 transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <p className="text-[10px] leading-4 text-muted-foreground font-mono">
+                Fields and roles can be configured once upload completes in a few seconds.
+              </p>
+            </div>
+          ) : (
+            <FieldPalette
+              selectedType={selectedType}
+              fieldCounts={fieldCounts}
+              onSelectType={setSelectedType}
+            />
+          )}
         </div>
       </aside>
 
@@ -257,8 +343,7 @@ function DocumentSetupDock({
             onDocumentLoad={(nextPageCount) => setPageCount(nextPageCount)}
             onVisiblePageChange={(pageIndex) => setCurrentPage(pageIndex)}
             renderOverlay={(pageIndex, metrics) =>
-              fields
-                .filter((field) => field.page === pageIndex)
+              (fieldsByPage.get(pageIndex) || [])
                 .map((field, index) => {
                   const Icon = fieldIconMap[field.type];
 

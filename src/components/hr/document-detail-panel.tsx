@@ -51,6 +51,18 @@ type BulkSendJob = {
   }>
 }
 
+type DirectorySigner = {
+  id: string
+  name: string
+  email: string
+}
+
+type SignerGroupRecord = {
+  id: string
+  name: string
+  signers: DirectorySigner[]
+}
+
 function DocumentDetailPanel({
   document,
   canShare = true,
@@ -85,6 +97,15 @@ function DocumentDetailPanel({
   const [roleColumn, setRoleColumn] = useState("role")
   const [defaultRoleName, setDefaultRoleName] = useState("")
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [directorySigners, setDirectorySigners] = useState<DirectorySigner[]>([])
+  const [signerGroups, setSignerGroups] = useState<SignerGroupRecord[]>([])
+  const [sendPath, setSendPath] = useState<"email" | "signer" | "group">("email")
+  const [recipientName, setRecipientName] = useState("")
+  const [recipientEmail, setRecipientEmail] = useState("")
+  const [selectedSignerId, setSelectedSignerId] = useState("")
+  const [selectedGroupId, setSelectedGroupId] = useState("")
+  const [sendRoleName, setSendRoleName] = useState("")
+  const [sendBusy, setSendBusy] = useState(false)
   const workspaceId = useCurrentWorkspaceId()
 
   useEffect(() => {
@@ -120,12 +141,21 @@ function DocumentDetailPanel({
   useEffect(() => {
     if (!workspaceId) return
 
-    fetch(`/api/teams?workspaceId=${encodeURIComponent(workspaceId)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setTeams(Array.isArray(data?.teams) ? data.teams : [])
+    Promise.all([
+      fetch(`/api/teams?workspaceId=${encodeURIComponent(workspaceId)}`).then((res) => res.json()),
+      fetch(`/api/signers/directory?workspaceId=${encodeURIComponent(workspaceId)}`).then((res) => res.json()),
+      fetch(`/api/signer-groups?workspaceId=${encodeURIComponent(workspaceId)}`).then((res) => res.json()),
+    ])
+      .then(([teamData, signerData, groupData]) => {
+        setTeams(Array.isArray(teamData?.teams) ? teamData.teams : [])
+        setDirectorySigners(Array.isArray(signerData?.signers) ? signerData.signers : [])
+        setSignerGroups(Array.isArray(groupData?.groups) ? groupData.groups : [])
       })
-      .catch(() => setTeams([]))
+      .catch(() => {
+        setTeams([])
+        setDirectorySigners([])
+        setSignerGroups([])
+      })
   }, [workspaceId])
 
   const roleConfigs = useMemo(
@@ -314,9 +344,60 @@ function DocumentDetailPanel({
     }))
   }
 
+  async function sendDocumentNow() {
+    if (!document) return
+
+    const roleName = sendRoleName || privateRoles[0]?.name || roleConfigs[0]?.name || ""
+    if (!roleName) {
+      toast.error("Choose a signer role before sending")
+      return
+    }
+
+    const targets =
+      sendPath === "email"
+        ? recipientEmail.trim()
+          ? [{ kind: "email", name: recipientName.trim() || roleName, email: recipientEmail.trim(), roleName }]
+          : []
+        : sendPath === "signer"
+          ? selectedSignerId
+            ? [{ kind: "signer", signerId: selectedSignerId, roleName }]
+            : []
+          : selectedGroupId
+            ? [{ kind: "group", groupId: selectedGroupId, roleName }]
+            : []
+
+    if (targets.length === 0) {
+      toast.error("Choose a recipient before sending")
+      return
+    }
+
+    setSendBusy(true)
+    try {
+      const res = await fetch("/api/send-document", {
+        method: "POST",
+        body: JSON.stringify({
+          documentId: document.id,
+          mode: selectedMode,
+          targets,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Unable to send document")
+      toast.success("Document sent")
+      setRecipientName("")
+      setRecipientEmail("")
+      setSelectedSignerId("")
+      setSelectedGroupId("")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to send document")
+    } finally {
+      setSendBusy(false)
+    }
+  }
+
   return (
     <aside className="grid h-full min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-x-hidden bg-card">
-      <div className="border-b border-border p-4">
+      <div className="px-5 pb-3 pt-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="truncate text-xs font-semibold uppercase tracking-widest">{document.name}</h2>
@@ -330,28 +411,33 @@ function DocumentDetailPanel({
         </div>
       </div>
 
-      <div className="min-h-0 overflow-auto p-4">
+      <div className="min-h-0 overflow-auto px-5 pb-5">
         <Tabs defaultValue="overview" className="min-w-0 flex flex-col gap-4">
-          <TabsList className="grid w-full min-w-0 grid-cols-2 sm:grid-cols-5">
+          <TabsList className="grid w-full min-w-0 grid-cols-2 sm:grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="link">Link</TabsTrigger>
             <TabsTrigger value="bulk">Bulk Send</TabsTrigger>
             <TabsTrigger value="activity">Audit</TabsTrigger>
-            <TabsTrigger value="details">Details</TabsTrigger>
           </TabsList>
-          <TabsContent value="overview" className="m-0 flex flex-col gap-5">
+          <TabsContent value="overview" className="m-0 flex flex-col gap-6 pt-1">
             <div className="grid grid-cols-2 gap-3">
               <PanelMetric label="Status" value={status} />
               <PanelMetric label="Fields" value={`${counts.fields}`} />
               <PanelMetric label="Pending" value={`${counts.pending}/${Math.max(counts.total, 1)}`} />
               <PanelMetric label="Completed" value={`${counts.completed}/${Math.max(counts.total, 1)}`} />
             </div>
-            <div className="grid gap-3 border border-border bg-background p-4">
+            <div className="grid gap-4 rounded-3xl bg-muted/35 p-4">
               <div className="flex items-center gap-2">
                 <ShieldCheckIcon className="size-4 text-orange-500" />
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Enterprise controls
+                  Overview
                 </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <PanelStat label="Document ID" value={document.id.slice(0, 10)} />
+                <PanelStat label="File type" value={document.name.split(".").pop()?.toUpperCase() || "PDF"} />
+                <PanelStat label="Team" value={teams.find((team) => team.id === selectedTeamId)?.name || "Unassigned"} />
+                <PanelStat label="Verification" value={requireOtp ? "Email OTP required" : "No OTP"} />
               </div>
               <label className="grid gap-2 text-sm">
                 <span className="font-medium">Team ownership</span>
@@ -369,7 +455,7 @@ function DocumentDetailPanel({
                     }))
                     void persistDocumentSettings({ teamId: nextTeamId || null })
                   }}
-                  className="border border-border bg-background px-3 py-2"
+                  className="rounded-2xl bg-background px-3 py-2.5"
                 >
                   <option value="">Unassigned</option>
                   {teams.map((team) => (
@@ -379,7 +465,7 @@ function DocumentDetailPanel({
                   ))}
                 </select>
               </label>
-              <label className="flex items-center justify-between gap-3 border border-border px-3 py-3 text-sm">
+              <label className="flex items-center justify-between gap-3 rounded-2xl bg-background px-4 py-3 text-sm">
                 <div>
                   <p className="font-medium">Require email OTP before viewing</p>
                   <p className="text-muted-foreground">
@@ -405,9 +491,9 @@ function DocumentDetailPanel({
                 />
               </label>
             </div>
-            <div className="border border-border bg-background p-4">
+            <div className="rounded-3xl bg-background/80 p-4 shadow-sm">
               <div className="flex items-start gap-3">
-                <span className="flex size-9 items-center justify-center border border-border bg-secondary text-muted-foreground">
+                <span className="flex size-9 items-center justify-center rounded-2xl bg-secondary text-muted-foreground">
                   <SendIcon className="size-4" />
                 </span>
                 <div className="min-w-0">
@@ -417,10 +503,123 @@ function DocumentDetailPanel({
                   </p>
                 </div>
               </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button variant="outline" onClick={onEdit}>
+                  <Edit3Icon data-icon="inline-start" />
+                  Back to Editor
+                </Button>
+                <Button
+                  disabled={!canShare || !selectedPacket}
+                  onClick={() =>
+                    guardShareAction(() => {
+                      if (!selectedPacket) {
+                        toast.error("Create a packet before copying links")
+                        return
+                      }
+                      navigator.clipboard.writeText(
+                        `${publicUrl}?packet=${encodeURIComponent(selectedPacket.id)}`,
+                      )
+                      toast.success("Packet link copied")
+                    })
+                  }
+                >
+                  <LinkIcon data-icon="inline-start" />
+                  Copy Packet Link
+                </Button>
+              </div>
+              {!canShare ? (
+                <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-destructive">
+                  Assign every field before sharing links.
+                </p>
+              ) : null}
             </div>
           </TabsContent>
 
           <TabsContent value="link" className="m-0 flex flex-col gap-4">
+            <div className="rounded-3xl bg-background p-4 shadow-sm">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Send document
+              </p>
+              <div className="mt-3 grid gap-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {(["email", "signer", "group"] as const).map((path) => (
+                    <button
+                      key={path}
+                      type="button"
+                      onClick={() => setSendPath(path)}
+                      className={`rounded-2xl px-3 py-2 text-left text-sm transition-colors ${
+                        sendPath === path
+                          ? "bg-muted text-foreground"
+                          : "bg-muted/35 hover:bg-muted/60"
+                      }`}
+                    >
+                      {path === "email" ? "Single email" : path === "signer" ? "Single signer" : "Group"}
+                    </button>
+                  ))}
+                </div>
+                {sendPath === "email" ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input
+                      value={recipientName}
+                      onChange={(event) => setRecipientName(event.target.value)}
+                      placeholder="Recipient name"
+                      className="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
+                    />
+                    <input
+                      value={recipientEmail}
+                      onChange={(event) => setRecipientEmail(event.target.value)}
+                      placeholder="Recipient email"
+                      className="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
+                    />
+                  </div>
+                ) : null}
+                {sendPath === "signer" ? (
+                  <select
+                    value={selectedSignerId}
+                    onChange={(event) => setSelectedSignerId(event.target.value)}
+                    className="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
+                  >
+                    <option value="">Choose a workspace signer</option>
+                    {directorySigners.map((signer) => (
+                      <option key={signer.id} value={signer.id}>
+                        {signer.name} · {signer.email}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                {sendPath === "group" ? (
+                  <select
+                    value={selectedGroupId}
+                    onChange={(event) => setSelectedGroupId(event.target.value)}
+                    className="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
+                  >
+                    <option value="">Choose a signer group</option>
+                    {signerGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name} · {group.signers.length} signers
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <select
+                    value={sendRoleName}
+                    onChange={(event) => setSendRoleName(event.target.value)}
+                    className="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
+                  >
+                    <option value="">Choose recipient role</option>
+                    {privateRoles.map((role) => (
+                      <option key={role.name} value={role.name}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button disabled={!canShare || sendBusy} onClick={() => void sendDocumentNow()}>
+                    {sendBusy ? "Sending..." : "Send"}
+                  </Button>
+                </div>
+              </div>
+            </div>
             <div className="grid gap-3">
               <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                 Choose a workflow model
@@ -446,10 +645,10 @@ function DocumentDetailPanel({
                   key={option.mode}
                   type="button"
                   onClick={() => setSelectedMode(option.mode)}
-                  className={`border px-4 py-3 text-left transition-colors ${
+                  className={`rounded-3xl px-4 py-3 text-left transition-colors ${
                     selectedMode === option.mode
-                      ? "border-foreground bg-muted"
-                      : "border-border bg-background hover:bg-muted/40"
+                      ? "bg-muted"
+                      : "bg-background hover:bg-muted/30"
                   }`}
                 >
                   <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -460,7 +659,7 @@ function DocumentDetailPanel({
                 </button>
               ))}
             </div>
-            <div className="border border-border bg-background p-4">
+            <div className="rounded-3xl bg-muted/35 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -491,7 +690,7 @@ function DocumentDetailPanel({
                   Role links
                 </p>
                 {getPacketRoleLinks(selectedPacket).map(({ role, url }) => (
-                  <div key={`${selectedPacket.id}-${role.name}`} className="grid min-w-0 grid-cols-1 gap-2 border border-border bg-background p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <div key={`${selectedPacket.id}-${role.name}`} className="grid min-w-0 grid-cols-1 gap-2 rounded-3xl bg-background p-3 shadow-sm sm:grid-cols-[minmax(0,1fr)_auto]">
                     <div className="min-w-0">
                       <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                         {role.name} · {role.scope === "shared" ? "Shared" : "Private"}
@@ -519,7 +718,7 @@ function DocumentDetailPanel({
           </TabsContent>
 
           <TabsContent value="bulk" className="m-0 flex flex-col gap-4">
-            <div className="border border-border bg-background p-4">
+            <div className="rounded-3xl bg-background p-4 shadow-sm">
               <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                 CSV upload
               </p>
@@ -535,24 +734,24 @@ function DocumentDetailPanel({
                     value={nameColumn}
                     onChange={(event) => setNameColumn(event.target.value)}
                     placeholder="Name column"
-                    className="border border-border bg-background px-3 py-2 text-sm"
+                    className="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
                   />
                   <input
                     value={emailColumn}
                     onChange={(event) => setEmailColumn(event.target.value)}
                     placeholder="Email column"
-                    className="border border-border bg-background px-3 py-2 text-sm"
+                    className="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
                   />
                   <input
                     value={roleColumn}
                     onChange={(event) => setRoleColumn(event.target.value)}
                     placeholder="Role column"
-                    className="border border-border bg-background px-3 py-2 text-sm"
+                    className="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
                   />
                   <select
                     value={defaultRoleName}
                     onChange={(event) => setDefaultRoleName(event.target.value)}
-                    className="border border-border bg-background px-3 py-2 text-sm"
+                    className="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
                   >
                     <option value="">Default role (optional)</option>
                     {privateRoles.map((role) => (
@@ -578,13 +777,13 @@ function DocumentDetailPanel({
             </div>
 
             {csvPreview.length > 0 ? (
-              <div className="border border-border bg-background p-4">
+              <div className="rounded-3xl bg-background p-4 shadow-sm">
                 <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                   Preview
                 </p>
                 <div className="mt-3 grid gap-2">
                   {csvPreview.slice(0, 5).map((row, index) => (
-                    <div key={`${String(row.signerEmail || index)}-${index}`} className="border border-border px-3 py-2 text-sm">
+                    <div key={`${String(row.signerEmail || index)}-${index}`} className="rounded-2xl bg-muted/35 px-3 py-2 text-sm">
                       {String(row.signerName || "Recipient")} · {String(row.roleName || "Role")} · {String(row.signerEmail || "")}
                     </div>
                   ))}
@@ -592,7 +791,7 @@ function DocumentDetailPanel({
               </div>
             ) : null}
 
-            <div className="border border-border bg-background p-4">
+            <div className="rounded-3xl bg-background p-4 shadow-sm">
               <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                 Job status
               </p>
@@ -601,7 +800,7 @@ function DocumentDetailPanel({
                   <p className="text-sm text-muted-foreground">No bulk send jobs yet.</p>
                 ) : (
                   jobs.map((job) => (
-                    <div key={job.id} className="border border-border p-3">
+                    <div key={job.id} className="rounded-2xl bg-muted/35 p-3">
                       <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                         {job.status}
                       </p>
@@ -623,7 +822,7 @@ function DocumentDetailPanel({
                   <p className="text-sm text-muted-foreground">No audit events yet.</p>
                 ) : (
                   auditLogs.slice(0, 20).map((log) => (
-                    <div key={log.id} className="border border-border bg-background p-3">
+                    <div key={log.id} className="rounded-2xl bg-background p-3 shadow-sm">
                       <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                         {log.eventType}
                       </p>
@@ -640,22 +839,10 @@ function DocumentDetailPanel({
               <SignerTimeline sessions={document.sessions || []} />
             </div>
           </TabsContent>
-
-          <TabsContent value="details" className="m-0 flex flex-col gap-4">
-            <PanelMetric label="Document ID" value={document.id.slice(0, 10)} />
-            <PanelMetric label="File type" value={document.name.split(".").pop()?.toUpperCase() || "PDF"} />
-            <PanelMetric label="Team" value={teams.find((team) => team.id === selectedTeamId)?.name || "Unassigned"} />
-            <PanelMetric label="Verification" value={requireOtp ? "Email OTP required" : "No OTP"} />
-            <Separator />
-            <Button variant="outline" onClick={onEdit}>
-              <Edit3Icon data-icon="inline-start" />
-              Back to Editor
-            </Button>
-          </TabsContent>
         </Tabs>
       </div>
 
-      <div className="grid gap-3 border-t border-border p-4">
+      <div className="grid gap-3 px-5 pb-5">
         <Button
           disabled={!canShare || !selectedPacket}
           onClick={() =>
@@ -690,9 +877,18 @@ function DocumentDetailPanel({
 
 function PanelMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-border bg-background p-3">
+    <div className="rounded-3xl bg-background p-3 shadow-sm">
       <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">{label}</p>
       <p className="mt-2 truncate font-mono text-sm text-foreground">{value}</p>
+    </div>
+  )
+}
+
+function PanelStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-background px-3 py-3">
+      <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
     </div>
   )
 }

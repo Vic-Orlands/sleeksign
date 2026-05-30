@@ -15,62 +15,91 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Field, RoleConfig } from "@/lib/field-utils";
-import { uploadDocument } from "@/lib/upload-document";
+import { nanoid } from "nanoid";
+import { backgroundUploadStore, useBackgroundUpload } from "@/lib/background-upload-store";
 import { useCurrentWorkspaceId } from "@/lib/workspace-store";
 
 export default function HRDocumentPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const setupRef = useRef<HTMLDivElement>(null);
+  const bgUpload = useBackgroundUpload(id);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
-  const [document, setDocument] = useState<DocumentRecord | null>(null);
+  const [document, setDocument] = useState<DocumentRecord | null>(() =>
+    readUploadedDocumentDraft(id),
+  );
   const [query, setQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => !readUploadedDocumentDraft(id));
   const [shareOpen, setShareOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [uploadingDocumentName, setUploadingDocumentName] = useState<string | null>(null);
   const workspaceId = useCurrentWorkspaceId();
+  const bgUploadStatus = bgUpload?.status;
+  const bgUploadError = bgUpload?.error;
 
   function normalizeDocuments(data: unknown) {
     return Array.isArray(data) ? (data as DocumentRecord[]) : [];
   }
 
-  function delay(ms: number) {
-    return new Promise((resolve) => window.setTimeout(resolve, ms));
-  }
-
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchWorkspace() {
-      setIsLoading(true);
-      try {
-        const [documentsRes] = await Promise.all([
-          fetch(
-            workspaceId
-              ? `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`
-              : "/api/documents",
-          ),
-        ]);
-        const documentsData = await documentsRes.json();
+    async function fetchDocumentWithRetry() {
+      let lastError: Error | null = null;
 
-        let documentData: DocumentRecord | null = null;
-        for (let attempt = 0; attempt < 4; attempt += 1) {
-          const documentRes = await fetch(`/api/documents/${id}`, {
-            cache: "no-store",
-          });
-          if (documentRes.ok) {
-            documentData = await documentRes.json();
-            break;
-          }
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const documentRes = await fetch(`/api/documents/${id}`, {
+          cache: "no-store",
+        });
 
-          await delay(180 * (attempt + 1));
+        if (documentRes.ok) {
+          const documentData = await documentRes.json();
+          clearUploadedDocumentDraft(id);
+          return documentData as DocumentRecord;
         }
 
-        if (cancelled) return;
+        lastError = new Error(`Failed to fetch document: ${documentRes.status}`);
+        await new Promise((resolve) => window.setTimeout(resolve, 180 * (attempt + 1)));
+      }
 
-        setDocuments(normalizeDocuments(documentsData));
+      throw lastError || new Error("Document not found");
+    }
+
+    async function fetchIndividualDocument() {
+      if (bgUploadStatus === "uploading") {
+        setIsLoading(false);
+        return;
+      }
+
+      if (bgUploadStatus === "success") {
+        const uploadedDraft = readUploadedDocumentDraft(id);
+        if (uploadedDraft) {
+          setDocument((current) => ({
+            ...(current || uploadedDraft),
+            ...uploadedDraft,
+          }));
+        }
+        setIsLoading(false);
+      }
+
+      if (bgUploadStatus === "error") {
+        setIsLoading(false);
+        setDocument(null);
+        return;
+      }
+
+      if (!document) {
+        setIsLoading(true);
+      }
+      try {
+        const documentData = await fetchDocumentWithRetry();
+
+        if (cancelled) return;
         setDocument(documentData);
+        backgroundUploadStore.clearUpload(id);
+      } catch {
+        if (!cancelled) {
+          setDocument(null);
+        }
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -78,17 +107,30 @@ export default function HRDocumentPage() {
       }
     }
 
-    fetchWorkspace().catch(() => {
-      if (!cancelled) {
-        setDocument(null);
-        setIsLoading(false);
+    async function fetchWorkspaceDocuments() {
+      try {
+        const documentsRes = await fetch(
+          workspaceId
+            ? `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`
+            : "/api/documents",
+        );
+        if (!documentsRes.ok) return;
+        const documentsData = await documentsRes.json();
+
+        if (cancelled) return;
+        setDocuments(normalizeDocuments(documentsData));
+      } catch {
+        // Asynchronous statistics background loading fail silent
       }
-    });
+    }
+
+    void fetchIndividualDocument();
+    void fetchWorkspaceDocuments();
 
     return () => {
       cancelled = true;
     };
-  }, [id, workspaceId]);
+  }, [bgUploadError, bgUploadStatus, document, id, workspaceId]);
 
   const allSessions = documents.flatMap((item) => item.sessions || []);
   const completedCount = allSessions.filter(
@@ -103,20 +145,13 @@ export default function HRDocumentPage() {
 
   async function handleUpload(file: File) {
     if (!workspaceId) {
-      toast.error("Select or create a workspace before uploading");
+      toast.error("No active workspace selected");
       return;
     }
-
-    setUploadingDocumentName(file.name);
-
-    try {
-      const data = await uploadDocument(file, workspaceId);
-      toast.success("Document uploaded");
-      router.push(`/hr/documents/${data.id}`);
-    } catch (error) {
-      setUploadingDocumentName(null);
-      toast.error(error instanceof Error ? error.message : "Upload failed");
-    }
+    const docId = nanoid();
+    backgroundUploadStore.startUpload(file, workspaceId, docId);
+    toast.success("Uploading document in background...");
+    router.push(`/hr/documents/${docId}`);
   }
 
   function updateDocumentFields(documentId: string, fields: Field[]) {
@@ -170,10 +205,8 @@ export default function HRDocumentPage() {
       onQueryChange={setQuery}
       onUpload={handleUpload}
       actionOverlay={{
-        visible: Boolean(uploadingDocumentName),
-        title: "Uploading document",
-        documentName: uploadingDocumentName || undefined,
-        detail: "Preparing for setup.",
+        visible: false,
+        title: "",
       }}
       headerMode="none"
       pendingCount={pendingCount}
@@ -196,8 +229,20 @@ export default function HRDocumentPage() {
                   <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
                     All Documents / Document
                   </p>
-                  <h1 className="truncate font-mono text-xs font-semibold uppercase tracking-widest">
+                  <h1 className="truncate font-mono text-xs font-semibold uppercase tracking-widest flex items-center gap-2">
                     {document?.name || "Loading document..."}
+                    {bgUpload && bgUpload.status === "uploading" && (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-mono uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 animate-pulse">
+                        <span className="size-1.5 rounded-full bg-amber-500" />
+                        Uploading {bgUpload.progress}%
+                      </span>
+                    )}
+                    {bgUpload && bgUpload.status === "success" && (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-mono uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                        Synced
+                      </span>
+                    )}
                   </h1>
                 </div>
               </div>
@@ -206,11 +251,18 @@ export default function HRDocumentPage() {
                   <span className="hidden font-mono text-[10px] uppercase tracking-widest text-muted-foreground sm:inline">
                     {getDocumentCounts(document).fields} fields placed
                   </span>
-                  <Button variant="outline" onClick={() => setReviewOpen(true)}>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setReviewOpen(true)}
+                    disabled={Boolean(bgUpload && bgUpload.status === "uploading")}
+                  >
                     <EyeIcon data-icon="inline-start" />
                     Review
                   </Button>
-                  <Button onClick={openSharePanel}>
+                  <Button 
+                    onClick={openSharePanel}
+                    disabled={Boolean(bgUpload && bgUpload.status === "uploading")}
+                  >
                     <SendIcon data-icon="inline-start" />
                     Share Document
                   </Button>
@@ -237,11 +289,13 @@ export default function HRDocumentPage() {
               </div>
             ) : document ? (
               <DocumentSetupDock
-                key={document.id}
+                key={`${document.id}:${document.fileUrl}`}
                 document={document}
                 onFieldsChange={updateDocumentFields}
                 onRoleConfigsChange={updateDocumentRoleConfigs}
                 fullHeight
+                isUploading={Boolean(bgUpload && bgUpload.status === "uploading")}
+                uploadProgress={bgUpload ? bgUpload.progress : 0}
               />
             ) : (
               <div className="flex h-full items-center justify-center border border-dashed border-border bg-card font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
@@ -296,4 +350,24 @@ export default function HRDocumentPage() {
       </div>
     </HrShell>
   );
+}
+
+function readUploadedDocumentDraft(documentId: string) {
+  if (typeof window === "undefined") return null;
+
+  const rawValue = window.sessionStorage.getItem(
+    `sleeksign:uploaded-document:${documentId}`,
+  );
+  if (!rawValue) return null;
+
+  try {
+    return JSON.parse(rawValue) as DocumentRecord;
+  } catch {
+    return null;
+  }
+}
+
+function clearUploadedDocumentDraft(documentId: string) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(`sleeksign:uploaded-document:${documentId}`);
 }

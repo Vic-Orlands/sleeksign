@@ -194,12 +194,6 @@ function FieldInspector({
               </label>
             ))}
           </div>
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-              Rotation
-            </span>
-            <Input value="0°" readOnly className="font-mono" />
-          </label>
           <Separator />
           {roleScopeSection}
           <div className="mt-auto pt-2">

@@ -153,6 +153,10 @@ export const signingPacketCopies = pgTable("signing_packet_copies", {
   roleName: text("role_name").notNull(),
   signerName: text("signer_name"),
   signerEmail: text("signer_email"),
+  recipientType: text("recipient_type")
+    .$type<"email" | "signer" | "group" | "bulk">()
+    .default("email"),
+  recipientSourceId: text("recipient_source_id"),
   status: text("status")
     .$type<"pending" | "completed">()
     .notNull()
@@ -254,6 +258,60 @@ export const memberRoleAssignments = pgTable("member_role_assignments", {
     .notNull()
     .references(() => permissionRoles.id, { onDelete: "cascade" }),
   teamId: text("team_id").references(() => teams.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: false })
+    .notNull()
+    .defaultNow(),
+});
+
+export const workspaceSigners = pgTable("workspace_signers", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => authOrganization.id, { onDelete: "cascade" }),
+  teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  title: text("title"),
+  type: text("type")
+    .$type<"internal" | "external">()
+    .notNull()
+    .default("internal"),
+  status: text("status")
+    .$type<"active" | "archived">()
+    .notNull()
+    .default("active"),
+  createdAt: timestamp("created_at", { withTimezone: false })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: false })
+    .notNull()
+    .defaultNow(),
+});
+
+export const signerGroups = pgTable("signer_groups", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => authOrganization.id, { onDelete: "cascade" }),
+  teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: false })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: false })
+    .notNull()
+    .defaultNow(),
+});
+
+export const signerGroupMembers = pgTable("signer_group_members", {
+  id: text("id").primaryKey(),
+  groupId: text("group_id")
+    .notNull()
+    .references(() => signerGroups.id, { onDelete: "cascade" }),
+  signerId: text("signer_id")
+    .notNull()
+    .references(() => workspaceSigners.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
@@ -650,5 +708,47 @@ export const teamsRelations = relations(teams, ({ one, many }) => ({
   packets: many(signingPackets),
   copies: many(signingPacketCopies),
   memberships: many(teamMembers),
+  signers: many(workspaceSigners),
+  signerGroups: many(signerGroups),
 }));
 
+export const workspaceSignersRelations = relations(
+  workspaceSigners,
+  ({ one, many }) => ({
+    organization: one(authOrganization, {
+      fields: [workspaceSigners.organizationId],
+      references: [authOrganization.id],
+    }),
+    team: one(teams, {
+      fields: [workspaceSigners.teamId],
+      references: [teams.id],
+    }),
+    groupMemberships: many(signerGroupMembers),
+  }),
+);
+
+export const signerGroupsRelations = relations(signerGroups, ({ one, many }) => ({
+  organization: one(authOrganization, {
+    fields: [signerGroups.organizationId],
+    references: [authOrganization.id],
+  }),
+  team: one(teams, {
+    fields: [signerGroups.teamId],
+    references: [teams.id],
+  }),
+  members: many(signerGroupMembers),
+}));
+
+export const signerGroupMembersRelations = relations(
+  signerGroupMembers,
+  ({ one }) => ({
+    group: one(signerGroups, {
+      fields: [signerGroupMembers.groupId],
+      references: [signerGroups.id],
+    }),
+    signer: one(workspaceSigners, {
+      fields: [signerGroupMembers.signerId],
+      references: [workspaceSigners.id],
+    }),
+  }),
+);

@@ -42,13 +42,13 @@
     --color-popover: var(--popover);
     --color-card-foreground: var(--card-foreground);
     --color-card: var(--card);
-    --radius-sm: 0rem;
-    --radius-md: 0rem;
-    --radius-lg: 0rem;
-    --radius-xl: 0rem;
-    --radius-2xl: 0rem;
-    --radius-3xl: 0rem;
-    --radius-4xl: 0rem;
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.625rem;
+    --radius-xl: 0.875rem;
+    --radius-2xl: 1.25rem;
+    --radius-3xl: 1.75rem;
+    --radius-4xl: 2.5rem;
 }
 
 :root {
@@ -77,7 +77,15 @@
     --chart-3: #3b82f6;
     --chart-4: #a855f7;
     --chart-5: #ef4444;
-    --radius: 0rem;
+    --radius-custom: 0.375rem;
+    --radius-sm-custom: 0.25rem;
+    --radius-md-custom: 0.375rem;
+    --radius-lg-custom: 0.5rem;
+    --radius-xl-custom: 0.75rem;
+    --radius-2xl-custom: 1rem;
+    --radius-3xl-custom: 1.5rem;
+    --radius-4xl-custom: 2rem;
+    --radius: var(--radius-custom, 0rem);
     --sidebar: #ffffff;
     --sidebar-foreground: #18181b;
     --sidebar-primary: #18181b;
@@ -207,3 +215,50 @@
         }
     }
 }
+
+/* Landing page border-radius override to retain sharp corners */
+.landing-page,
+.landing-page * {
+    --radius-custom: 0rem !important;
+    --radius-sm: 0rem !important;
+    --radius-md: 0rem !important;
+    --radius-lg: 0rem !important;
+    --radius-xl: 0rem !important;
+    --radius-2xl: 0rem !important;
+    --radius-3xl: 0rem !important;
+    --radius-4xl: 0rem !important;
+    border-radius: 0rem !important;
+}
+
+/* Rounded overrides for all non-landing pages to add cohesive border-radius to inputs, buttons, cards, and modal dialogs */
+body:not(.landing-page) button,
+body:not(.landing-page) [role="button"],
+body:not(.landing-page) input,
+body:not(.landing-page) select,
+body:not(.landing-page) textarea,
+body:not(.landing-page) [role="combobox"],
+body:not(.landing-page) [role="dialog"],
+body:not(.landing-page) .dialog,
+body:not(.landing-page) .sheet,
+body:not(.landing-page) .popover,
+body:not(.landing-page) [class*="DialogContent"],
+body:not(.landing-page) [class*="SheetContent"],
+body:not(.landing-page) [class*="PopoverContent"],
+body:not(.landing-page) [class*="Card"],
+body:not(.landing-page) .card,
+body:not(.landing-page) [data-slot="table-container"],
+body:not(.landing-page) [class*="table-container"],
+body:not(.landing-page) .toast {
+    border-radius: 0.625rem !important;
+}
+
+/* Ensure contents clip beautifully inside the rounded corners of cards, table containers, and dialogs */
+body:not(.landing-page) [data-slot="table-container"],
+body:not(.landing-page) [class*="table-container"],
+body:not(.landing-page) [class*="Card"],
+body:not(.landing-page) .card,
+body:not(.landing-page) [class*="DialogContent"],
+body:not(.landing-page) [class*="SheetContent"] {
+    overflow: hidden !important;
+}
+

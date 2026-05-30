@@ -224,6 +224,8 @@ export async function sendBulkSendJob(jobId: string) {
         teamId: job.teamId || null,
         bulkSendJobId: job.id,
         bulkSendRowId: row.id,
+        recipientType: "bulk",
+        recipientSourceId: row.id,
       });
 
       const shareUrl = `${baseUrl}/sign/packet/${packet.id}?role=${encodeURIComponent(

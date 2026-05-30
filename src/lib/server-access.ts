@@ -21,6 +21,7 @@ import {
 
 type AuthSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 type WorkspacePermission = "read" | "manage" | "owner" | AppPermission;
+const SESSION_RETRY_DELAYS_MS = [150, 350];
 
 class AccessError extends Error {
   status: number;
@@ -67,7 +68,24 @@ function buildTeamScopeCondition(
 }
 
 async function getSessionFromHeaders(input: HeadersInit) {
-  return auth.api.getSession({ headers: input });
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= SESSION_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      return await auth.api.getSession({ headers: input });
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableSessionError(error) || attempt === SESSION_RETRY_DELAYS_MS.length) {
+        throw error;
+      }
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, SESSION_RETRY_DELAYS_MS[attempt]),
+      );
+    }
+  }
+
+  throw lastError;
 }
 
 async function requireSessionFromHeaders(input: HeadersInit): Promise<AuthSession> {
@@ -214,6 +232,67 @@ async function requireHrSession() {
 
 function canManageWorkspaceMembers(member: typeof authMember.$inferSelect | null) {
   return hasWorkspaceManageRole(member?.role);
+}
+
+function isRetryableSessionError(error: unknown) {
+  const details = collectErrorDetails(error);
+  return details.some((detail) => {
+    const normalized = detail.toLowerCase();
+    return (
+      normalized.includes("failed_to_get_session") ||
+      normalized.includes("failed to get session") ||
+      normalized.includes("fetch failed") ||
+      normalized.includes("error connecting to database") ||
+      normalized.includes("internal_server_error")
+    );
+  });
+}
+
+function collectErrorDetails(error: unknown): string[] {
+  const details: string[] = [];
+  const seen = new Set<unknown>();
+
+  function visit(value: unknown) {
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+
+    if (typeof value === "string") {
+      details.push(value);
+      return;
+    }
+
+    if (value instanceof Error) {
+      details.push(value.name, value.message);
+      const errorWithBody = value as Error & {
+        code?: unknown;
+        status?: unknown;
+        statusCode?: unknown;
+        body?: unknown;
+        cause?: unknown;
+      };
+      if (typeof errorWithBody.code === "string") details.push(errorWithBody.code);
+      if (typeof errorWithBody.status === "string") details.push(errorWithBody.status);
+      if (typeof errorWithBody.statusCode === "string") details.push(errorWithBody.statusCode);
+      if (typeof errorWithBody.statusCode === "number") details.push(String(errorWithBody.statusCode));
+      visit(errorWithBody.body);
+      visit(errorWithBody.cause);
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+
+    if (typeof value === "object") {
+      for (const nested of Object.values(value as Record<string, unknown>)) {
+        visit(nested);
+      }
+    }
+  }
+
+  visit(error);
+  return details;
 }
 
 export {

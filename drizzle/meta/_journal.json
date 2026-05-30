@@ -15,6 +15,13 @@
       "when": 1779577908987,
       "tag": "0001_smiling_nextwave",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779604200000,
+      "tag": "0002_enterprise_signers",
+      "breakpoints": true
     }
   ]
 }

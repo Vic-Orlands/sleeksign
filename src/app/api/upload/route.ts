@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     await fs.mkdir(uploadDir, { recursive: true });
     await fs.writeFile(path.join(uploadDir, fileName), buffer);
 
-    const docId = nanoid();
+    const docId = String(formData.get("documentId") || nanoid());
     await db.insert(documents).values({
       id: docId,
       name: originalName,
@@ -89,7 +89,12 @@ export async function POST(req: NextRequest) {
       ...getRequestAuditContext(req.headers),
     });
 
-    return NextResponse.json({ id: docId, name: originalName, url: `/uploads/${fileName}` });
+    return NextResponse.json({
+      id: docId,
+      name: originalName,
+      url: `/uploads/${fileName}`,
+      createdAt: new Date().toISOString(),
+    });
   } catch (error) {
     if (error instanceof AccessError) {
       return NextResponse.json(

@@ -73,6 +73,8 @@ async function createPacketCopy(input: {
   teamId?: string | null;
   bulkSendJobId?: string | null;
   bulkSendRowId?: string | null;
+  recipientType?: "email" | "signer" | "group" | "bulk";
+  recipientSourceId?: string | null;
 }) {
   const copyId = nanoid();
 
@@ -83,6 +85,8 @@ async function createPacketCopy(input: {
     roleName: input.roleName,
     signerName: input.signerName || null,
     signerEmail: input.signerEmail || null,
+    recipientType: input.recipientType || "email",
+    recipientSourceId: input.recipientSourceId || null,
     bulkSendJobId: input.bulkSendJobId || null,
     bulkSendRowId: input.bulkSendRowId || null,
   });
