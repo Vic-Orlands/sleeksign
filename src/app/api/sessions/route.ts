@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
       ...session,
       document: {
         ...session.document,
+        fileUrl: `/api/public-documents/${session.document.id}/file?sessionId=${session.id}`,
         signerRoles: parseSignerRoles(session.document.signerRoles),
         fields: session.document.fields.map((field) => ({
           ...field,

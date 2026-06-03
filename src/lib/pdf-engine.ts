@@ -10,8 +10,6 @@ import {
   sessions,
 } from "@/db/schema";
 import { asc, eq } from "drizzle-orm";
-import fs from "fs/promises";
-import path from "path";
 import { format } from "date-fns";
 import crypto from "crypto";
 import {
@@ -21,6 +19,11 @@ import {
 } from "@/lib/signing-workflows";
 import { decodeSignatureVector } from "@/lib/field-utils";
 import { parseAuditPayload } from "@/lib/audit";
+import {
+  buildFinalizedKey,
+  getObjectBytes,
+  putObjectBytes,
+} from "@/lib/r2-storage";
 
 type EvidenceSnapshot = {
   certificateId: string;
@@ -32,6 +35,11 @@ type EvidenceSnapshot = {
     createdAt: string;
     ipAddress: string | null;
   }>;
+};
+
+type FinalizedDocumentResult = {
+  url: string;
+  storageKey: string;
 };
 
 function createEvidenceHash(value: unknown) {
@@ -96,8 +104,21 @@ export async function finalizeDocument(sessionId: string) {
     where: eq(signatures.sessionId, sessionId),
   });
 
-  const finalizedPath = await renderFinalizedDocument({
-    fileUrl: docData.fileUrl,
+  if (!docData.workspaceId || !docData.storageKey) {
+    throw new Error("Document storage not configured");
+  }
+
+  const finalizedStorageKey = buildFinalizedKey(
+    docData.workspaceId,
+    docData.id,
+    "session",
+    session.id,
+  );
+  const finalizedFileUrl = `/api/finalized/session/${session.id}`;
+  await renderFinalizedDocument({
+    sourceStorageKey: docData.storageKey,
+    finalizedStorageKey,
+    finalizedFileName: `finalized_${session.id}.pdf`,
     fileNameSeed: session.id,
     fields: docFields,
     values: Object.fromEntries(
@@ -121,7 +142,8 @@ export async function finalizeDocument(sessionId: string) {
     .set({
       status: "completed",
       completedAt: new Date(),
-      finalizedFileUrl: finalizedPath,
+      finalizedFileUrl,
+      finalizedStorageKey,
       evidenceSnapshot: JSON.stringify(
         await buildEvidenceSnapshot(`session:${session.id}`),
       ),
@@ -129,25 +151,25 @@ export async function finalizeDocument(sessionId: string) {
       certificateHash: createEvidenceHash({
         documentId: docData.id,
         sessionId: session.id,
-        finalizedPath,
+        finalizedStorageKey,
       }),
     })
     .where(eq(sessions.id, sessionId));
 
-  return finalizedPath;
+  return finalizedFileUrl;
 }
 
 async function renderFinalizedDocument(input: {
-  fileUrl: string;
+  sourceStorageKey: string;
+  finalizedStorageKey: string;
+  finalizedFileName: string;
   fileNameSeed: string;
   fields: Array<typeof fields.$inferSelect>;
   values: Record<string, string>;
   certificateDetails: Array<{ label: string; value: string }>;
   evidenceSnapshot?: EvidenceSnapshot;
 }) {
-  const pdfBytes = await fs.readFile(
-    path.join(process.cwd(), "public", input.fileUrl),
-  );
+  const pdfBytes = await getObjectBytes(input.sourceStorageKey);
   const pdfDoc = await PDFDocument.load(pdfBytes);
 
   const fallbackSignatureFont = await pdfDoc.embedFont(
@@ -343,18 +365,9 @@ async function renderFinalizedDocument(input: {
   );
 
   const finalizedPdfBytes = await pdfDoc.save();
-  const finalizedFileName = `finalized_${input.fileNameSeed}.pdf`;
-  const finalizedPath = path.join(
-    process.cwd(),
-    "public",
-    "uploads",
-    finalizedFileName,
-  );
-
-  await fs.mkdir(path.dirname(finalizedPath), { recursive: true });
-  await fs.writeFile(finalizedPath, finalizedPdfBytes);
-
-  return `/uploads/${finalizedFileName}`;
+  await putObjectBytes(input.finalizedStorageKey, finalizedPdfBytes, {
+    contentDisposition: `inline; filename="${input.finalizedFileName}"`,
+  });
 }
 
 export async function finalizeSigningPacket(input: {
@@ -380,8 +393,20 @@ export async function finalizeSigningPacket(input: {
     return null;
   }
 
-  return renderFinalizedDocument({
-    fileUrl: packet.document.fileUrl,
+  if (!packet.document.workspaceId || !packet.document.storageKey) {
+    throw new Error("Document storage not configured");
+  }
+
+  const storageKey = buildFinalizedKey(
+    packet.document.workspaceId,
+    packet.document.id,
+    "packet",
+    packet.id,
+  );
+  await renderFinalizedDocument({
+    sourceStorageKey: packet.document.storageKey,
+    finalizedStorageKey: storageKey,
+    finalizedFileName: `packet_${packet.id}.pdf`,
     fileNameSeed: `packet_${packet.id}`,
     fields: packet.document.fields,
     values: packetValues,
@@ -397,6 +422,10 @@ export async function finalizeSigningPacket(input: {
       { label: "Status", value: "ALL PARTIES COMPLETED" },
     ],
   });
+  return {
+    url: `/api/finalized/packet/${packet.id}`,
+    storageKey,
+  } satisfies FinalizedDocumentResult;
 }
 
 export async function finalizeSigningPacketCopy(input: {
@@ -437,8 +466,20 @@ export async function finalizeSigningPacketCopy(input: {
     mode: packet.mode,
   });
 
-  return renderFinalizedDocument({
-    fileUrl: packet.document.fileUrl,
+  if (!packet.document.workspaceId || !packet.document.storageKey) {
+    throw new Error("Document storage not configured");
+  }
+
+  const storageKey = buildFinalizedKey(
+    packet.document.workspaceId,
+    packet.document.id,
+    "copy",
+    copy.id,
+  );
+  await renderFinalizedDocument({
+    sourceStorageKey: packet.document.storageKey,
+    finalizedStorageKey: storageKey,
+    finalizedFileName: `copy_${copy.id}.pdf`,
     fileNameSeed: `copy_${copy.id}`,
     fields: visibleFields,
     values,
@@ -461,4 +502,10 @@ export async function finalizeSigningPacketCopy(input: {
       },
     ],
   });
+  return {
+    url: `/api/finalized/copy/${copy.id}`,
+    storageKey,
+  } satisfies FinalizedDocumentResult;
 }
+
+export type { FinalizedDocumentResult };

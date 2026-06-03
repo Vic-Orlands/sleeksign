@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 
+import { createReadUrl } from "@/lib/r2-storage";
 import { requireSigningSessionAccess, AccessError } from "@/lib/server-access";
 
 export async function GET(
@@ -23,16 +22,17 @@ export async function GET(
       );
     }
 
-    const fileName = `finalized_${signingSession.id}.pdf`;
-    const filePath = path.join(process.cwd(), "public", "uploads", fileName);
+    if (!signingSession.finalizedStorageKey) {
+      return NextResponse.json(
+        { error: "Document not found or not completed" },
+        { status: 404 },
+      );
+    }
 
-    const fileBuffer = await fs.readFile(filePath);
-    return new NextResponse(fileBuffer, {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${fileName}"`,
-      },
+    const url = await createReadUrl(signingSession.finalizedStorageKey, {
+      downloadName: `finalized_${signingSession.id}.pdf`,
     });
+    return NextResponse.redirect(url);
   } catch (error) {
     if (error instanceof AccessError) {
       return NextResponse.json(

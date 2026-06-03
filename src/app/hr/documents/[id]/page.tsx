@@ -16,7 +16,10 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Field, RoleConfig } from "@/lib/field-utils";
 import { nanoid } from "nanoid";
-import { backgroundUploadStore, useBackgroundUpload } from "@/lib/background-upload-store";
+import {
+  backgroundUploadStore,
+  useBackgroundUpload,
+} from "@/lib/background-upload-store";
 import { useCurrentWorkspaceId } from "@/lib/workspace-store";
 
 export default function HRDocumentPage() {
@@ -29,12 +32,17 @@ export default function HRDocumentPage() {
     readUploadedDocumentDraft(id),
   );
   const [query, setQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(() => !readUploadedDocumentDraft(id));
+  const [isLoading, setIsLoading] = useState(
+    () => !readUploadedDocumentDraft(id),
+  );
   const [shareOpen, setShareOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const workspaceId = useCurrentWorkspaceId();
   const bgUploadStatus = bgUpload?.status;
   const bgUploadError = bgUpload?.error;
+  const isDocumentUploading =
+    Boolean(bgUpload && bgUpload.status === "uploading") ||
+    document?.uploadStatus === "pending_upload";
 
   function normalizeDocuments(data: unknown) {
     return Array.isArray(data) ? (data as DocumentRecord[]) : [];
@@ -57,8 +65,12 @@ export default function HRDocumentPage() {
           return documentData as DocumentRecord;
         }
 
-        lastError = new Error(`Failed to fetch document: ${documentRes.status}`);
-        await new Promise((resolve) => window.setTimeout(resolve, 180 * (attempt + 1)));
+        lastError = new Error(
+          `Failed to fetch document: ${documentRes.status}`,
+        );
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, 180 * (attempt + 1)),
+        );
       }
 
       throw lastError || new Error("Document not found");
@@ -165,7 +177,10 @@ export default function HRDocumentPage() {
     );
   }
 
-  function updateDocumentRoleConfigs(documentId: string, roleConfigs: RoleConfig[]) {
+  function updateDocumentRoleConfigs(
+    documentId: string,
+    roleConfigs: RoleConfig[],
+  ) {
     setDocument((current) =>
       current?.id === documentId ? { ...current, roleConfigs } : current,
     );
@@ -251,17 +266,17 @@ export default function HRDocumentPage() {
                   <span className="hidden font-mono text-[10px] uppercase tracking-widest text-muted-foreground sm:inline">
                     {getDocumentCounts(document).fields} fields placed
                   </span>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     onClick={() => setReviewOpen(true)}
-                    disabled={Boolean(bgUpload && bgUpload.status === "uploading")}
+                    disabled={isDocumentUploading}
                   >
                     <EyeIcon data-icon="inline-start" />
                     Review
                   </Button>
-                  <Button 
+                  <Button
                     onClick={openSharePanel}
-                    disabled={Boolean(bgUpload && bgUpload.status === "uploading")}
+                    disabled={isDocumentUploading}
                   >
                     <SendIcon data-icon="inline-start" />
                     Share Document
@@ -273,7 +288,7 @@ export default function HRDocumentPage() {
 
           <div
             ref={setupRef}
-            className="min-h-0 overflow-hidden bg-(--paper)] p-4"
+            className="min-h-0 overflow-hidden bg-[var(--paper)] p-4"
           >
             {isLoading ? (
               <div className="grid h-full min-h-0 overflow-hidden border border-border bg-card lg:grid-cols-[150px_minmax(0,1fr)_178px]">
@@ -294,7 +309,7 @@ export default function HRDocumentPage() {
                 onFieldsChange={updateDocumentFields}
                 onRoleConfigsChange={updateDocumentRoleConfigs}
                 fullHeight
-                isUploading={Boolean(bgUpload && bgUpload.status === "uploading")}
+                isUploading={isDocumentUploading}
                 uploadProgress={bgUpload ? bgUpload.progress : 0}
               />
             ) : (
@@ -342,8 +357,13 @@ export default function HRDocumentPage() {
               hideCloseButton
               className="left-auto right-0 w-[min(100vw,72rem)] max-w-none translate-x-full border-l border-r-0 p-0 data-[state=open]:translate-x-0"
             >
-              <SheetTitle className="sr-only">Review document before sharing</SheetTitle>
-              <DocumentReviewPanel document={document} onClose={() => setReviewOpen(false)} />
+              <SheetTitle className="sr-only">
+                Review document before sharing
+              </SheetTitle>
+              <DocumentReviewPanel
+                document={document}
+                onClose={() => setReviewOpen(false)}
+              />
             </SheetContent>
           </Sheet>
         ) : null}

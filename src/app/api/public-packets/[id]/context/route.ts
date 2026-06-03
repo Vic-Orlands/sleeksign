@@ -130,7 +130,10 @@ export async function GET(
         signerName: copy?.signerName || null,
         signerEmail: copy?.signerEmail || null,
         branding,
-        document: packet.document,
+        document: {
+          ...packet.document,
+          fileUrl: `/api/public-packets/${packet.id}/file?role=${encodeURIComponent(roleName)}${copyId ? `&copyId=${encodeURIComponent(copyId)}` : ""}`,
+        },
         fields: visibleFields,
         values,
       },
@@ -299,15 +302,19 @@ export async function POST(
     }
 
     if (scope === "shared") {
-      const packetUrl = await finalizeSigningPacket({
+      const finalizedPacket = await finalizeSigningPacket({
         packetId: packet.id,
         roleName,
         signerName: signerName || null,
         signerEmail: signerEmail || null,
       });
 
-      if (packetUrl) {
-        await completePacket(packet.id, packetUrl);
+      if (finalizedPacket) {
+        await completePacket(
+          packet.id,
+          finalizedPacket.url,
+          finalizedPacket.storageKey,
+        );
         await emitAuditEvent({
           organizationId: packet.workspaceId,
           teamId: packet.teamId,
@@ -318,10 +325,10 @@ export async function POST(
           actorEmail: signerEmail || null,
           eventType: "packet.finalized",
           chainKey: `packet:${packet.id}`,
-          payload: { roleName, url: packetUrl },
+          payload: { roleName, storageProvider: "r2" },
           ...getRequestAuditContext(req.headers),
         });
-        return NextResponse.json({ status: "completed", url: packetUrl });
+        return NextResponse.json({ status: "completed", url: finalizedPacket.url });
       }
 
       return NextResponse.json({
@@ -337,7 +344,7 @@ export async function POST(
       );
     }
 
-    const finalizedUrl = await finalizeSigningPacketCopy({
+    const finalizedCopy = await finalizeSigningPacketCopy({
       packetId: packet.id,
       copyId,
       roleName,
@@ -345,7 +352,7 @@ export async function POST(
       signerEmail: signerEmail || null,
     });
 
-    await completePacketCopy(copyId, finalizedUrl);
+    await completePacketCopy(copyId, finalizedCopy.url, finalizedCopy.storageKey);
     const row = await db.query.bulkSendRows.findFirst({
       where: eq(bulkSendRows.packetCopyId, copyId),
     });
@@ -381,11 +388,11 @@ export async function POST(
       actorEmail: signerEmail || null,
       eventType: "packet-copy.finalized",
       chainKey: `packet-copy:${copyId}`,
-      payload: { roleName, url: finalizedUrl },
+      payload: { roleName, storageProvider: "r2" },
       ...getRequestAuditContext(req.headers),
     });
 
-    return NextResponse.json({ status: "completed", url: finalizedUrl });
+    return NextResponse.json({ status: "completed", url: finalizedCopy.url });
   } catch (error) {
     console.error("Public packet completion error:", error);
     return NextResponse.json(

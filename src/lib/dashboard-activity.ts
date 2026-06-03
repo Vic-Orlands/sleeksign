@@ -27,7 +27,8 @@ function buildDocumentSessions(document: DocumentWithActivity): SessionRecord[] 
     .filter((session) => !session.deletedAt)
     .map((session) => ({
       ...session,
-      finalizedFileUrl: null,
+      finalizedFileUrl: session.finalizedFileUrl || null,
+      finalizedStorageKey: session.finalizedStorageKey || null,
       completedAt: session.completedAt || null,
       deletedAt: session.deletedAt || null,
     }));
@@ -75,6 +76,7 @@ function buildPacketSessions(
           ? "completed"
           : "pending",
         finalizedFileUrl: packet.finalizedFileUrl || null,
+        finalizedStorageKey: packet.finalizedStorageKey || null,
         signerName: firstValue?.signerName || role.name,
         signerEmail: firstValue?.signerEmail || null,
         signerRole: role.name,
@@ -92,6 +94,7 @@ function buildPacketSessions(
     documentId: String(document.id || ""),
     status: copy.status === "completed" ? "completed" : "pending",
     finalizedFileUrl: copy.finalizedFileUrl || null,
+    finalizedStorageKey: copy.finalizedStorageKey || null,
     signerName: copy.signerName || copy.roleName,
     signerEmail: copy.signerEmail || null,
     signerRole: copy.roleName,

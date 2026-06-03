@@ -11,6 +11,7 @@ export interface BackgroundUpload {
     id: string;
     name: string;
     url: string;
+    fileUrl?: string;
     createdAt?: string;
   };
 }
@@ -56,16 +57,15 @@ class BackgroundUploadStore {
   startUpload(file: File, workspaceId: string, docId: string) {
     if (typeof window === "undefined") return;
 
-    // Create a local blob/object URL for immediate rendering
     const localUrl = URL.createObjectURL(file);
 
-    // Create the background draft record in sessionStorage
     window.sessionStorage.setItem(
       `sleeksign:uploaded-document:${docId}`,
       JSON.stringify({
         id: docId,
         name: file.name,
         fileUrl: localUrl,
+        uploadStatus: "pending_upload",
         createdAt: new Date().toISOString(),
         fields: [],
         sessions: [],
@@ -85,14 +85,40 @@ class BackgroundUploadStore {
     this.uploads[docId] = uploadItem;
     this.notify();
 
-    // Start XMLHttpRequest for true progress reporting
+    void this.presignAndUpload(file, workspaceId, docId);
+  }
+
+  private async presignAndUpload(file: File, workspaceId: string, docId: string) {
+    let uploadUrl = "";
+
+    try {
+      const presignResponse = await fetch("/api/uploads/presign", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          documentId: docId,
+          workspaceId,
+          fileName: file.name,
+          fileSize: file.size,
+          contentType: "application/pdf",
+        }),
+      });
+      const presignData = await presignResponse.json().catch(() => null);
+
+      if (!presignResponse.ok || !presignData?.uploadUrl) {
+        throw new Error(presignData?.error || "Upload failed");
+      }
+
+      uploadUrl = presignData.uploadUrl;
+    } catch (error) {
+      this.handleError(docId, error instanceof Error ? error : new Error("Upload failed"));
+      return;
+    }
+
     const xhr = new XMLHttpRequest();
     this.activeRequests[docId] = xhr;
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("workspaceId", workspaceId);
-    formData.append("documentId", docId); // server will use this custom document ID!
 
     xhr.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable) {
@@ -108,41 +134,50 @@ class BackgroundUploadStore {
     xhr.addEventListener("load", () => {
       delete this.activeRequests[docId];
       if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          
-          // Update sessionStorage with actual uploaded file details
-          window.sessionStorage.setItem(
-            `sleeksign:uploaded-document:${docId}`,
-            JSON.stringify({
-              id: docId,
-              name: data.name,
-              fileUrl: data.url,
-              createdAt: data.createdAt || new Date().toISOString(),
-              fields: [],
-              sessions: [],
-              roleConfigs: [],
-              signerRoles: [],
-            }),
-          );
+        void fetch("/api/uploads/complete", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ documentId: docId }),
+        })
+          .then(async (response) => {
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+              throw new Error(data?.error || "Upload failed");
+            }
 
-          this.uploads[docId] = {
-            ...this.uploads[docId],
-            status: "success",
-            progress: 100,
-            result: data,
-          };
-          this.notify();
-        } catch {
-          this.handleError(docId, new Error("Invalid response from server"));
-        }
+            window.sessionStorage.setItem(
+              `sleeksign:uploaded-document:${docId}`,
+              JSON.stringify({
+                id: docId,
+                name: data.name,
+                fileUrl: data.fileUrl || data.url,
+                uploadStatus: "ready",
+                createdAt: data.createdAt || new Date().toISOString(),
+                fields: [],
+                sessions: [],
+                roleConfigs: [],
+                signerRoles: [],
+              }),
+            );
+
+            this.uploads[docId] = {
+              ...this.uploads[docId],
+              status: "success",
+              progress: 100,
+              result: data,
+            };
+            this.notify();
+          })
+          .catch((error) => {
+            this.handleError(
+              docId,
+              error instanceof Error ? error : new Error("Upload failed"),
+            );
+          });
       } else {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          this.handleError(docId, new Error(data.error || "Upload failed"));
-        } catch {
-          this.handleError(docId, new Error(`Upload failed (Status: ${xhr.status})`));
-        }
+        this.handleError(docId, new Error(`Upload failed (Status: ${xhr.status})`));
       }
     });
 
@@ -151,8 +186,9 @@ class BackgroundUploadStore {
       this.handleError(docId, new Error("Network error during file upload"));
     });
 
-    xhr.open("POST", "/api/upload");
-    xhr.send(formData);
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("Content-Type", "application/pdf");
+    xhr.send(file);
   }
 
   private handleError(docId: string, error: Error) {

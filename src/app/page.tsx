@@ -100,7 +100,7 @@ export default function LandingPage() {
           >
             <a
               href="/hr"
-              className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-primary px-8 py-3.5 text-[10px] uppercase tracking-[0.15em] font-medium text-primary-foreground transition-all hover:bg-primary/90"
+              className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full! bg-primary px-8 py-3.5 text-[10px] uppercase tracking-[0.15em] font-medium text-primary-foreground transition-all hover:bg-primary/90"
             >
               <span className="relative z-10 flex items-center gap-2">
                 Get started

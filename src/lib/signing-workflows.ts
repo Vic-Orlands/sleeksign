@@ -249,23 +249,33 @@ async function upsertPacketValue(input: {
   return valueId;
 }
 
-async function completePacketCopy(copyId: string, finalizedFileUrl?: string | null) {
+async function completePacketCopy(
+  copyId: string,
+  finalizedFileUrl?: string | null,
+  finalizedStorageKey?: string | null,
+) {
   await db
     .update(signingPacketCopies)
     .set({
       status: "completed",
       finalizedFileUrl: finalizedFileUrl || null,
+      finalizedStorageKey: finalizedStorageKey || null,
       completedAt: new Date(),
     })
     .where(eq(signingPacketCopies.id, copyId));
 }
 
-async function completePacket(packetId: string, finalizedFileUrl?: string | null) {
+async function completePacket(
+  packetId: string,
+  finalizedFileUrl?: string | null,
+  finalizedStorageKey?: string | null,
+) {
   await db
     .update(signingPackets)
     .set({
       status: "completed",
       finalizedFileUrl: finalizedFileUrl || null,
+      finalizedStorageKey: finalizedStorageKey || null,
       completedAt: new Date(),
     })
     .where(eq(signingPackets.id, packetId));

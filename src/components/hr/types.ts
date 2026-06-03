@@ -8,6 +8,7 @@ export type SessionRecord = {
   documentId: string
   status: SessionStatus
   finalizedFileUrl?: string | null
+  finalizedStorageKey?: string | null
   signerName?: string | null
   signerEmail?: string | null
   signerRole?: string | null
@@ -22,6 +23,11 @@ export type DocumentRecord = {
   id: string
   name: string
   fileUrl: string
+  storageKey?: string | null
+  storageProvider?: string | null
+  uploadStatus?: "pending_upload" | "ready" | "failed"
+  fileSize?: number | null
+  contentType?: string | null
   teamId?: string | null
   requireOtp?: boolean
   createdAt: string | number | Date

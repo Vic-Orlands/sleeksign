@@ -11,6 +11,7 @@ import {
   getDocumentType,
 } from "@/components/hr/types";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -168,6 +169,73 @@ function DocumentTable({
   );
 }
 
+function DocumentTableSkeleton({
+  variant = "documents",
+  showActions = true,
+}: {
+  variant?: "documents" | "shared";
+  showActions?: boolean;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Document Name</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Fields</TableHead>
+          {variant === "shared" ? <TableHead>Signatures</TableHead> : null}
+          <TableHead>Last Updated</TableHead>
+          {showActions ? <TableHead className="w-24 text-right">Actions</TableHead> : null}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {Array.from({ length: 5 }).map((_, index) => (
+          <TableRow key={index}>
+            <TableCell>
+              <div className="flex items-center gap-3">
+                <Skeleton className="size-7 rounded-none" />
+                <div className="min-w-0 space-y-2">
+                  <Skeleton className="h-3 w-44 max-w-[42vw]" />
+                  <Skeleton className="h-2 w-28" />
+                </div>
+              </div>
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-3 w-12" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-6 w-24 rounded-none" />
+            </TableCell>
+            <TableCell>
+              <Skeleton className="h-3 w-8" />
+            </TableCell>
+            {variant === "shared" ? (
+              <TableCell>
+                <Skeleton className="h-3 w-10" />
+              </TableCell>
+            ) : null}
+            <TableCell>
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-2 w-16" />
+              </div>
+            </TableCell>
+            {showActions ? (
+              <TableCell>
+                <div className="flex justify-end gap-1">
+                  <Skeleton className="size-8 rounded-none" />
+                  <Skeleton className="size-8 rounded-none" />
+                </div>
+              </TableCell>
+            ) : null}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
 function getSharedStatus(document: DocumentRecord) {
   const sessions = document.sessions || [];
   if (sessions.some((session) => session.status === "completed"))
@@ -176,4 +244,4 @@ function getSharedStatus(document: DocumentRecord) {
   return "Not Opened";
 }
 
-export { DocumentTable };
+export { DocumentTable, DocumentTableSkeleton };

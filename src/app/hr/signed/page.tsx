@@ -28,8 +28,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { uploadDocument } from "@/lib/upload-document";
+import { backgroundUploadStore } from "@/lib/background-upload-store";
 import { useCurrentWorkspaceId } from "@/lib/workspace-store";
+import { nanoid } from "nanoid";
 
 type SignedSession = SessionRecord & {
   documentName: string;
@@ -46,9 +47,6 @@ export default function SignedDocumentsPage() {
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isDeletingSession, setIsDeletingSession] = useState(false);
-  const [uploadingDocumentName, setUploadingDocumentName] = useState<
-    string | null
-  >(null);
   const [selectedGroup, setSelectedGroup] = useState<SignedSessionGroup | null>(
     null,
   );
@@ -168,16 +166,15 @@ export default function SignedDocumentsPage() {
   ).length;
 
   async function handleUpload(file: File) {
-    setUploadingDocumentName(file.name);
-
-    try {
-      const data = await uploadDocument(file, workspaceId);
-      toast.success("Document uploaded");
-      router.push(`/hr/documents/${data.id}`);
-    } catch (error) {
-      setUploadingDocumentName(null);
-      toast.error(error instanceof Error ? error.message : "Upload failed");
+    if (!workspaceId) {
+      toast.error("No active workspace selected");
+      return;
     }
+
+    const docId = nanoid();
+    backgroundUploadStore.startUpload(file, workspaceId, docId);
+    toast.success("Uploading document in background...");
+    router.push(`/hr/documents/${docId}`);
   }
 
   async function deleteSignedSession() {
@@ -219,9 +216,8 @@ export default function SignedDocumentsPage() {
         onQueryChange={setQuery}
         onUpload={handleUpload}
         actionOverlay={{
-          visible: Boolean(uploadingDocumentName),
+          visible: false,
           title: "Uploading document",
-          documentName: uploadingDocumentName || undefined,
           detail: "Preparing for setup.",
         }}
         activeView="signed"
@@ -640,11 +636,13 @@ function formatCompletedAt(session: SignedSession) {
 
 function getReviewUrl(session: SignedSession) {
   if (session.finalizedFileUrl) return session.finalizedFileUrl;
-  if (session.id.startsWith("packet-")) return undefined;
-  return `/uploads/finalized_${session.id}.pdf`;
+  return undefined;
 }
 
 function getDownloadUrl(session: SignedSession) {
+  if (session.finalizedFileUrl?.includes("/api/finalized/session/")) {
+    return `/api/download/${session.id}`;
+  }
   if (session.finalizedFileUrl) return session.finalizedFileUrl;
   if (session.id.startsWith("packet-")) return undefined;
   return `/api/download/${session.id}`;

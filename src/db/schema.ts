@@ -29,6 +29,14 @@ export const documents = pgTable("documents", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   fileUrl: text("file_url").notNull(),
+  storageKey: text("storage_key"),
+  storageProvider: text("storage_provider").notNull().default("r2"),
+  uploadStatus: text("upload_status")
+    .$type<"pending_upload" | "ready" | "failed">()
+    .notNull()
+    .default("ready"),
+  fileSize: integer("file_size"),
+  contentType: text("content_type"),
   workspaceId: text("workspace_id"),
   teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
   signerRoles: text("signer_roles")
@@ -91,6 +99,7 @@ export const sessions = pgTable("sessions", {
   certificateId: text("certificate_id"),
   certificateHash: text("certificate_hash"),
   finalizedFileUrl: text("finalized_file_url"),
+  finalizedStorageKey: text("finalized_storage_key"),
   completedAt: timestamp("completed_at", { withTimezone: false }),
   deletedAt: timestamp("deleted_at", { withTimezone: false }),
   createdAt: timestamp("created_at", { withTimezone: false })
@@ -132,6 +141,7 @@ export const signingPackets = pgTable("signing_packets", {
     .notNull()
     .default("active"),
   finalizedFileUrl: text("finalized_file_url"),
+  finalizedStorageKey: text("finalized_storage_key"),
   evidenceSnapshot: text("evidence_snapshot"),
   certificateId: text("certificate_id"),
   certificateHash: text("certificate_hash"),
@@ -162,6 +172,7 @@ export const signingPacketCopies = pgTable("signing_packet_copies", {
     .notNull()
     .default("pending"),
   finalizedFileUrl: text("finalized_file_url"),
+  finalizedStorageKey: text("finalized_storage_key"),
   evidenceSnapshot: text("evidence_snapshot"),
   certificateId: text("certificate_id"),
   certificateHash: text("certificate_hash"),
