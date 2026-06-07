@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import type { CSSProperties } from "react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -46,7 +47,10 @@ export default function LandingPage() {
   ];
 
   return (
-    <main className="min-h-screen bg-[var(--paper)] text-foreground font-roboto relative overflow-hidden">
+    <main
+      className="min-h-screen bg-[var(--paper)] text-foreground font-roboto relative overflow-hidden"
+      style={{ "--paper": "#dfe8ed" } as CSSProperties}
+    >
       {/* Hero Section */}
       <section className="relative mx-auto w-[90%] max-w-7xl pt-28 pb-32 z-10">
         <motion.div
@@ -273,7 +277,7 @@ export default function LandingPage() {
                   alt={item.label}
                   className="object-contain rounded-2xl"
                   fill
-                  quality={100}
+                  priority={i === 0}
                   unoptimized
                 />
               </motion.div>
