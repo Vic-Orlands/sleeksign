@@ -446,14 +446,7 @@ function RelationshipNode({
       transition={{ duration: 0.4, type: "spring", bounce: 0.3 }}
       className={cx(
         "relative min-w-[150px] rounded-md border px-3.5 py-2.5 shadow-sm backdrop-blur-sm",
-        data.tone === "document" &&
-          "border-foreground/20 bg-white/90 text-foreground shadow-md",
-        data.tone === "shared" &&
-          "border-border/80 bg-stone-50/90 text-foreground",
-        data.tone === "private" &&
-          "border-amber-200/50 bg-amber-50/90 text-amber-950",
-        data.tone === "recipient" &&
-          "border-blue-200/50 bg-blue-50/90 text-blue-950",
+        "border-blue-200/50 bg-blue-50/90 text-blue-950",
       )}
     >
       {targetPosition && (

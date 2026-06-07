@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import type { CSSProperties } from "react";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -49,7 +48,6 @@ export default function LandingPage() {
   return (
     <main
       className="min-h-screen bg-[var(--paper)] text-foreground font-roboto relative overflow-hidden"
-      style={{ "--paper": "#dfe8ed" } as CSSProperties}
     >
       {/* Hero Section */}
       <section className="relative mx-auto w-[90%] max-w-7xl pt-28 pb-32 z-10">
@@ -237,7 +235,7 @@ export default function LandingPage() {
               <button
                 key={i}
                 onClick={() => setActiveGalleryTab(i)}
-                className={`text-left transition-all duration-300 ${activeGalleryTab === i ? "opacity-100" : "opacity-40 hover:opacity-70"}`}
+                className={`text-left transition-all duration-300 ${activeGalleryTab === i ? "opacity-100" : "opacity-[0.65] hover:opacity-[0.85]"}`}
               >
                 <div className="text-[10px] uppercase tracking-[0.2em] font-medium mb-3 text-foreground flex items-center gap-2">
                   {item.label}
@@ -251,7 +249,7 @@ export default function LandingPage() {
                     </motion.div>
                   )}
                 </div>
-                <p className="text-[13px] font-light leading-[1.6] text-muted-foreground">
+                <p className="text-[13px] font-normal leading-[1.6] text-foreground/65">
                   {item.desc}
                 </p>
               </button>
@@ -259,7 +257,10 @@ export default function LandingPage() {
           </div>
 
           {/* Image Display */}
-          <div className="w-full md:w-2/3 relative overflow-hidden h-[300px] sm:h-[450px] lg:h-[520px] shadow-2xl bg-transparent">
+          <div
+            className="w-full md:w-2/3 relative overflow-hidden shadow-2xl bg-transparent"
+            style={{ aspectRatio: "3600 / 2338" }}
+          >
             {galleryItems.map((item, i) => (
               <motion.div
                 key={item.src}
@@ -275,7 +276,7 @@ export default function LandingPage() {
                 <Image
                   src={item.src}
                   alt={item.label}
-                  className="object-contain rounded-2xl"
+                  className="object-contain"
                   fill
                   priority={i === 0}
                   unoptimized
