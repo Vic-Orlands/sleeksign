@@ -415,7 +415,7 @@ function AuthSignal({
   label: string;
 }) {
   return (
-    <div className="flex items-center gap-3 border border-border bg-card p-3 text-sm text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground">
+    <div className="flex items-center gap-3 border border-border p-3 text-sm text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground">
       <Icon className="size-4 text-foreground" />
       <span>{label}</span>
     </div>

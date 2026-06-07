@@ -60,15 +60,11 @@ function DocumentSetupDock({
   onFieldsChange,
   onRoleConfigsChange,
   fullHeight = false,
-  isUploading = false,
-  uploadProgress = 0,
 }: {
   document: DocumentRecord;
   onFieldsChange?: (documentId: string, fields: Field[]) => void;
   onRoleConfigsChange?: (documentId: string, roleConfigs: RoleConfig[]) => void;
   fullHeight?: boolean;
-  isUploading?: boolean;
-  uploadProgress?: number;
 }) {
   const [fields, setFields] = useState<Field[]>(document.fields || []);
   const [roleConfigs, setRoleConfigs] = useState<RoleConfig[]>(
@@ -110,10 +106,6 @@ function DocumentSetupDock({
   );
 
   async function addField(page: number, point: { x: number; y: number }) {
-    if (isUploading) {
-      toast.error("Please wait for the document to finish uploading");
-      return;
-    }
     if (selectedType === "select") return;
 
     const defaults = fieldDefaults[selectedType];
@@ -304,30 +296,11 @@ function DocumentSetupDock({
               Select a field type, then click the PDF to place it.
             </p>
           </div>
-          {isUploading ? (
-            <div className="mt-4 border border-border bg-card p-4 space-y-3 lg:w-auto sm:w-48">
-              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground font-bold">Background Upload</p>
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-mono text-[10px] text-foreground font-semibold">Uploading PDF...</span>
-                <span className="font-mono text-[10px] text-amber-500 font-bold">{uploadProgress}%</span>
-              </div>
-              <div className="h-1.5 bg-muted overflow-hidden relative">
-                <div 
-                  className="h-full bg-amber-500 transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-              <p className="text-[10px] leading-4 text-muted-foreground font-mono">
-                Fields and roles can be configured once upload completes in a few seconds.
-              </p>
-            </div>
-          ) : (
-            <FieldPalette
-              selectedType={selectedType}
-              fieldCounts={fieldCounts}
-              onSelectType={setSelectedType}
-            />
-          )}
+          <FieldPalette
+            selectedType={selectedType}
+            fieldCounts={fieldCounts}
+            onSelectType={setSelectedType}
+          />
         </div>
       </aside>
 

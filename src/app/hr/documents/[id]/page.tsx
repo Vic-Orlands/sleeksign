@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftIcon, EyeIcon, SendIcon } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import useSWR from "swr";
 
 import { DocumentDetailPanel } from "@/components/hr/document-detail-panel";
 import { DocumentReviewPanel } from "@/components/hr/document-review-panel";
@@ -22,138 +23,110 @@ import {
 } from "@/lib/background-upload-store";
 import { useCurrentWorkspaceId } from "@/lib/workspace-store";
 
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+async function fetchDocumentWithRetry(url: string) {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const documentRes = await fetch(url, {
+      cache: "no-store",
+    });
+
+    if (documentRes.ok) {
+      const documentData = await documentRes.json();
+      return documentData as DocumentRecord;
+    }
+
+    lastError = new Error(`Failed to fetch document: ${documentRes.status}`);
+    await new Promise((resolve) =>
+      window.setTimeout(resolve, 180 * (attempt + 1)),
+    );
+  }
+
+  throw lastError || new Error("Document not found");
+}
+
 export default function HRDocumentPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const setupRef = useRef<HTMLDivElement>(null);
   const bgUpload = useBackgroundUpload(id);
-  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
-  const [document, setDocument] = useState<DocumentRecord | null>(() =>
-    readUploadedDocumentDraft(id),
-  );
   const [query, setQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(
-    () => !readUploadedDocumentDraft(id),
-  );
   const [shareOpen, setShareOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const workspaceId = useCurrentWorkspaceId();
   const bgUploadStatus = bgUpload?.status;
   const bgUploadError = bgUpload?.error;
-  const isDocumentUploading =
-    Boolean(bgUpload && bgUpload.status === "uploading") ||
-    document?.uploadStatus === "pending_upload";
+
+  const fallbackDraft = useMemo(() => readUploadedDocumentDraft(id), [id]);
+
+  // Fetch individual document
+  const { data: fetchedDocument, error: documentError, mutate: mutateDocument } = useSWR<DocumentRecord>(
+    id && bgUploadStatus !== "uploading" && bgUploadStatus !== "error"
+      ? `/api/documents/${id}`
+      : null,
+    fetchDocumentWithRetry,
+    {
+      shouldRetryOnError: false,
+      onSuccess: () => {
+        clearUploadedDocumentDraft(id);
+        backgroundUploadStore.clearUpload(id);
+      },
+    }
+  );
+
+  // Fetch workspace documents
+  const { data: documentsData, mutate: mutateDocuments } = useSWR<DocumentRecord[]>(
+    workspaceId
+      ? `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`
+      : "/api/documents",
+    fetcher
+  );
 
   function normalizeDocuments(data: unknown) {
     return Array.isArray(data) ? (data as DocumentRecord[]) : [];
   }
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchDocumentWithRetry() {
-      let lastError: Error | null = null;
-
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const documentRes = await fetch(`/api/documents/${id}`, {
-          cache: "no-store",
-        });
-
-        if (documentRes.ok) {
-          const documentData = await documentRes.json();
-          clearUploadedDocumentDraft(id);
-          return documentData as DocumentRecord;
-        }
-
-        lastError = new Error(
-          `Failed to fetch document: ${documentRes.status}`,
-        );
-        await new Promise((resolve) =>
-          window.setTimeout(resolve, 180 * (attempt + 1)),
-        );
-      }
-
-      throw lastError || new Error("Document not found");
+  const document = useMemo(() => {
+    if (bgUploadStatus === "uploading") {
+      return fallbackDraft;
     }
-
-    async function fetchIndividualDocument() {
-      if (bgUploadStatus === "uploading") {
-        setIsLoading(false);
-        return;
-      }
-
-      if (bgUploadStatus === "success") {
-        const uploadedDraft = readUploadedDocumentDraft(id);
-        if (uploadedDraft) {
-          setDocument((current) => ({
-            ...(current || uploadedDraft),
-            ...uploadedDraft,
-          }));
-        }
-        setIsLoading(false);
-      }
-
-      if (bgUploadStatus === "error") {
-        setIsLoading(false);
-        setDocument(null);
-        return;
-      }
-
-      if (!document) {
-        setIsLoading(true);
-      }
-      try {
-        const documentData = await fetchDocumentWithRetry();
-
-        if (cancelled) return;
-        setDocument(documentData);
-        backgroundUploadStore.clearUpload(id);
-      } catch {
-        if (!cancelled) {
-          setDocument(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+    if (bgUploadStatus === "error") {
+      return null;
+    }
+    if (bgUploadStatus === "success") {
+      const draft = readUploadedDocumentDraft(id);
+      if (draft) {
+        return fetchedDocument ? { ...fetchedDocument, ...draft } : draft;
       }
     }
+    return fetchedDocument || fallbackDraft;
+  }, [fetchedDocument, fallbackDraft, bgUploadStatus, id]);
 
-    async function fetchWorkspaceDocuments() {
-      try {
-        const documentsRes = await fetch(
-          workspaceId
-            ? `/api/documents?workspaceId=${encodeURIComponent(workspaceId)}`
-            : "/api/documents",
-        );
-        if (!documentsRes.ok) return;
-        const documentsData = await documentsRes.json();
+  const documents = useMemo(() => normalizeDocuments(documentsData), [documentsData]);
 
-        if (cancelled) return;
-        setDocuments(normalizeDocuments(documentsData));
-      } catch {
-        // Asynchronous statistics background loading fail silent
-      }
+  const isLoading = useMemo(() => {
+    if (bgUploadStatus === "uploading" || bgUploadStatus === "success" || bgUploadStatus === "error") {
+      return false;
     }
+    return !document && !documentError;
+  }, [document, documentError, bgUploadStatus]);
 
-    void fetchIndividualDocument();
-    void fetchWorkspaceDocuments();
+  const isDocumentUploading =
+    Boolean(bgUpload && bgUpload.status === "uploading") ||
+    document?.uploadStatus === "pending_upload";
 
-    return () => {
-      cancelled = true;
-    };
-  }, [bgUploadError, bgUploadStatus, document, id, workspaceId]);
-
-  const allSessions = documents.flatMap((item) => item.sessions || []);
-  const completedCount = allSessions.filter(
+  const allSessions = useMemo(() => documents.flatMap((item) => item.sessions || []), [documents]);
+  const completedCount = useMemo(() => allSessions.filter(
     (session) => session.status === "completed",
-  ).length;
-  const pendingCount = allSessions.filter(
+  ).length, [allSessions]);
+  const pendingCount = useMemo(() => allSessions.filter(
     (session) => session.status === "pending",
-  ).length;
-  const inProgressCount = documents.filter(
+  ).length, [allSessions]);
+  const inProgressCount = useMemo(() => documents.filter(
     (item) => getDocumentStatus(item) === "In Progress",
-  ).length;
+  ).length, [documents]);
 
   async function handleUpload(file: File) {
     if (!workspaceId) {
@@ -162,18 +135,18 @@ export default function HRDocumentPage() {
     }
     const docId = nanoid();
     backgroundUploadStore.startUpload(file, workspaceId, docId);
-    toast.success("Uploading document in background...");
     router.push(`/hr/documents/${docId}`);
   }
 
   function updateDocumentFields(documentId: string, fields: Field[]) {
-    setDocument((current) =>
-      current?.id === documentId ? { ...current, fields } : current,
+    void mutateDocument(
+      (current) => (current?.id === documentId ? { ...current, fields } : current),
+      { revalidate: false }
     );
-    setDocuments((current) =>
-      current.map((item) =>
-        item.id === documentId ? { ...item, fields } : item,
-      ),
+    void mutateDocuments(
+      (current) =>
+        current?.map((item) => (item.id === documentId ? { ...item, fields } : item)) || [],
+      { revalidate: false }
     );
   }
 
@@ -181,13 +154,14 @@ export default function HRDocumentPage() {
     documentId: string,
     roleConfigs: RoleConfig[],
   ) {
-    setDocument((current) =>
-      current?.id === documentId ? { ...current, roleConfigs } : current,
+    void mutateDocument(
+      (current) => (current?.id === documentId ? { ...current, roleConfigs } : current),
+      { revalidate: false }
     );
-    setDocuments((current) =>
-      current.map((item) =>
-        item.id === documentId ? { ...item, roleConfigs } : item,
-      ),
+    void mutateDocuments(
+      (current) =>
+        current?.map((item) => (item.id === documentId ? { ...item, roleConfigs } : item)) || [],
+      { revalidate: false }
     );
   }
 
@@ -246,18 +220,6 @@ export default function HRDocumentPage() {
                   </p>
                   <h1 className="truncate font-mono text-xs font-semibold uppercase tracking-widest flex items-center gap-2">
                     {document?.name || "Loading document..."}
-                    {bgUpload && bgUpload.status === "uploading" && (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-mono uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 animate-pulse">
-                        <span className="size-1.5 rounded-full bg-amber-500" />
-                        Uploading {bgUpload.progress}%
-                      </span>
-                    )}
-                    {bgUpload && bgUpload.status === "success" && (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-mono uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                        <span className="size-1.5 rounded-full bg-emerald-500" />
-                        Synced
-                      </span>
-                    )}
                   </h1>
                 </div>
               </div>
@@ -309,8 +271,6 @@ export default function HRDocumentPage() {
                 onFieldsChange={updateDocumentFields}
                 onRoleConfigsChange={updateDocumentRoleConfigs}
                 fullHeight
-                isUploading={isDocumentUploading}
-                uploadProgress={bgUpload ? bgUpload.progress : 0}
               />
             ) : (
               <div className="flex h-full items-center justify-center border border-dashed border-border bg-card font-mono text-[11px] uppercase tracking-widest text-muted-foreground">

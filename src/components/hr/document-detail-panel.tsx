@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { CopyIcon, Edit3Icon, LinkIcon, SendIcon, ShieldCheckIcon, UploadIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
+import useSWR from "swr"
 
 import { SignerTimeline } from "@/components/hr/signer-timeline"
 import type { DocumentRecord } from "@/components/hr/types"
@@ -65,6 +66,8 @@ type SignerGroupRecord = {
 
 type BulkBusyAction = "" | "parse" | "send" | "draft"
 
+const fetcher = (url: string) => fetch(url).then((res) => res.json())
+
 function DocumentDetailPanel({
   document,
   canShare = true,
@@ -76,12 +79,8 @@ function DocumentDetailPanel({
   onEdit: () => void
   onClose?: () => void
 }) {
-  const [packets, setPackets] = useState<PacketSummary[]>([])
   const [isCreatingPacket, setIsCreatingPacket] = useState(false)
   const [selectedMode, setSelectedMode] = useState<WorkflowMode>("shared-base")
-  const [teams, setTeams] = useState<TeamRecord[]>([])
-  const [auditLogs, setAuditLogs] = useState<AuditRecord[]>([])
-  const [jobs, setJobs] = useState<BulkSendJob[]>([])
   const [documentOverrides, setDocumentOverrides] = useState<{
     documentId: string
     teamId: string | null
@@ -99,8 +98,6 @@ function DocumentDetailPanel({
   const [roleColumn, setRoleColumn] = useState("role")
   const [defaultRoleName, setDefaultRoleName] = useState("")
   const [bulkBusyAction, setBulkBusyAction] = useState<BulkBusyAction>("")
-  const [directorySigners, setDirectorySigners] = useState<DirectorySigner[]>([])
-  const [signerGroups, setSignerGroups] = useState<SignerGroupRecord[]>([])
   const [sendPath, setSendPath] = useState<"email" | "signer" | "group">("email")
   const [recipientName, setRecipientName] = useState("")
   const [recipientEmail, setRecipientEmail] = useState("")
@@ -111,55 +108,47 @@ function DocumentDetailPanel({
   const workspaceId = useCurrentWorkspaceId()
   const bulkBusy = Boolean(bulkBusyAction)
 
-  useEffect(() => {
-    if (!document) return
+  // 1. Packets SWR
+  const { data: packetsData, mutate: mutatePackets } = useSWR<PacketSummary[]>(
+    document ? `/api/signing-packets?documentId=${encodeURIComponent(document.id)}` : null,
+    fetcher
+  )
+  const packets = packetsData || []
 
-    fetch(`/api/signing-packets?documentId=${encodeURIComponent(document.id)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setPackets(Array.isArray(data) ? data : [])
-      })
-      .catch(() => undefined)
-  }, [document])
+  // 2. Audit logs SWR
+  const { data: auditData } = useSWR<AuditRecord[]>(
+    document && workspaceId
+      ? `/api/audit?documentId=${encodeURIComponent(document.id)}&workspaceId=${encodeURIComponent(workspaceId)}`
+      : null,
+    fetcher
+  )
+  const auditLogs = auditData || []
 
-  useEffect(() => {
-    if (!document) return
-    if (!workspaceId) return
+  // 3. Bulk send jobs SWR
+  const { data: jobsData, mutate: mutateJobs } = useSWR<BulkSendJob[]>(
+    document ? `/api/bulk-send/jobs?documentId=${encodeURIComponent(document.id)}` : null,
+    fetcher
+  )
+  const jobs = jobsData || []
 
-    fetch(`/api/audit?documentId=${encodeURIComponent(document.id)}&workspaceId=${encodeURIComponent(workspaceId)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setAuditLogs(Array.isArray(data) ? data : [])
-      })
-      .catch(() => setAuditLogs([]))
+  // 4. Teams, Signers, Groups SWR
+  const { data: teamsData } = useSWR<{ teams: TeamRecord[] }>(
+    workspaceId ? `/api/teams?workspaceId=${encodeURIComponent(workspaceId)}` : null,
+    fetcher
+  )
+  const teams = teamsData?.teams || []
 
-    fetch(`/api/bulk-send/jobs?documentId=${encodeURIComponent(document.id)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setJobs(Array.isArray(data) ? data : [])
-      })
-      .catch(() => setJobs([]))
-  }, [document, workspaceId])
+  const { data: signerData } = useSWR<{ signers: DirectorySigner[] }>(
+    workspaceId ? `/api/signers/directory?workspaceId=${encodeURIComponent(workspaceId)}` : null,
+    fetcher
+  )
+  const directorySigners = signerData?.signers || []
 
-  useEffect(() => {
-    if (!workspaceId) return
-
-    Promise.all([
-      fetch(`/api/teams?workspaceId=${encodeURIComponent(workspaceId)}`).then((res) => res.json()),
-      fetch(`/api/signers/directory?workspaceId=${encodeURIComponent(workspaceId)}`).then((res) => res.json()),
-      fetch(`/api/signer-groups?workspaceId=${encodeURIComponent(workspaceId)}`).then((res) => res.json()),
-    ])
-      .then(([teamData, signerData, groupData]) => {
-        setTeams(Array.isArray(teamData?.teams) ? teamData.teams : [])
-        setDirectorySigners(Array.isArray(signerData?.signers) ? signerData.signers : [])
-        setSignerGroups(Array.isArray(groupData?.groups) ? groupData.groups : [])
-      })
-      .catch(() => {
-        setTeams([])
-        setDirectorySigners([])
-        setSignerGroups([])
-      })
-  }, [workspaceId])
+  const { data: groupData } = useSWR<{ groups: SignerGroupRecord[] }>(
+    workspaceId ? `/api/signer-groups?workspaceId=${encodeURIComponent(workspaceId)}` : null,
+    fetcher
+  )
+  const signerGroups = groupData?.groups || []
 
   const roleConfigs = useMemo(
     () => document?.roleConfigs || [],
@@ -283,7 +272,7 @@ function DocumentDetailPanel({
       toast.success(sendImmediately ? "Bulk send started" : "Bulk draft created")
       const jobsRes = await fetch(`/api/bulk-send/jobs?documentId=${encodeURIComponent(document.id)}`)
       const jobsData = await jobsRes.json()
-      setJobs(Array.isArray(jobsData) ? jobsData : [])
+      void mutateJobs(Array.isArray(jobsData) ? jobsData : [], false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create job")
     } finally {
@@ -329,7 +318,7 @@ function DocumentDetailPanel({
         status: "active",
         roleConfigs,
       }
-      setPackets((current) => [packet, ...current])
+      void mutatePackets([packet, ...packets], false)
       toast.success("Share packet created")
       return packet
     } catch {

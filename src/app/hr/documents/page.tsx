@@ -28,7 +28,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { nanoid } from "nanoid";
-import { backgroundUploadStore } from "@/lib/background-upload-store";
+import {
+  backgroundUploadStore,
+  useBackgroundUploads,
+} from "@/lib/background-upload-store";
 import { useCurrentWorkspaceId } from "@/lib/workspace-store";
 
 type TableFilter = "all" | "archived" | "shared" | DocumentSetupStatus;
@@ -47,9 +50,12 @@ export default function HRDocuments() {
     useState<DocumentRecord | null>(null);
   const [documentToRestore, setDocumentToRestore] =
     useState<DocumentRecord | null>(null);
+  const [activeUploadId, setActiveUploadId] = useState("");
 
   const workspaceId = useCurrentWorkspaceId();
   const router = useRouter();
+  const uploads = useBackgroundUploads();
+  const activeUpload = activeUploadId ? uploads[activeUploadId] : undefined;
   const visibleDocuments = useMemo(
     () => (workspaceId ? documents : []),
     [documents, workspaceId],
@@ -97,6 +103,21 @@ export default function HRDocuments() {
         setTableFilter("shared");
     });
   }, []);
+
+  useEffect(() => {
+    if (!activeUploadId || !activeUpload) return;
+
+    if (activeUpload.status === "success") {
+      router.push(`/hr/documents/${activeUploadId}`);
+      return;
+    }
+
+    if (activeUpload.status === "error") {
+      toast.error(activeUpload.error || "Upload failed");
+      backgroundUploadStore.clearUpload(activeUploadId);
+      queueMicrotask(() => setActiveUploadId(""));
+    }
+  }, [activeUpload, activeUploadId, router]);
 
   async function fetchDocuments(options?: { background?: boolean }) {
     if (!workspaceId) {
@@ -165,9 +186,9 @@ export default function HRDocuments() {
     }
 
     const docId = nanoid();
+    setActiveUploadId(docId);
     backgroundUploadStore.startUpload(file, workspaceId, docId);
-    toast.success("Uploading document in background...");
-    router.push(`/hr/documents/${docId}`);
+    router.prefetch(`/hr/documents/${docId}`);
   }
 
   async function deleteDocument() {
@@ -240,8 +261,11 @@ export default function HRDocuments() {
         onQueryChange={setQuery}
         onUpload={handleUpload}
         actionOverlay={{
-          visible: false,
-          title: "",
+          visible: Boolean(activeUpload && activeUpload.status === "uploading"),
+          title: "Uploading document",
+          documentName: activeUpload?.name,
+          detail: "Keep this window open while SleekSign prepares your document.",
+          progress: activeUpload?.progress,
         }}
         activeView={tableFilter === "shared" ? "shared" : "documents"}
         onSharedActivityClick={() => setTableFilter("shared")}

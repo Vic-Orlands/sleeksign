@@ -97,6 +97,7 @@ type HrShellProps = {
     title: string;
     documentName?: string;
     detail?: string;
+    progress?: number;
   };
   activeView?: "documents" | "shared" | "signers" | "signed" | "admin";
   headerMode?: "documents" | "minimal" | "none";
@@ -277,7 +278,7 @@ function HrShell({
               className="w-[min(92vw,24rem)] border border-border bg-background px-5 py-4 shadow-sm"
             >
               <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                Preparing workspace
+                Document upload
               </p>
               <p className="mt-2 text-sm font-medium">{actionOverlay.title}</p>
               {actionOverlay.documentName ? (
@@ -304,16 +305,14 @@ function HrShell({
                   {actionOverlay.detail}
                 </p>
               ) : null}
-              <div className="mt-4 h-2 overflow-hidden bg-muted">
+              <div className="mt-4 h-2.5 overflow-hidden bg-muted rounded-lg">
                 <motion.div
-                  className="h-full w-1/2 bg-primary/90"
-                  initial={{ x: "-120%" }}
-                  animate={{ x: "240%" }}
-                  transition={{
-                    duration: 1.05,
-                    ease: [0.22, 1, 0.36, 1],
-                    repeat: Infinity,
+                  className="h-full bg-amber-500"
+                  initial={{ width: 0 }}
+                  animate={{
+                    width: `${Math.max(2, Math.min(100, actionOverlay.progress ?? 8))}%`,
                   }}
+                  transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                 />
               </div>
             </motion.div>
@@ -353,7 +352,8 @@ function HrSidebar({
     ? activeView === "documents"
     : pathname.startsWith("/hr/documents");
   const isShared = activeView === "shared";
-  const isSigners = activeView === "signers" || pathname.startsWith("/hr/signers");
+  const isSigners =
+    activeView === "signers" || pathname.startsWith("/hr/signers");
   const isSigned = activeView === "signed" || pathname.startsWith("/hr/signed");
 
   function showSharedActivity() {
@@ -478,8 +478,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
   const [signOutBusy, setSignOutBusy] = React.useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = React.useState("");
   const [newTeamName, setNewTeamName] = React.useState("");
-  const [workspaceBusy, setWorkspaceBusy] =
-    React.useState<"" | "creating">("");
+  const [workspaceBusy, setWorkspaceBusy] = React.useState<"" | "creating">("");
   const [teamBusy, setTeamBusy] = React.useState(false);
   const [workspaceTransitionVisible, setWorkspaceTransitionVisible] =
     React.useState(false);
@@ -675,7 +674,8 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         ]);
         const createdTeams = await loadWorkspaceTeams(organization.data.id);
         const defaultTeamId =
-          createdTeams.find((team) => team.isDefault)?.id || createdTeams[0]?.id;
+          createdTeams.find((team) => team.isDefault)?.id ||
+          createdTeams[0]?.id;
         await switchWorkspace(organization.data.id, defaultTeamId);
         setWorkspaceForTeams(organization.data.id);
       }
@@ -714,8 +714,11 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         throw new Error(data.error || "Unable to create team");
       }
 
-      const teams = await loadWorkspaceTeams(viewedWorkspaceId, { force: true });
-      const createdTeamId = data.id || teams.find((team) => team.name === name)?.id;
+      const teams = await loadWorkspaceTeams(viewedWorkspaceId, {
+        force: true,
+      });
+      const createdTeamId =
+        data.id || teams.find((team) => team.name === name)?.id;
       if (createdTeamId) {
         await switchWorkspace(viewedWorkspaceId, createdTeamId);
       }
@@ -742,7 +745,11 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
         aria-expanded={open}
       >
         <Avatar className="size-8 rounded-none">
-          <AvatarImage src={user?.image || undefined} alt={userName} className="rounded-none" />
+          <AvatarImage
+            src={user?.image || undefined}
+            alt={userName}
+            className="rounded-none"
+          />
           <AvatarFallback className="rounded-none bg-sidebar-primary font-mono text-[10px] text-sidebar-primary-foreground">
             {userInitials}
           </AvatarFallback>
@@ -785,9 +792,9 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
                         ? "text-foreground"
                         : "text-muted-foreground",
                     )}
-                      onClick={() => {
-                        setWorkspaceOpen(true);
-                        void handleWorkspaceClick(item.id);
+                    onClick={() => {
+                      setWorkspaceOpen(true);
+                      void handleWorkspaceClick(item.id);
                     }}
                   >
                     <Building2Icon className="size-3.5" />
@@ -841,10 +848,14 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
           <TeamPopover
             workspace={viewedWorkspace}
             teams={workspaceTeams}
-            selectedTeamId={selectedWorkspaceId === viewedWorkspace.id ? selectedTeamId : ""}
+            selectedTeamId={
+              selectedWorkspaceId === viewedWorkspace.id ? selectedTeamId : ""
+            }
             loading={teamsLoading}
             onCreateTeamClick={() => setCreateTeamOpen(true)}
-            onSelectTeam={(teamId) => switchWorkspace(viewedWorkspace.id, teamId)}
+            onSelectTeam={(teamId) =>
+              switchWorkspace(viewedWorkspace.id, teamId)
+            }
           />
         ) : null}
       </AnimatePresence>
@@ -916,7 +927,9 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
                 Cancel
               </Button>
               <Button type="submit" disabled={workspaceBusy === "creating"}>
-                {workspaceBusy === "creating" ? "Creating..." : "Create Workspace"}
+                {workspaceBusy === "creating"
+                  ? "Creating..."
+                  : "Create Workspace"}
               </Button>
             </DialogFooter>
           </form>
@@ -1004,9 +1017,7 @@ function TeamPopover({
         <p className="font-mono text-[10px] font-semibold uppercase tracking-widest">
           Teams
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {workspace.name}
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{workspace.name}</p>
       </div>
 
       <div className="max-h-52 overflow-auto py-2">
@@ -1070,9 +1081,8 @@ function getLastWorkspaceId(user: unknown) {
 
 function getSessionWorkspaceId(session: unknown) {
   if (!session || typeof session !== "object") return "";
-  const value = (
-    session as { session?: { activeOrganizationId?: unknown } }
-  ).session?.activeOrganizationId;
+  const value = (session as { session?: { activeOrganizationId?: unknown } })
+    .session?.activeOrganizationId;
   return typeof value === "string" ? value : "";
 }
 

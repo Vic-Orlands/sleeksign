@@ -42,14 +42,7 @@ export default function NotFound() {
                 route. Return to your active documents or dashboard.
               </p>
 
-              <div className="mt-10 flex flex-col sm:flex-row gap-4">
-                <Link
-                  href="/"
-                  className="group inline-flex items-center justify-center gap-2 rounded-full bg-primary px-8 py-3.5 text-[10px] uppercase tracking-[0.15em] font-medium text-primary-foreground transition-all hover:bg-primary/90"
-                >
-                  Open Dashboard
-                  <LayoutGridIcon className="size-3.5" />
-                </Link>
+              <div className="mt-10">
                 <Link
                   href="/"
                   className="inline-flex items-center justify-center gap-2 rounded-full border border-border/60 bg-white/50 px-8 py-3.5 text-[10px] uppercase tracking-[0.15em] font-medium transition-colors hover:bg-stone-50 text-foreground"
