@@ -13,7 +13,8 @@ import {
   Copy, 
   Lock, 
   Calendar,
-  Trash2
+  Trash2,
+  UserCog
 } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -171,6 +172,7 @@ export default function EnterpriseAdminPage() {
   const [newGroupTeamId, setNewGroupTeamId] = useState("")
   const [busyAction, setBusyAction] = useState<AdminBusyAction>("")
   const [selectedRoleByMember, setSelectedRoleByMember] = useState<Record<string, string>>({})
+  const [assignRoleMemberId, setAssignRoleMemberId] = useState("")
   const [selectedMembersByTeam, setSelectedMembersByTeam] = useState<Record<string, string[]>>({})
   const [selectedSignersByGroup, setSelectedSignersByGroup] = useState<Record<string, string[]>>({})
   const [activeSection, setActiveSection] = useState<SettingsSection>("general")
@@ -400,6 +402,23 @@ export default function EnterpriseAdminPage() {
     )
   }, [query, signers])
 
+  const normalizedInviteEmail = inviteEmail.trim().toLowerCase()
+  const inviteMatchesMember = normalizedInviteEmail
+    ? members.some((member) => member.user?.email?.toLowerCase() === normalizedInviteEmail)
+    : false
+  const inviteMatchesPendingInvitation = normalizedInviteEmail
+    ? invitations.some(
+        (invitation) =>
+          invitation.status !== "canceled" &&
+          invitation.email.toLowerCase() === normalizedInviteEmail,
+      )
+    : false
+  const inviteBlockedReason = inviteMatchesMember
+    ? "This email is already an active member."
+    : inviteMatchesPendingInvitation
+      ? "This email already has a pending invite."
+      : ""
+
   async function createTeam() {
     if (!workspaceId || !newTeamName.trim()) return
     setBusyAction("create-team")
@@ -425,6 +444,10 @@ export default function EnterpriseAdminPage() {
 
   async function inviteMember() {
     if (!workspaceId || !inviteEmail.trim()) return
+    if (inviteBlockedReason) {
+      toast.error(inviteBlockedReason)
+      return
+    }
     setBusyAction("invite-member")
     try {
       await authClient.$fetch("/organization/invite-member", {
@@ -439,8 +462,8 @@ export default function EnterpriseAdminPage() {
       setInviteRole("member")
       toast.success("Invitation sent")
       await refreshEnterpriseData(workspaceId)
-    } catch {
-      toast.error("Unable to invite this member")
+    } catch (error) {
+      toast.error(getInviteErrorMessage(error))
     } finally {
       setBusyAction("")
     }
@@ -611,6 +634,12 @@ export default function EnterpriseAdminPage() {
       if (!res.ok) throw new Error(data.error || "Unable to assign role")
       toast.success("Permission role assigned")
       await refreshEnterpriseData(workspaceId)
+      setAssignRoleMemberId("")
+      setSelectedRoleByMember((current) => {
+        const next = { ...current }
+        delete next[memberId]
+        return next
+      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to assign role")
     } finally {
@@ -896,7 +925,7 @@ export default function EnterpriseAdminPage() {
                           
                           {/* Subview 1: Members Directory */}
                           {directoryTab === "members" && (
-                            <div className="grid lg:grid-cols-[1fr_minmax(0,1.2fr)] gap-6">
+                            <div className="space-y-6">
                               
                               {/* Invite Panel */}
                               <div className="space-y-4">
@@ -926,7 +955,7 @@ export default function EnterpriseAdminPage() {
                                       ))}
                                     </select>
                                     <Button
-                                      disabled={isBusy}
+                                      disabled={isBusy || Boolean(inviteBlockedReason)}
                                       loading={busyAction === "invite-member"}
                                       loadingText="Sending..."
                                       onClick={() => void inviteMember()}
@@ -935,6 +964,11 @@ export default function EnterpriseAdminPage() {
                                       Invite
                                     </Button>
                                   </div>
+                                  {inviteBlockedReason && (
+                                    <p className="font-mono text-[10px] uppercase tracking-widest text-destructive">
+                                      {inviteBlockedReason}
+                                    </p>
+                                  )}
 
                                   {/* Pending Invitations list */}
                                   {invitations.length > 0 && (
@@ -966,7 +1000,7 @@ export default function EnterpriseAdminPage() {
                                 </div>
                               </div>
 
-                              {/* Member Directory Grid */}
+                              {/* Member Directory List */}
                               <div className="space-y-4">
                                 <div className="flex items-center justify-between border-b border-border/40 pb-3">
                                   <h2 className="font-mono text-xs uppercase tracking-widest font-bold">Active Members</h2>
@@ -977,82 +1011,98 @@ export default function EnterpriseAdminPage() {
                                   {filteredMembers.map((member) => {
                                     const initials = ((member.user?.name || member.user?.email || "U").substring(0, 2)).toUpperCase()
                                     const isSelf = member.user?.email === session?.user?.email
+                                    const isAssignOpen = assignRoleMemberId === member.id
                                     return (
-                                      <div key={member.id} className="p-4 space-y-3 bg-muted/5 hover:bg-muted/10 transition-colors border border-border/30">
-                                        <div className="flex items-start justify-between gap-4">
-                                          <div className="flex items-center gap-3">
-                                            <div className="size-9 bg-primary/5 border border-border/60 flex items-center justify-center font-mono text-[11px] font-bold text-foreground">
+                                      <div key={member.id} className="px-4 py-3 space-y-3 bg-muted/5 hover:bg-muted/10 transition-colors border border-border/30">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                          <div className="flex min-w-0 items-center gap-3 flex-1">
+                                            <div className="size-9 shrink-0 bg-primary/5 border border-border/60 flex items-center justify-center font-mono text-[11px] font-bold text-foreground">
                                               {initials}
                                             </div>
-                                            <div>
-                                              <h4 className="text-xs font-medium text-foreground">{member.user?.name || "Workspace User"}</h4>
-                                              <p className="text-[10px] text-muted-foreground">{member.user?.email}</p>
+                                            <div className="min-w-0">
+                                              <h4 className="truncate text-xs font-medium text-foreground">{member.user?.name || "Workspace User"}</h4>
+                                              <p className="truncate text-[10px] text-muted-foreground">{member.user?.email}</p>
                                             </div>
                                           </div>
-                                          <div className="flex items-center gap-2">
-                                            <div className="text-right">
+                                          <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+                                            <div className="text-left sm:text-right">
                                               <span className="inline-block px-1.5 py-0.5 bg-muted font-mono text-[8px] uppercase tracking-widest text-foreground font-bold border border-border/40">
                                                 {member.role}
                                               </span>
                                               <p className="text-[9px] text-muted-foreground mt-0.5">{member.teamIds.length} teams</p>
                                             </div>
-                                            <button
-                                              type="button"
-                                              className="p-1.5 border border-border/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                                              onClick={() => {
-                                                setSelectedMember(member)
-                                                setPermissionsSheetOpen(true)
-                                              }}
-                                              title="View Permissions"
-                                            >
-                                              <CircleAlertIcon className="size-3.5" />
-                                            </button>
-                                            {!isSelf && (
+                                            <div className="flex items-center gap-1.5">
                                               <button
                                                 type="button"
-                                                className="p-1.5 border border-border/60 hover:bg-destructive/10 text-destructive transition-colors"
-                                                onClick={() => setMemberToRemove(member)}
-                                                title="Remove Member"
+                                                className={`p-1.5 border transition-colors ${
+                                                  isAssignOpen
+                                                    ? "border-orange-500 bg-orange-500/10 text-orange-600"
+                                                    : "border-border/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                }`}
+                                                onClick={() => setAssignRoleMemberId(isAssignOpen ? "" : member.id)}
+                                                title="Assign Privileges"
                                               >
-                                                <Trash2 className="size-3.5" />
+                                                <UserCog className="size-3.5" />
                                               </button>
-                                            )}
+                                              <button
+                                                type="button"
+                                                className="p-1.5 border border-border/60 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                                onClick={() => {
+                                                  setSelectedMember(member)
+                                                  setPermissionsSheetOpen(true)
+                                                }}
+                                                title="View Permissions"
+                                              >
+                                                <CircleAlertIcon className="size-3.5" />
+                                              </button>
+                                              {!isSelf && (
+                                                <button
+                                                  type="button"
+                                                  className="p-1.5 border border-border/60 hover:bg-destructive/10 text-destructive transition-colors"
+                                                  onClick={() => setMemberToRemove(member)}
+                                                  title="Remove Member"
+                                                >
+                                                  <Trash2 className="size-3.5" />
+                                                </button>
+                                              )}
+                                            </div>
                                           </div>
                                         </div>
 
-                                        {/* Role Assign Action */}
-                                        <div className="flex gap-2 pt-2 border-t border-dashed border-border/40">
-                                          <select
-                                            value={selectedRoleByMember[member.id] || ""}
-                                            onChange={(event) =>
-                                              setSelectedRoleByMember((current) => ({
-                                                ...current,
-                                                [member.id]: event.target.value,
-                                              }))
-                                            }
-                                            className="flex-1 border border-border/60 bg-background px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wider outline-none focus:border-foreground"
-                                          >
-                                            <option value="">Assign privileges...</option>
-                                            {roles
-                                              .filter((role) => role.name !== "Team Manager")
-                                              .map((role) => (
-                                                <option key={role.id} value={role.id}>
-                                                  {role.name.toUpperCase()}
-                                                </option>
-                                              ))}
-                                          </select>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={isBusy || !selectedRoleByMember[member.id]}
-                                            loading={busyAction === `assign-role:${member.id}`}
-                                            loadingText="Assigning..."
-                                            onClick={() => void assignRole(member.id)}
-                                            className="h-8 px-2 font-mono text-[10px] uppercase border-border/60 hover:border-foreground"
-                                          >
-                                            Assign
-                                          </Button>
-                                        </div>
+                                        {isAssignOpen && (
+                                          <div className="flex gap-2 pt-2 border-t border-dashed border-border/40">
+                                            <select
+                                              value={selectedRoleByMember[member.id] || ""}
+                                              onChange={(event) =>
+                                                setSelectedRoleByMember((current) => ({
+                                                  ...current,
+                                                  [member.id]: event.target.value,
+                                                }))
+                                              }
+                                              className="min-w-0 flex-1 border border-border/60 bg-background px-2.5 py-1.5 text-[11px] font-mono uppercase tracking-wider outline-none focus:border-foreground"
+                                            >
+                                              <option value="">Select privilege...</option>
+                                              {roles
+                                                .filter((role) => role.name !== "Team Manager")
+                                                .map((role) => (
+                                                  <option key={role.id} value={role.id}>
+                                                    {role.name.toUpperCase()}
+                                                  </option>
+                                                ))}
+                                            </select>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              disabled={isBusy || !selectedRoleByMember[member.id]}
+                                              loading={busyAction === `assign-role:${member.id}`}
+                                              loadingText="Assigning..."
+                                              onClick={() => void assignRole(member.id)}
+                                              className="h-8 px-2 font-mono text-[10px] uppercase border-border/60 hover:border-foreground"
+                                            >
+                                              Assign
+                                            </Button>
+                                          </div>
+                                        )}
                                       </div>
                                     )
                                   })}
@@ -1941,4 +1991,22 @@ export default function EnterpriseAdminPage() {
       </section>
     </HrShell>
   )
+}
+
+function getInviteErrorMessage(error: unknown) {
+  const message =
+    error && typeof error === "object" && "message" in error
+      ? String(error.message)
+      : ""
+
+  if (message.includes("USER_IS_ALREADY_A_MEMBER")) {
+    return "This email is already an active member."
+  }
+  if (message.includes("USER_IS_ALREADY_INVITED")) {
+    return "This email already has a pending invite."
+  }
+  if (message.includes("INVALID_EMAIL")) {
+    return "Enter a valid email address."
+  }
+  return message || "Unable to invite this member"
 }
