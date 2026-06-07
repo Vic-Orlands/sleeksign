@@ -56,6 +56,8 @@ const authContent: Record<
 
 function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
   const router = useRouter();
+  const [authBusy, setAuthBusy] = React.useState(false);
+  const [googleBusy, setGoogleBusy] = React.useState(false);
   const isSignUp = mode === "signup";
   const isSignIn = mode === "signin";
   const isForgot = mode === "forgot";
@@ -79,6 +81,7 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
     );
     const workspaceName = String(formData.get("workspace") || "").trim();
 
+    setAuthBusy(true);
     try {
       if (isForgot) {
         await authClient.requestPasswordReset({
@@ -139,10 +142,13 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
       );
     } catch {
       toast.error(isSignUp ? "Sign up failed" : "Sign in failed");
+    } finally {
+      setAuthBusy(false);
     }
   }
 
   async function signInWithGoogle() {
+    setGoogleBusy(true);
     try {
       await authClient.signIn.social({
         provider: "google",
@@ -150,6 +156,8 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
       });
     } catch {
       toast.error("Google sign in is not configured yet");
+    } finally {
+      setGoogleBusy(false);
     }
   }
 
@@ -280,7 +288,12 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
               ) : null}
 
               <div className="mt-2">
-                <Button className="w-full gap-2" type="submit">
+                <Button
+                  className="w-full gap-2"
+                  type="submit"
+                  loading={authBusy}
+                  loadingText={getSubmitLoadingLabel(mode)}
+                >
                   {getSubmitLabel(mode)}
                   <ArrowRightIcon data-icon="inline-end" />
                 </Button>
@@ -302,6 +315,8 @@ function AuthPanel({ mode, token, nextPath }: AuthPanelProps) {
                     variant="outline"
                     className="w-full gap-2"
                     onClick={signInWithGoogle}
+                    loading={googleBusy}
+                    loadingText="Connecting..."
                   >
                     <span
                       data-icon="inline-start"
@@ -357,6 +372,13 @@ function getSubmitLabel(mode: AuthMode) {
   if (mode === "forgot") return "Send Reset Link";
   if (mode === "reset") return "Reset Password";
   return "Sign In";
+}
+
+function getSubmitLoadingLabel(mode: AuthMode) {
+  if (mode === "signup") return "Creating account...";
+  if (mode === "forgot") return "Sending reset link...";
+  if (mode === "reset") return "Resetting password...";
+  return "Signing in...";
 }
 
 function getSwitcherText(mode: AuthMode) {

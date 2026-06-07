@@ -265,14 +265,12 @@ export default function SignerPortal() {
           ) : null}
           <Button
             disabled={!allFieldsSigned || isFinalizing}
+            loading={isFinalizing}
+            loadingText="Completing..."
             onClick={finalize}
             className="gap-2"
           >
-            {isFinalizing ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Check className="size-4" />
-            )}
+            <Check className="size-4" />
             {allFieldsSigned
               ? "Complete"
               : `${completedCount}/${requiredCount} complete`}

@@ -63,6 +63,8 @@ type SignerGroupRecord = {
   signers: DirectorySigner[]
 }
 
+type BulkBusyAction = "" | "parse" | "send" | "draft"
+
 function DocumentDetailPanel({
   document,
   canShare = true,
@@ -96,7 +98,7 @@ function DocumentDetailPanel({
   const [emailColumn, setEmailColumn] = useState("email")
   const [roleColumn, setRoleColumn] = useState("role")
   const [defaultRoleName, setDefaultRoleName] = useState("")
-  const [bulkBusy, setBulkBusy] = useState(false)
+  const [bulkBusyAction, setBulkBusyAction] = useState<BulkBusyAction>("")
   const [directorySigners, setDirectorySigners] = useState<DirectorySigner[]>([])
   const [signerGroups, setSignerGroups] = useState<SignerGroupRecord[]>([])
   const [sendPath, setSendPath] = useState<"email" | "signer" | "group">("email")
@@ -107,6 +109,7 @@ function DocumentDetailPanel({
   const [sendRoleName, setSendRoleName] = useState("")
   const [sendBusy, setSendBusy] = useState(false)
   const workspaceId = useCurrentWorkspaceId()
+  const bulkBusy = Boolean(bulkBusyAction)
 
   useEffect(() => {
     if (!document) return
@@ -233,7 +236,7 @@ function DocumentDetailPanel({
     formData.append("roleColumn", roleColumn)
     formData.append("defaultRoleName", defaultRoleName)
 
-    setBulkBusy(true)
+    setBulkBusyAction("parse")
     try {
       const res = await fetch("/api/bulk-send/parse", {
         method: "POST",
@@ -247,7 +250,7 @@ function DocumentDetailPanel({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to parse CSV")
     } finally {
-      setBulkBusy(false)
+      setBulkBusyAction("")
     }
   }
 
@@ -257,7 +260,7 @@ function DocumentDetailPanel({
       return
     }
 
-    setBulkBusy(true)
+    setBulkBusyAction(sendImmediately ? "send" : "draft")
     try {
       const res = await fetch("/api/bulk-send/jobs", {
         method: "POST",
@@ -284,7 +287,7 @@ function DocumentDetailPanel({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create job")
     } finally {
-      setBulkBusy(false)
+      setBulkBusyAction("")
     }
   }
 
@@ -614,8 +617,13 @@ function DocumentDetailPanel({
                       </option>
                     ))}
                   </select>
-                  <Button disabled={!canShare || sendBusy} onClick={() => void sendDocumentNow()}>
-                    {sendBusy ? "Sending..." : "Send"}
+                  <Button
+                    disabled={!canShare || sendBusy}
+                    loading={sendBusy}
+                    loadingText="Sending..."
+                    onClick={() => void sendDocumentNow()}
+                  >
+                    Send
                   </Button>
                 </div>
               </div>
@@ -674,13 +682,15 @@ function DocumentDetailPanel({
                 <Button
                   variant="outline"
                   disabled={!canShare || isCreatingPacket}
+                  loading={isCreatingPacket}
+                  loadingText="Creating..."
                   onClick={() =>
                     guardShareAction(() => {
                       void ensurePacket(selectedMode)
                     })
                   }
                 >
-                  {isCreatingPacket ? "Creating..." : selectedPacket ? "Reuse Packet" : "Create Packet"}
+                  {selectedPacket ? "Reuse Packet" : "Create Packet"}
                 </Button>
               </div>
             </div>
@@ -762,14 +772,31 @@ function DocumentDetailPanel({
                   </select>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" disabled={bulkBusy} onClick={() => void parseCsvPreview()}>
+                  <Button
+                    variant="outline"
+                    disabled={bulkBusy}
+                    loading={bulkBusyAction === "parse"}
+                    loadingText="Parsing..."
+                    onClick={() => void parseCsvPreview()}
+                  >
                     <UploadIcon data-icon="inline-start" />
                     Parse CSV
                   </Button>
-                  <Button disabled={bulkBusy || !csvText} onClick={() => void createBulkJob(true)}>
+                  <Button
+                    disabled={bulkBusy || !csvText}
+                    loading={bulkBusyAction === "send"}
+                    loadingText="Sending..."
+                    onClick={() => void createBulkJob(true)}
+                  >
                     Send now
                   </Button>
-                  <Button variant="outline" disabled={bulkBusy || !csvText} onClick={() => void createBulkJob(false)}>
+                  <Button
+                    variant="outline"
+                    disabled={bulkBusy || !csvText}
+                    loading={bulkBusyAction === "draft"}
+                    loadingText="Saving..."
+                    onClick={() => void createBulkJob(false)}
+                  >
                     Save draft
                   </Button>
                 </div>

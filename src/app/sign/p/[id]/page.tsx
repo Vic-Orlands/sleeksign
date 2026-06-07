@@ -236,9 +236,10 @@ export default function PublicSignLanding() {
           <Button
             type="submit"
             disabled={isCreating}
+            loading={isCreating}
+            loadingText="Starting..."
             className="h-11 w-full gap-2"
           >
-            {isCreating ? <Loader2 className="size-4 animate-spin" /> : null}
             Start signing
             <ArrowRight className="size-4" />
           </Button>

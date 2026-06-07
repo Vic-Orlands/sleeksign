@@ -109,6 +109,22 @@ type SignerGroupPayload = {
 }
 
 type SettingsSection = "general" | "workspace" | "branding" | "audit"
+type AdminBusyAction =
+  | ""
+  | "delete-workspace"
+  | "delete-account"
+  | "remove-member"
+  | "delete-team"
+  | "create-team"
+  | "invite-member"
+  | `cancel-invitation:${string}`
+  | "create-signer"
+  | "create-group"
+  | "save-branding"
+  | "request-domain"
+  | "verify-domain"
+  | `assign-role:${string}`
+  | `save-team-members:${string}`
 
 export default function EnterpriseAdminPage() {
   const workspaceId = useCurrentWorkspaceId()
@@ -153,7 +169,7 @@ export default function EnterpriseAdminPage() {
   const [newGroupName, setNewGroupName] = useState("")
   const [newGroupDescription, setNewGroupDescription] = useState("")
   const [newGroupTeamId, setNewGroupTeamId] = useState("")
-  const [isBusy, setIsBusy] = useState(false)
+  const [busyAction, setBusyAction] = useState<AdminBusyAction>("")
   const [selectedRoleByMember, setSelectedRoleByMember] = useState<Record<string, string>>({})
   const [selectedMembersByTeam, setSelectedMembersByTeam] = useState<Record<string, string[]>>({})
   const [selectedSignersByGroup, setSelectedSignersByGroup] = useState<Record<string, string[]>>({})
@@ -161,10 +177,11 @@ export default function EnterpriseAdminPage() {
   const [permissionsSheetOpen, setPermissionsSheetOpen] = useState(false)
   const [selectedMember, setSelectedMember] = useState<MemberPayload | null>(null)
   const [directoryTab, setDirectoryTab] = useState<"members" | "teams" | "signers" | "groups">("members")
+  const isBusy = Boolean(busyAction)
 
   async function handleDeleteWorkspace() {
     if (!workspaceId) return
-    setIsBusy(true)
+    setBusyAction("delete-workspace")
     try {
       const activeOrg = authOrganizations?.find((org) => org.id === workspaceId)
       if (workspaceConfirmInput.trim() !== activeOrg?.name) {
@@ -191,12 +208,12 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete workspace")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function handleDeleteAccount() {
-    setIsBusy(true)
+    setBusyAction("delete-account")
     try {
       if (accountConfirmInput.trim() !== "DELETE MY ACCOUNT") {
         toast.error("Incorrect confirmation phrase")
@@ -211,13 +228,13 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete account")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function handleRemoveMember() {
     if (!workspaceId || !memberToRemove) return
-    setIsBusy(true)
+    setBusyAction("remove-member")
     try {
       await authClient.organization.removeMember({
         memberIdOrEmail: memberToRemove.id,
@@ -229,13 +246,13 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to remove member")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function handleDeleteTeam() {
     if (!workspaceId || !teamToDelete) return
-    setIsBusy(true)
+    setBusyAction("delete-team")
     try {
       const res = await fetch(`/api/teams/${teamToDelete.id}?workspaceId=${encodeURIComponent(workspaceId)}`, {
         method: "DELETE",
@@ -248,7 +265,7 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete team")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
@@ -385,7 +402,7 @@ export default function EnterpriseAdminPage() {
 
   async function createTeam() {
     if (!workspaceId || !newTeamName.trim()) return
-    setIsBusy(true)
+    setBusyAction("create-team")
     try {
       const res = await fetch("/api/teams", {
         method: "POST",
@@ -402,13 +419,13 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create team")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function inviteMember() {
     if (!workspaceId || !inviteEmail.trim()) return
-    setIsBusy(true)
+    setBusyAction("invite-member")
     try {
       await authClient.$fetch("/organization/invite-member", {
         method: "POST",
@@ -425,13 +442,13 @@ export default function EnterpriseAdminPage() {
     } catch {
       toast.error("Unable to invite this member")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function cancelInvitation(invitationId: string) {
     if (!workspaceId) return
-    setIsBusy(true)
+    setBusyAction(`cancel-invitation:${invitationId}`)
     try {
       await authClient.$fetch("/organization/cancel-invitation", {
         method: "POST",
@@ -442,13 +459,13 @@ export default function EnterpriseAdminPage() {
     } catch {
       toast.error("Unable to cancel invitation")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function createSigner() {
     if (!workspaceId || !newSignerName.trim() || !newSignerEmail.trim()) return
-    setIsBusy(true)
+    setBusyAction("create-signer")
     try {
       const res = await fetch("/api/signers/directory", {
         method: "POST",
@@ -471,13 +488,13 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create signer")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function createSignerGroup() {
     if (!workspaceId || !newGroupName.trim()) return
-    setIsBusy(true)
+    setBusyAction("create-group")
     try {
       const res = await fetch("/api/signer-groups", {
         method: "POST",
@@ -500,13 +517,13 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create signer group")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function saveBranding() {
     if (!workspaceId) return
-    setIsBusy(true)
+    setBusyAction("save-branding")
     try {
       const res = await fetch("/api/branding", {
         method: "PUT",
@@ -527,13 +544,13 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to save branding")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function requestDomain() {
     if (!workspaceId || !domainInput.trim()) return
-    setIsBusy(true)
+    setBusyAction("request-domain")
     try {
       const res = await fetch("/api/branding/domains", {
         method: "POST",
@@ -551,13 +568,13 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to request domain")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function verifyDomain() {
     if (!workspaceId || !domainId || !domainToken) return
-    setIsBusy(true)
+    setBusyAction("verify-domain")
     try {
       const res = await fetch("/api/branding/domains/verify", {
         method: "POST",
@@ -574,13 +591,13 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to verify domain")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function assignRole(memberId: string) {
     if (!workspaceId || !selectedRoleByMember[memberId]) return
-    setIsBusy(true)
+    setBusyAction(`assign-role:${memberId}`)
     try {
       const res = await fetch("/api/permissions/assignments", {
         method: "POST",
@@ -597,13 +614,13 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to assign role")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function saveTeamMembers(teamId: string) {
     if (!workspaceId) return
-    setIsBusy(true)
+    setBusyAction(`save-team-members:${teamId}`)
     try {
       const res = await fetch(`/api/teams/${teamId}`, {
         method: "PATCH",
@@ -619,7 +636,7 @@ export default function EnterpriseAdminPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update team members")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
@@ -910,6 +927,8 @@ export default function EnterpriseAdminPage() {
                                     </select>
                                     <Button
                                       disabled={isBusy}
+                                      loading={busyAction === "invite-member"}
+                                      loadingText="Sending..."
                                       onClick={() => void inviteMember()}
                                       className="font-mono text-xs uppercase px-4 h-9"
                                     >
@@ -933,6 +952,8 @@ export default function EnterpriseAdminPage() {
                                             variant="outline"
                                             size="sm"
                                             disabled={isBusy}
+                                            loading={busyAction === `cancel-invitation:${invitation.id}`}
+                                            loadingText="Cancelling..."
                                             onClick={() => void cancelInvitation(invitation.id)}
                                             className="h-7 text-[10px] font-mono uppercase px-2 border-border text-destructive hover:border-destructive hover:bg-destructive/5"
                                           >
@@ -1024,6 +1045,8 @@ export default function EnterpriseAdminPage() {
                                             variant="outline"
                                             size="sm"
                                             disabled={isBusy || !selectedRoleByMember[member.id]}
+                                            loading={busyAction === `assign-role:${member.id}`}
+                                            loadingText="Assigning..."
                                             onClick={() => void assignRole(member.id)}
                                             className="h-8 px-2 font-mono text-[10px] uppercase border-border/60 hover:border-foreground"
                                           >
@@ -1056,6 +1079,8 @@ export default function EnterpriseAdminPage() {
                                   />
                                   <Button
                                     disabled={isBusy}
+                                    loading={busyAction === "create-team"}
+                                    loadingText="Creating..."
                                     onClick={() => void createTeam()}
                                     size="sm"
                                     className="font-mono text-[10px] uppercase px-4 h-8"
@@ -1090,6 +1115,8 @@ export default function EnterpriseAdminPage() {
                                             variant="outline"
                                             size="sm"
                                             disabled={isBusy}
+                                            loading={busyAction === `save-team-members:${team.id}`}
+                                            loadingText="Saving..."
                                             onClick={() => void saveTeamMembers(team.id)}
                                             className="h-7 text-[10px] font-mono uppercase px-3 border-border/60 hover:border-foreground"
                                           >
@@ -1205,6 +1232,8 @@ export default function EnterpriseAdminPage() {
                                   </select>
                                   <Button
                                     disabled={isBusy || !newSignerName.trim() || !newSignerEmail.trim()}
+                                    loading={busyAction === "create-signer"}
+                                    loadingText="Registering..."
                                     onClick={() => void createSigner()}
                                     className="w-full font-mono text-[10px] uppercase h-8 mt-1"
                                   >
@@ -1301,6 +1330,8 @@ export default function EnterpriseAdminPage() {
 
                                   <Button
                                     disabled={isBusy || !newGroupName.trim()}
+                                    loading={busyAction === "create-group"}
+                                    loadingText="Creating..."
                                     onClick={() => void createSignerGroup()}
                                     className="w-full font-mono text-[10px] uppercase h-8 mt-1"
                                   >
@@ -1426,6 +1457,8 @@ export default function EnterpriseAdminPage() {
 
                             <Button
                               disabled={isBusy}
+                              loading={busyAction === "save-branding"}
+                              loadingText="Saving..."
                               onClick={() => void saveBranding()}
                               className="w-full font-mono text-xs uppercase py-2 mt-2 h-9"
                             >
@@ -1516,6 +1549,8 @@ export default function EnterpriseAdminPage() {
                             <Button
                               variant="outline"
                               disabled={isBusy || !domainInput.trim()}
+                              loading={busyAction === "request-domain"}
+                              loadingText="Requesting..."
                               onClick={() => void requestDomain()}
                               className="font-mono text-xs uppercase px-4 h-9 border-border/60 hover:border-foreground"
                             >
@@ -1555,6 +1590,8 @@ export default function EnterpriseAdminPage() {
 
                               <Button
                                 disabled={isBusy || !domainToken}
+                                loading={busyAction === "verify-domain"}
+                                loadingText="Verifying..."
                                 onClick={() => void verifyDomain()}
                                 className="w-full font-mono text-xs uppercase py-2 h-9"
                               >
@@ -1780,6 +1817,8 @@ export default function EnterpriseAdminPage() {
               </Button>
               <Button
                 disabled={isBusy || workspaceConfirmInput.trim() !== authOrganizations?.find(o => o.id === workspaceId)?.name}
+                loading={busyAction === "delete-workspace"}
+                loadingText="Deleting..."
                 onClick={() => void handleDeleteWorkspace()}
                 className="font-mono text-xs uppercase px-4 h-9 bg-destructive hover:bg-destructive/90 text-white rounded-none border border-destructive/20"
               >
@@ -1821,6 +1860,8 @@ export default function EnterpriseAdminPage() {
               </Button>
               <Button
                 disabled={isBusy || accountConfirmInput.trim() !== "DELETE MY ACCOUNT"}
+                loading={busyAction === "delete-account"}
+                loadingText="Deleting..."
                 onClick={() => void handleDeleteAccount()}
                 className="font-mono text-xs uppercase px-4 h-9 bg-destructive hover:bg-destructive/90 text-white rounded-none border border-destructive/20"
               >
@@ -1853,6 +1894,8 @@ export default function EnterpriseAdminPage() {
               </Button>
               <Button
                 disabled={isBusy}
+                loading={busyAction === "remove-member"}
+                loadingText="Removing..."
                 onClick={() => void handleRemoveMember()}
                 className="font-mono text-xs uppercase px-4 h-9 bg-destructive hover:bg-destructive/90 text-white rounded-none border border-destructive/20"
               >
@@ -1885,6 +1928,8 @@ export default function EnterpriseAdminPage() {
               </Button>
               <Button
                 disabled={isBusy}
+                loading={busyAction === "delete-team"}
+                loadingText="Deleting..."
                 onClick={() => void handleDeleteTeam()}
                 className="font-mono text-xs uppercase px-4 h-9 bg-destructive hover:bg-destructive/90 text-white rounded-none border border-destructive/20"
               >
@@ -1897,6 +1942,3 @@ export default function EnterpriseAdminPage() {
     </HrShell>
   )
 }
-
-
-

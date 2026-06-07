@@ -423,14 +423,16 @@ export default function PacketSignerPortal() {
           ) : null}
           <Button
             disabled={!allFieldsSigned || isFinalizing}
+            loading={isFinalizing}
+            loadingText={
+              context.mode === "collaborative"
+                ? "Completing my part..."
+                : "Completing..."
+            }
             onClick={completeSigning}
             className="gap-2"
           >
-            {isFinalizing ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Check className="size-4" />
-            )}
+            <Check className="size-4" />
             {allFieldsSigned
               ? context.mode === "collaborative"
                 ? "Complete my part"

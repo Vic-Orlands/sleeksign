@@ -71,13 +71,20 @@ interface MemberPayload {
 }
 
 type SignerTab = "directory" | "groups" | "activity"
+type SignerBusyAction =
+  | ""
+  | "create-signer"
+  | "create-group"
+  | "delete-group"
+  | "delete-directory-signer"
+  | "delete-activity"
 
 export default function HRSignersPage() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
   const [query, setQuery] = useState("")
   const [activeTab, setActiveTab] = useState<SignerTab>("directory")
   const [isLoading, setIsLoading] = useState(true)
-  const [isBusy, setIsBusy] = useState(false)
+  const [busyAction, setBusyAction] = useState<SignerBusyAction>("")
   const workspaceId = useCurrentWorkspaceId()
   const router = useRouter()
 
@@ -102,6 +109,7 @@ export default function HRSignersPage() {
   const [groupToDelete, setGroupToDelete] = useState<SignerGroup | null>(null)
   const [directorySignerToDelete, setDirectorySignerToDelete] = useState<DirectorySigner | null>(null)
   const [signerToDelete, setSignerToDelete] = useState<(SessionRecord & { documentName: string }) | null>(null)
+  const isBusy = Boolean(busyAction)
 
   function normalizeDocuments(data: unknown) {
     return Array.isArray(data) ? (data as DocumentRecord[]) : []
@@ -182,7 +190,7 @@ export default function HRSignersPage() {
 
   async function createSigner() {
     if (!workspaceId || !newSignerName.trim() || !newSignerEmail.trim()) return
-    setIsBusy(true)
+    setBusyAction("create-signer")
     try {
       const res = await fetch("/api/signers/directory", {
         method: "POST",
@@ -206,7 +214,7 @@ export default function HRSignersPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to register signer")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
@@ -216,7 +224,7 @@ export default function HRSignersPage() {
       toast.error("Select at least one signer for the group")
       return
     }
-    setIsBusy(true)
+    setBusyAction("create-group")
     try {
       const finalSignerIds: string[] = []
 
@@ -273,13 +281,13 @@ export default function HRSignersPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to assemble signer group")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function deleteSignerGroup() {
     if (!workspaceId || !groupToDelete) return
-    setIsBusy(true)
+    setBusyAction("delete-group")
     try {
       const res = await fetch(`/api/signer-groups/${groupToDelete.id}?workspaceId=${encodeURIComponent(workspaceId)}`, {
         method: "DELETE",
@@ -292,13 +300,13 @@ export default function HRSignersPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete group")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function deleteDirectorySigner() {
     if (!workspaceId || !directorySignerToDelete) return
-    setIsBusy(true)
+    setBusyAction("delete-directory-signer")
     try {
       const res = await fetch(
         `/api/signers/directory/${directorySignerToDelete.id}?workspaceId=${encodeURIComponent(workspaceId)}`,
@@ -312,13 +320,13 @@ export default function HRSignersPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to delete signer")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
   async function deleteSignerActivity() {
     if (!signerToDelete) return
-    setIsBusy(true)
+    setBusyAction("delete-activity")
     try {
       const res = await fetch(`/api/signers/${signerToDelete.id}`, {
         method: "DELETE",
@@ -334,7 +342,7 @@ export default function HRSignersPage() {
     } catch {
       toast.error("Failed to delete activity record")
     } finally {
-      setIsBusy(false)
+      setBusyAction("")
     }
   }
 
@@ -733,6 +741,8 @@ export default function HRSignersPage() {
             </Button>
             <Button
               disabled={isBusy || !newSignerName.trim() || !newSignerEmail.trim()}
+              loading={busyAction === "create-signer"}
+              loadingText="Adding..."
               onClick={createSigner}
               className="font-mono text-xs uppercase tracking-wide bg-foreground text-background hover:bg-foreground/90 font-bold"
             >
@@ -881,6 +891,8 @@ export default function HRSignersPage() {
                 </Button>
                 <Button
                   disabled={isBusy}
+                  loading={busyAction === "create-group"}
+                  loadingText="Assembling..."
                   onClick={createSignerGroup}
                   className="font-mono text-xs uppercase tracking-wide bg-orange-500 hover:bg-orange-600 text-white border border-orange-500/20 font-bold"
                 >
@@ -911,6 +923,8 @@ export default function HRSignersPage() {
             </Button>
             <Button
               disabled={isBusy}
+              loading={busyAction === "delete-group"}
+              loadingText="Deleting..."
               onClick={() => void deleteSignerGroup()}
               className="font-mono text-xs uppercase bg-destructive hover:bg-destructive/90 text-white border border-destructive/20"
             >
@@ -939,6 +953,8 @@ export default function HRSignersPage() {
             </Button>
             <Button
               disabled={isBusy}
+              loading={busyAction === "delete-directory-signer"}
+              loadingText="Deleting..."
               onClick={() => void deleteDirectorySigner()}
               className="font-mono text-xs uppercase bg-destructive hover:bg-destructive/90 text-white border border-destructive/20"
             >
@@ -967,6 +983,8 @@ export default function HRSignersPage() {
             </Button>
             <Button
               disabled={isBusy}
+              loading={busyAction === "delete-activity"}
+              loadingText="Deleting..."
               onClick={deleteSignerActivity}
               className="font-mono text-xs uppercase bg-destructive hover:bg-destructive/90 text-white border border-destructive/20"
             >

@@ -475,6 +475,7 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
   const [createWorkspaceOpen, setCreateWorkspaceOpen] = React.useState(false);
   const [createTeamOpen, setCreateTeamOpen] = React.useState(false);
   const [confirmSignOutOpen, setConfirmSignOutOpen] = React.useState(false);
+  const [signOutBusy, setSignOutBusy] = React.useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = React.useState("");
   const [newTeamName, setNewTeamName] = React.useState("");
   const [workspaceBusy, setWorkspaceBusy] =
@@ -867,13 +868,20 @@ function AccountMenu({ collapsed }: { collapsed: boolean }) {
               Cancel
             </Button>
             <Button
+              loading={signOutBusy}
+              loadingText="Signing out..."
               onClick={async () => {
-                setConfirmSignOutOpen(false);
-                setOpen(false);
-                setWorkspaceOpen(false);
-                setCurrentWorkspaceId("");
-                await authClient.signOut().catch(() => undefined);
-                router.push("/signin");
+                setSignOutBusy(true);
+                try {
+                  setOpen(false);
+                  setWorkspaceOpen(false);
+                  setCurrentWorkspaceId("");
+                  await authClient.signOut().catch(() => undefined);
+                  router.push("/signin");
+                } finally {
+                  setSignOutBusy(false);
+                  setConfirmSignOutOpen(false);
+                }
               }}
             >
               Sign Out

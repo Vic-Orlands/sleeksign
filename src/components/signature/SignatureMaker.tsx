@@ -44,7 +44,7 @@ const signatureFontPromises = new Map<string, Promise<void>>();
 interface SignatureMakerProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (value: string) => void;
+  onConfirm: (value: string) => void | Promise<void>;
   type?: "signature" | "text";
   defaultValue?: string;
   textSuggestions?: Array<{ label: string; value: string }>;
@@ -64,6 +64,7 @@ export function SignatureMaker({
   const [fontIndex, setFontIndex] = useState(0);
   const [typedPreviewUrl, setTypedPreviewUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
   const [drawVersion, setDrawVersion] = useState(0);
   const [drawHasContent, setDrawHasContent] = useState(false);
   const sigCanvas = useRef<SignatureCanvas>(null);
@@ -137,18 +138,27 @@ export function SignatureMaker({
     };
   }, [name, fontIndex, activeTab, defaultValue]);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    setIsConfirming(true);
+    let value = "";
+
     if (activeTab === "text") {
-      onConfirm(textValue);
+      value = textValue;
     } else if (activeTab === "type" && typedPreviewUrl) {
-      onConfirm(typedPreviewUrl);
+      value = typedPreviewUrl;
     } else if (activeTab === "draw" && sigCanvas.current) {
       if (!sigCanvas.current.isEmpty()) {
         const trimmedCanvas = trimCanvas(sigCanvas.current.getCanvas());
-        onConfirm(trimmedCanvas.toDataURL("image/png"));
+        value = trimmedCanvas.toDataURL("image/png");
       }
     }
-    onClose();
+
+    try {
+      if (value) await onConfirm(value);
+      onClose();
+    } finally {
+      setIsConfirming(false);
+    }
   };
 
   const canConfirm =
@@ -425,9 +435,12 @@ export function SignatureMaker({
             className="h-10 px-8 font-semibold"
             disabled={
               isLoading ||
+              isConfirming ||
               !canConfirm ||
               (activeTab === "draw" && drawVersion === 0)
             }
+            loading={isConfirming}
+            loadingText="Saving..."
           >
             Confirm {type === "text" ? "Entry" : "Signature"}
           </Button>
