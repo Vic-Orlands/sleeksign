@@ -44,6 +44,25 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${jetBrainsMono.variable} ${roboto.variable} ${ruthie.variable} h-full antialiased dark`}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('sleeksign:theme');
+                  var el = document.documentElement;
+                  if (theme === 'light') {
+                    el.classList.remove('dark');
+                  } else {
+                    el.classList.add('dark');
+                  }
+                } catch (e) {}
+              })()
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           {children}

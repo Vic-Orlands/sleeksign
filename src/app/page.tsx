@@ -46,7 +46,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <main className="min-h-screen bg-[(--paper)] text-foreground font-roboto relative overflow-hidden">
+    <main className="min-h-screen bg-[var(--paper)] text-foreground font-roboto relative overflow-hidden">
       {/* Hero Section */}
       <section className="relative mx-auto w-[90%] max-w-7xl pt-28 pb-32 z-10">
         <motion.div
@@ -255,10 +255,10 @@ export default function LandingPage() {
           </div>
 
           {/* Image Display */}
-          <div className="w-full md:w-2/3 relative rounded-2xl overflow-hidden h-75 sm:h-112.5 lg:h-120 shadow-2xl">
+          <div className="w-full md:w-2/3 relative overflow-hidden h-[300px] sm:h-[450px] lg:h-[520px] shadow-2xl bg-transparent">
             {galleryItems.map((item, i) => (
               <motion.div
-                key={i}
+                key={item.src}
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{
                   opacity: activeGalleryTab === i ? 1 : 0,
@@ -266,14 +266,15 @@ export default function LandingPage() {
                   zIndex: activeGalleryTab === i ? 10 : 0,
                 }}
                 transition={{ duration: 0.5 }}
-                className="absolute inset-0 bg-[(--paper)]"
+                className="absolute inset-0"
               >
                 <Image
                   src={item.src}
                   alt={item.label}
-                  className="w-full h-full object-contain rounded-2xl"
-                  width={1000}
-                  height={1000}
+                  className="object-contain rounded-2xl"
+                  fill
+                  quality={100}
+                  unoptimized
                 />
               </motion.div>
             ))}
