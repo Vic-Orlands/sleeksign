@@ -121,14 +121,15 @@ export async function emitAuditEvent(input: AuditEventInput) {
   return { id, eventHash, previousEventHash: previousLog?.eventHash || null };
 }
 
-export function getRequestAuditContext(headers: Headers): AuditContextFromRequest {
+export function getRequestAuditContext(headers: HeadersInit): AuditContextFromRequest {
+  const resolved = headers instanceof Headers ? headers : new Headers(headers);
   return {
-    requestId: headers.get("x-request-id"),
+    requestId: resolved.get("x-request-id"),
     ipAddress:
-      headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      headers.get("x-real-ip") ||
+      resolved.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      resolved.get("x-real-ip") ||
       null,
-    userAgent: headers.get("user-agent"),
+    userAgent: resolved.get("user-agent"),
   };
 }
 

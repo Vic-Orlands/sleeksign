@@ -24,7 +24,7 @@ const DEFAULT_BRANDING: BrandingTokenSet = {
   secondaryColor: "#f97316",
   neutralColor: "#f7f5f1",
   accentColor: "#ea580c",
-  bodyFont: "Roboto",
+  bodyFont: "Inter",
   signatureFont: "Ruthie",
   senderName: "SleekSign",
   supportEmail: null,
@@ -184,13 +184,13 @@ export async function verifyCustomDomain(
 
 export function getWorkspaceBaseUrl(
   branding: BrandingTokenSet,
-  fallbackBaseUrl: string,
+  baseUrl: string,
 ) {
   if (!branding.domain) {
-    return fallbackBaseUrl;
+    return baseUrl;
   }
 
-  const protocol = fallbackBaseUrl.startsWith("http://localhost") ? "http" : "https";
+  const protocol = baseUrl.startsWith("http://localhost") ? "http" : "https";
   return `${protocol}://${branding.domain}`;
 }
 

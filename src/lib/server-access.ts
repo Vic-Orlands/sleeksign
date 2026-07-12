@@ -1,6 +1,6 @@
 import { eq, inArray, isNull, or } from "drizzle-orm";
-import { headers as nextHeaders } from "next/headers";
-import { redirect } from "next/navigation";
+import { redirect } from "@sveltejs/kit";
+import { getRequestEvent } from "$app/server";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
@@ -21,6 +21,7 @@ import {
 
 type AuthSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 type WorkspacePermission = "read" | "manage" | "owner" | AppPermission;
+type WorkspaceAccessOptions = { ensureEnterpriseSetup?: boolean };
 const SESSION_RETRY_DELAYS_MS = [150, 350];
 
 class AccessError extends Error {
@@ -68,6 +69,15 @@ function buildTeamScopeCondition(
 }
 
 async function getSessionFromHeaders(input: HeadersInit) {
+  try {
+    const event = getRequestEvent();
+    if (event && "authSession" in event.locals) {
+      return event.locals.authSession as AuthSession | null;
+    }
+  } catch {
+    // Outside a SvelteKit request context — fall through to auth lookup.
+  }
+
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= SESSION_RETRY_DELAYS_MS.length; attempt += 1) {
@@ -98,6 +108,7 @@ async function requireWorkspaceAccess(
   input: HeadersInit,
   requestedWorkspaceId?: string | null,
   permission: WorkspacePermission = "read",
+  options?: WorkspaceAccessOptions,
 ) {
   const session = await requireSessionFromHeaders(input);
   const workspaceId =
@@ -107,7 +118,9 @@ async function requireWorkspaceAccess(
     throw new AccessError("No active workspace", 400);
   }
 
-  const resolved = await resolveWorkspaceAccess(session.user.id, workspaceId);
+  const resolved = await resolveWorkspaceAccess(session.user.id, workspaceId, {
+    ensureSetup: options?.ensureEnterpriseSetup,
+  });
   if (!resolved) {
     throw new AccessError("Forbidden", 403);
   }
@@ -129,6 +142,7 @@ async function requireDocumentAccess(
   input: HeadersInit,
   documentId: string,
   permission: WorkspacePermission = "read",
+  options?: WorkspaceAccessOptions,
 ) {
   const document = await db.query.documents.findFirst({
     where: eq(documents.id, documentId),
@@ -142,6 +156,7 @@ async function requireDocumentAccess(
     input,
     document.workspaceId,
     permission,
+    options,
   );
 
   if (
@@ -221,10 +236,13 @@ async function requirePacketAccess(
   return { ...access, packet };
 }
 
-async function requireHrSession() {
-  const session = await getSessionFromHeaders(await nextHeaders());
+async function requireDocsSession() {
+  const event = getRequestEvent();
+  const session =
+    (event.locals.authSession as AuthSession | null) ??
+    (await getSessionFromHeaders(event.request.headers));
   if (!session) {
-    redirect("/signin");
+    redirect(303, "/signin");
   }
 
   return session;
@@ -243,6 +261,8 @@ function isRetryableSessionError(error: unknown) {
       normalized.includes("failed to get session") ||
       normalized.includes("fetch failed") ||
       normalized.includes("error connecting to database") ||
+      normalized.includes("this operation was aborted") ||
+      normalized.includes("aborterror") ||
       normalized.includes("internal_server_error")
     );
   });
@@ -304,7 +324,7 @@ export {
   hasWorkspaceManageRole as hasManageRole,
   hasWorkspaceOwnerRole as hasOwnerRole,
   requireDocumentAccess,
-  requireHrSession,
+  requireDocsSession,
   requirePacketAccess,
   requireSessionFromHeaders,
   requireSigningSessionAccess,

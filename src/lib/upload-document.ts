@@ -5,13 +5,13 @@ type UploadDocumentResult = {
   createdAt?: string;
 };
 
-function getUploadErrorMessage(data: unknown, fallback = "Upload failed") {
+function getUploadErrorMessage(data: unknown) {
   if (data && typeof data === "object" && "error" in data) {
     const message = (data as { error?: unknown }).error;
     if (typeof message === "string" && message.trim()) return message;
   }
 
-  return fallback;
+  throw new Error("Upload response did not include an error message");
 }
 
 async function uploadDocument(file: File, workspaceId?: string) {
@@ -27,7 +27,7 @@ async function uploadDocument(file: File, workspaceId?: string) {
       workspaceId,
     }),
   });
-  const presignData: unknown = await presignResponse.json().catch(() => null);
+  const presignData: unknown = await presignResponse.json();
 
   if (!presignResponse.ok) {
     throw new Error(getUploadErrorMessage(presignData));
@@ -39,7 +39,7 @@ async function uploadDocument(file: File, workspaceId?: string) {
     typeof (presignData as UploadDocumentResult & { uploadUrl?: string }).id !== "string" ||
     typeof (presignData as UploadDocumentResult & { uploadUrl?: string }).uploadUrl !== "string"
   ) {
-    throw new Error("Upload failed");
+    throw new Error("Presign response missing document id or uploadUrl");
   }
 
   const presignedUpload = presignData as UploadDocumentResult & {
@@ -55,7 +55,7 @@ async function uploadDocument(file: File, workspaceId?: string) {
   });
 
   if (!uploadResponse.ok) {
-    throw new Error("Upload failed");
+    throw new Error(`Direct upload failed with status ${uploadResponse.status}`);
   }
 
   const completeResponse = await fetch("/api/uploads/complete", {
@@ -65,22 +65,26 @@ async function uploadDocument(file: File, workspaceId?: string) {
     },
     body: JSON.stringify({ documentId: presignedUpload.id }),
   });
-  const data: unknown = await completeResponse.json().catch(() => null);
+  const data: unknown = await completeResponse.json();
 
   if (!completeResponse.ok) {
     throw new Error(getUploadErrorMessage(data));
   }
 
+  const uploadedDocument = data as UploadDocumentResult & { fileUrl?: string };
+  if (!uploadedDocument.fileUrl) {
+    throw new Error("Upload completion response missing fileUrl");
+  }
+
   if (typeof window !== "undefined") {
-    const uploadedDocument = data as UploadDocumentResult & { fileUrl?: string };
     window.sessionStorage.setItem(
       `sleeksign:uploaded-document:${uploadedDocument.id}`,
       JSON.stringify({
         id: uploadedDocument.id,
         name: uploadedDocument.name,
-        fileUrl: uploadedDocument.fileUrl || uploadedDocument.url,
+        fileUrl: uploadedDocument.fileUrl,
         uploadStatus: "ready",
-        createdAt: uploadedDocument.createdAt || new Date().toISOString(),
+        createdAt: uploadedDocument.createdAt,
         fields: [],
         sessions: [],
         roleConfigs: [],

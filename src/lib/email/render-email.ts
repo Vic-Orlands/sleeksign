@@ -42,19 +42,19 @@ export function renderEmailHtml({
   const secondaryColor = branding?.secondaryColor || "#f97316";
   const neutralColor = branding?.neutralColor || "#f7f5f1";
   const accentColor = branding?.accentColor || "#ea580c";
-  const bodyFont = branding?.bodyFont || "Roboto";
-  
+  const bodyFont = branding?.bodyFont || "Inter";
+
   const paragraphs = body
     .map(
       (line) =>
         `<p style="margin:0 0 16px;font-family:${bodyFont},'Inter',sans-serif;font-size:15px;line-height:1.65;color:#4b5563;">${escapeHtml(line)}</p>`,
     )
     .join("");
-    
+
   const logo = branding?.logoUrl
     ? `<img src="${escapeHtml(branding.logoUrl)}" alt="${escapeHtml(senderName)}" style="display:block;height:36px;width:auto;margin:0 0 24px;border:none;" />`
     : "";
-    
+
   const supportLine = branding?.supportEmail
     ? `${supportNote} Contact ${branding.supportEmail} if you need help.`
     : supportNote;
@@ -199,7 +199,13 @@ export function renderEmailText({
   ctaUrl,
   supportNote,
 }: Omit<RenderEmailInput, "preheader" | "eyebrow">) {
-  return [headline, "", ...body, "", `${ctaLabel}: ${ctaUrl}`, "", supportNote].join(
-    "\n",
-  );
+  return [
+    headline,
+    "",
+    ...body,
+    "",
+    `${ctaLabel}: ${ctaUrl}`,
+    "",
+    supportNote,
+  ].join("\n");
 }

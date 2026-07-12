@@ -207,7 +207,7 @@ export async function sendBulkSendJob(jobId: string) {
     branding,
     process.env.BETTER_AUTH_URL ||
       process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
-      "http://localhost:3000",
+      "http://localhost:5173",
   );
 
   let createdCount = 0;

@@ -29,7 +29,9 @@ export const DEFAULT_ROLE_CONFIGS: RoleConfig[] = DEFAULT_SIGNER_ROLES.map(
 );
 
 export function normalizeRoleConfigs(value: unknown) {
-  if (!Array.isArray(value)) return [...DEFAULT_ROLE_CONFIGS];
+  if (!Array.isArray(value)) {
+    throw new Error("Role configs must be an array");
+  }
 
   const roleConfigs = value
     .map((item) => {
@@ -48,28 +50,36 @@ export function normalizeRoleConfigs(value: unknown) {
         array.findIndex((entry) => entry.name === item.name) === index,
     );
 
+  if (roleConfigs.length === 0) {
+    throw new Error("Role configs must contain at least one role");
+  }
+
   return roleConfigs;
 }
 
 export function normalizeSignerRoles(value: unknown) {
-  if (!Array.isArray(value)) return [...DEFAULT_SIGNER_ROLES];
+  if (!Array.isArray(value)) {
+    throw new Error("Signer roles must be an array");
+  }
 
   const roles = value
     .map((item) => String(item || "").trim())
     .filter(Boolean)
     .filter((role, index, array) => array.indexOf(role) === index);
 
+  if (roles.length === 0) {
+    throw new Error("Signer roles must contain at least one role");
+  }
+
   return roles;
 }
 
 export function parseSignerRoles(value?: string | null) {
-  if (!value) return [...DEFAULT_SIGNER_ROLES];
-
-  try {
-    return normalizeSignerRoles(JSON.parse(value));
-  } catch {
-    return [...DEFAULT_SIGNER_ROLES];
+  if (!value) {
+    throw new Error("Signer roles value is required");
   }
+
+  return normalizeSignerRoles(JSON.parse(value));
 }
 
 export function serializeSignerRoles(roles: string[]) {
@@ -77,13 +87,11 @@ export function serializeSignerRoles(roles: string[]) {
 }
 
 export function parseRoleConfigs(value?: string | null) {
-  if (!value) return [...DEFAULT_ROLE_CONFIGS];
-
-  try {
-    return normalizeRoleConfigs(JSON.parse(value));
-  } catch {
-    return [...DEFAULT_ROLE_CONFIGS];
+  if (!value) {
+    throw new Error("Role configs value is required");
   }
+
+  return normalizeRoleConfigs(JSON.parse(value));
 }
 
 export function serializeRoleConfigs(roleConfigs: RoleConfig[]) {
@@ -98,8 +106,12 @@ export function areRoleConfigsEqual(
   left: RoleConfig[] | undefined,
   right: RoleConfig[] | undefined,
 ) {
-  const normalizedLeft = normalizeRoleConfigs(left || []);
-  const normalizedRight = normalizeRoleConfigs(right || []);
+  if (!left || !right) {
+    throw new Error("Both role config arrays are required for comparison");
+  }
+
+  const normalizedLeft = normalizeRoleConfigs(left);
+  const normalizedRight = normalizeRoleConfigs(right);
 
   if (normalizedLeft.length !== normalizedRight.length) {
     return false;
@@ -116,10 +128,9 @@ export function areRoleConfigsEqual(
 }
 
 export function getRoleScope(roleConfigs: RoleConfig[], roleName: string) {
-  return (
-    normalizeRoleConfigs(roleConfigs).find((role) => role.name === roleName)
-      ?.scope || "private"
-  );
+  const role = normalizeRoleConfigs(roleConfigs).find((item) => item.name === roleName);
+  if (!role) throw new Error(`Role scope not found for role: ${roleName}`);
+  return role.scope;
 }
 
 export function getVisibleRoles(
@@ -200,12 +211,7 @@ export function encodeSignatureVector(vector: SignatureVector) {
 
 export function decodeSignatureVector(value?: string | null): SignatureVector | null {
   if (!value?.startsWith(SIGNATURE_VECTOR_PREFIX)) return null;
-
-  try {
-    return JSON.parse(value.slice(SIGNATURE_VECTOR_PREFIX.length));
-  } catch {
-    return null;
-  }
+  return JSON.parse(value.slice(SIGNATURE_VECTOR_PREFIX.length));
 }
 
 export function valueIsComplete(value?: string) {

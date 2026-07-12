@@ -1,7 +1,8 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { organization } from "better-auth/plugins";
-import { nextCookies } from "better-auth/next-js";
+import { sveltekitCookies } from "better-auth/svelte-kit";
+import { getRequestEvent } from "$app/server";
 
 import { db } from "@/db";
 import {
@@ -14,25 +15,30 @@ import {
   authVerification,
 } from "@/db/schema";
 import { getOrganizationBranding, getWorkspaceBaseUrl } from "@/lib/branding";
-import { buildInvitationEmail, buildResetPasswordEmail } from "@/lib/email/messages";
+import {
+  buildInvitationEmail,
+  buildResetPasswordEmail,
+} from "@/lib/email/messages";
 import { sendTransactionalEmail } from "@/lib/email/send-email";
 
 function getBaseUrl() {
-  return (
-    process.env.BETTER_AUTH_URL ||
-    process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
-    "http://localhost:3000"
-  );
+  if (!process.env.BETTER_AUTH_URL) {
+    throw new Error("BETTER_AUTH_URL is required");
+  }
+
+  return process.env.BETTER_AUTH_URL;
+}
+
+function getRequiredEnv(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value!;
 }
 
 export const auth = betterAuth({
   appName: "SleekSign",
-  secret:
-    process.env.BETTER_AUTH_SECRET || "sleeksign-local-development-secret",
-  baseURL:
-    process.env.BETTER_AUTH_URL ||
-    process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
-    "http://localhost:3000",
+  secret: getRequiredEnv("BETTER_AUTH_SECRET"),
+  baseURL: getBaseUrl(),
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
@@ -52,7 +58,7 @@ export const auth = betterAuth({
       const lastWorkspaceId = (user as { lastWorkspaceId?: string | null })
         .lastWorkspaceId;
       const branding = lastWorkspaceId
-        ? await getOrganizationBranding(lastWorkspaceId).catch(() => undefined)
+        ? await getOrganizationBranding(lastWorkspaceId)
         : undefined;
       const message = buildResetPasswordEmail({
         url,
@@ -82,35 +88,17 @@ export const auth = betterAuth({
   },
   socialProviders: {
     google: {
-      clientId:
-        process.env.GOOGLE_CLIENT_ID || process.env.AUTH_GOOGLE_ID || "",
-      clientSecret:
-        process.env.GOOGLE_CLIENT_SECRET ||
-        process.env.AUTH_GOOGLE_SECRET ||
-        "",
+      clientId: getRequiredEnv("GOOGLE_CLIENT_ID"),
+      clientSecret: getRequiredEnv("GOOGLE_CLIENT_SECRET"),
     },
   },
   plugins: [
     organization({
       sendInvitationEmail: async ({ id, email, organization, inviter }) => {
-        const branding = await getOrganizationBranding(organization.id).catch(
-          () => undefined,
-        );
+        const branding = await getOrganizationBranding(organization.id);
         const url = new URL(
           `/accept-invitation/${id}`,
-          getWorkspaceBaseUrl(branding || {
-            logoUrl: null,
-            primaryColor: "#18181b",
-            secondaryColor: "#f97316",
-            neutralColor: "#f7f5f1",
-            accentColor: "#ea580c",
-            bodyFont: "Roboto",
-            signatureFont: "Ruthie",
-            senderName: organization.name,
-            supportEmail: null,
-            supportLabel: "Support",
-            domain: null,
-          }, getBaseUrl()),
+          getWorkspaceBaseUrl(branding, getBaseUrl()),
         ).toString();
 
         const message = buildInvitationEmail({
@@ -129,6 +117,6 @@ export const auth = betterAuth({
         });
       },
     }),
-    nextCookies(),
+    sveltekitCookies(getRequestEvent),
   ],
 });

@@ -1,4 +1,4 @@
-import type { SessionRecord } from "@/components/hr/types";
+import type { SessionRecord } from "$lib/components/docs/types";
 import {
   fields,
   sessions,

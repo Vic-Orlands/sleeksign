@@ -261,6 +261,7 @@ export async function ensureWorkspaceEnterpriseSetup(
 export async function resolveWorkspaceAccess(
   userId: string,
   workspaceId: string,
+  options?: { ensureSetup?: boolean },
 ): Promise<ResolvedAccess | null> {
   const membership = await db.query.authMember.findFirst({
     where: and(
@@ -271,12 +272,11 @@ export async function resolveWorkspaceAccess(
 
   if (!membership) return null;
 
-  const { defaultTeamId } = await ensureWorkspaceEnterpriseSetup(
-    workspaceId,
-    membership.id,
-  );
+  const setup = options?.ensureSetup === true
+    ? await ensureWorkspaceEnterpriseSetup(workspaceId, membership.id)
+    : null;
 
-  const [workspace, membershipTeams, assignments] = await Promise.all([
+  const [workspace, membershipTeams, assignments, defaultTeam] = await Promise.all([
     db.query.authOrganization.findFirst({
       where: eq(authOrganization.id, workspaceId),
     }),
@@ -292,7 +292,16 @@ export async function resolveWorkspaceAccess(
         eq(memberRoleAssignments.memberId, membership.id),
       ),
     }),
+    setup
+      ? Promise.resolve(null)
+      : db.query.teams.findFirst({
+          where: and(
+            eq(teams.organizationId, workspaceId),
+            eq(teams.isDefault, true),
+          ),
+        }),
   ]);
+  const defaultTeamId = setup?.defaultTeamId || defaultTeam?.id || null;
 
   const roleIds = assignments.map((assignment) => assignment.roleId);
   const roles =

@@ -172,7 +172,7 @@ async function renderFinalizedDocument(input: {
   const pdfBytes = await getObjectBytes(input.sourceStorageKey);
   const pdfDoc = await PDFDocument.load(pdfBytes);
 
-  const fallbackSignatureFont = await pdfDoc.embedFont(
+  const typedSignatureFont = await pdfDoc.embedFont(
     StandardFonts.HelveticaOblique,
   );
 
@@ -223,7 +223,7 @@ async function renderFinalizedDocument(input: {
           x: x + 5,
           y: y + height / 4,
           size: Math.min(height, 32),
-          font: fallbackSignatureFont,
+          font: typedSignatureFont,
           color: rgb(0, 0, 0),
         });
       }

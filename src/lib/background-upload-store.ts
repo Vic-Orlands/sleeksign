@@ -1,12 +1,10 @@
-"use client";
-
 export interface BackgroundUpload {
   id: string;
   name: string;
   status: "uploading" | "success" | "error";
-  progress: number; // 0 to 100
+  progress: number;
   error?: string;
-  fileUrl: string; // local object URL (blob:)
+  fileUrl: string;
   result?: {
     id: string;
     name: string;
@@ -16,25 +14,25 @@ export interface BackgroundUpload {
   };
 }
 
-type Subscriber = (uploads: Record<string, BackgroundUpload>) => void;
+type Subscriber = () => void;
+type UploadCallbacks = {
+  onSuccess?: (upload: BackgroundUpload) => void;
+  onError?: (error: Error) => void;
+};
+type BackgroundUploadSnapshot = Record<string, BackgroundUpload>;
 type BackgroundUploadStoreWindow = Window & {
   __backgroundUploadStore?: BackgroundUploadStore;
 };
 
 class BackgroundUploadStore {
-  private uploads: Record<string, BackgroundUpload> = {};
+  private uploads: BackgroundUploadSnapshot = {};
+  private snapshot: BackgroundUploadSnapshot = {};
   private subscribers = new Set<Subscriber>();
   private activeRequests: Record<string, XMLHttpRequest> = {};
+  private callbacks: Record<string, UploadCallbacks> = {};
 
-  constructor() {
-    // If in browser, try to restore ongoing uploads (or clear them if they were interrupted)
-    if (typeof window !== "undefined") {
-      // Clear legacy/dangling sessionStorage on load if needed
-    }
-  }
-
-  getUploads() {
-    return this.uploads;
+  getUploads(): BackgroundUploadSnapshot {
+    return this.snapshot;
   }
 
   getUpload(id: string): BackgroundUpload | undefined {
@@ -43,18 +41,22 @@ class BackgroundUploadStore {
 
   subscribe(subscriber: Subscriber) {
     this.subscribers.add(subscriber);
-    // Initial call
-    subscriber(this.uploads);
     return () => {
       this.subscribers.delete(subscriber);
     };
   }
 
   private notify() {
-    this.subscribers.forEach((sub) => sub({ ...this.uploads }));
+    this.snapshot = { ...this.uploads };
+    this.subscribers.forEach((sub) => sub());
   }
 
-  startUpload(file: File, workspaceId: string, docId: string) {
+  startUpload(
+    file: File,
+    workspaceId: string,
+    docId: string,
+    callbacks: UploadCallbacks = {},
+  ) {
     if (typeof window === "undefined") return;
 
     const localUrl = URL.createObjectURL(file);
@@ -83,6 +85,7 @@ class BackgroundUploadStore {
     };
 
     this.uploads[docId] = uploadItem;
+    this.callbacks[docId] = callbacks;
     this.notify();
 
     void this.presignAndUpload(file, workspaceId, docId);
@@ -105,10 +108,10 @@ class BackgroundUploadStore {
           contentType: "application/pdf",
         }),
       });
-      const presignData = await presignResponse.json().catch(() => null);
+      const presignData = await presignResponse.json();
 
       if (!presignResponse.ok || !presignData?.uploadUrl) {
-        throw new Error(presignData?.error || "Upload failed");
+        throw new Error(presignData?.error || "Presign response missing uploadUrl");
       }
 
       uploadUrl = presignData.uploadUrl;
@@ -142,9 +145,15 @@ class BackgroundUploadStore {
           body: JSON.stringify({ documentId: docId }),
         })
           .then(async (response) => {
-            const data = await response.json().catch(() => null);
+            const data = await response.json();
             if (!response.ok) {
-              throw new Error(data?.error || "Upload failed");
+              throw new Error(data?.error || "Upload completion failed without an error message");
+            }
+            if (!data.fileUrl) {
+              throw new Error("Upload completion response missing fileUrl");
+            }
+            if (!data.createdAt) {
+              throw new Error("Upload completion response missing createdAt");
             }
 
             window.sessionStorage.setItem(
@@ -152,9 +161,9 @@ class BackgroundUploadStore {
               JSON.stringify({
                 id: docId,
                 name: data.name,
-                fileUrl: data.fileUrl || data.url,
+                fileUrl: data.fileUrl,
                 uploadStatus: "ready",
-                createdAt: data.createdAt || new Date().toISOString(),
+                createdAt: data.createdAt,
                 fields: [],
                 sessions: [],
                 roleConfigs: [],
@@ -169,6 +178,7 @@ class BackgroundUploadStore {
               result: data,
             };
             this.notify();
+            this.callbacks[docId]?.onSuccess?.(this.uploads[docId]);
           })
           .catch((error) => {
             this.handleError(
@@ -198,6 +208,7 @@ class BackgroundUploadStore {
       error: error.message,
     };
     this.notify();
+    this.callbacks[docId]?.onError?.(error);
   }
 
   cancelUpload(docId: string) {
@@ -207,17 +218,13 @@ class BackgroundUploadStore {
       delete this.activeRequests[docId];
     }
     
-    // Revoke object URL
     const upload = this.uploads[docId];
     if (upload && upload.fileUrl.startsWith("blob:")) {
-      try {
-        URL.revokeObjectURL(upload.fileUrl);
-      } catch {
-        // ignore
-      }
+      URL.revokeObjectURL(upload.fileUrl);
     }
 
     delete this.uploads[docId];
+    delete this.callbacks[docId];
     this.notify();
   }
 
@@ -226,7 +233,6 @@ class BackgroundUploadStore {
   }
 }
 
-// Global instance in browser
 let storeInstance: BackgroundUploadStore;
 if (typeof window !== "undefined") {
   const win = window as BackgroundUploadStoreWindow;
@@ -239,25 +245,3 @@ if (typeof window !== "undefined") {
 }
 
 export const backgroundUploadStore = storeInstance;
-
-// Custom React hook to subscribe to uploads in components
-import { useEffect, useState } from "react";
-
-export function useBackgroundUploads() {
-  const [uploads, setUploads] = useState<Record<string, BackgroundUpload>>(() =>
-    backgroundUploadStore.getUploads()
-  );
-
-  useEffect(() => {
-    return backgroundUploadStore.subscribe((nextUploads) => {
-      setUploads(nextUploads);
-    });
-  }, []);
-
-  return uploads;
-}
-
-export function useBackgroundUpload(docId: string) {
-  const uploads = useBackgroundUploads();
-  return uploads[docId];
-}

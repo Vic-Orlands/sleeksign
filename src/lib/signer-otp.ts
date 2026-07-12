@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { cookies } from "next/headers";
+import { getRequestEvent } from "$app/server";
 
 import { db } from "@/db";
 import {
@@ -52,7 +52,7 @@ export async function createOtpChallenge(input: {
     branding,
     process.env.BETTER_AUTH_URL ||
       process.env.NEXT_PUBLIC_BETTER_AUTH_URL ||
-      "http://localhost:3000",
+      "http://localhost:5173",
   );
 
   await db.insert(signerVerificationChallenges).values({
@@ -169,8 +169,8 @@ export async function verifyOtpChallenge(input: {
     })
     .where(eq(signerVerificationChallenges.id, challenge.id));
 
-  const cookieStore = await cookies();
-  cookieStore.set(
+  const event = getRequestEvent();
+  event.cookies.set(
     getCookieName(input.packetId, input.roleName, input.copyId),
     challenge.verificationToken || "",
     {
@@ -208,10 +208,10 @@ export async function isOtpVerified(input: {
   copyId?: string | null;
   roleName: string;
 }) {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(
+  const event = getRequestEvent();
+  const token = event.cookies.get(
     getCookieName(input.packetId, input.roleName, input.copyId),
-  )?.value;
+  );
 
   if (!token) return false;
 
