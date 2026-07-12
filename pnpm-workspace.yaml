@@ -1,0 +1,10 @@
+allowBuilds:
+  better-sqlite3: true
+  canvas: true
+  es5-ext: true
+  esbuild: true
+  fsevents: true
+  msw: true
+  sharp: true
+  uglifyjs-webpack-plugin: true
+  unrs-resolver: true
