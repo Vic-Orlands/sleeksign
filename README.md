@@ -1,6 +1,6 @@
 # SleekSign
 
-SleekSign is a self-hosted document-signing workspace for HR teams and internal operators. It combines a visual document setup editor, role-aware field assignment, signer identity capture, enterprise audit evidence, white-labeled signing flows, and multiple packet-sharing models in one Next.js app.
+SleekSign is a self-hosted document-signing workspace for teams and operators. It combines a visual document setup editor, role-aware field assignment, signer identity capture, enterprise audit evidence, white-labeled signing flows, and multiple packet-sharing models in one SvelteKit app.
 
 ## Features
 
@@ -148,7 +148,7 @@ After assignment:
 
 ## Admin Surfaces
 
-- `/hr/admin`
+- `/docs/admin`
   - team creation
   - permission role assignment
   - branding configuration
@@ -161,20 +161,19 @@ After assignment:
 
 ## Tech Stack
 
-- Next.js 16
-- React 19
+- SvelteKit 2 + Svelte 5
 - Drizzle ORM
 - Neon Postgres
+- Better Auth
 - Tailwind CSS
-- pdf-lib
+- pdf-lib / pdfjs-dist
 - opentype.js
-- react-rnd
 - Resend
 - Cloudflare R2
 
 ## Getting Started
 
-1. `npm install`
+1. `pnpm install`
 2. Copy `.env.example` to `.env.local`
 3. Set `DATABASE_URL` to your Neon connection string
 4. Create a private Cloudflare R2 bucket and set `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`
@@ -183,10 +182,20 @@ After assignment:
 7. Apply migrations to Neon
    - `npx drizzle-kit migrate`
    - if you are recovering from a partially applied migration, apply the SQL manually and update `drizzle.__drizzle_migrations`
-8. `npm run dev`
+8. `pnpm dev`
 9. Open `/`
-10. Open the dashboard from the homepage or go directly to `/hr/documents`
-11. Open `/hr/admin` for branding, teams, and enterprise access management
+10. Open the dashboard at `/docs`
+11. Open `/settings` for branding, teams, and enterprise access management
+
+## App routes
+
+- `/docs` — documents (use `?view=shared` / `?view=signed`)
+- `/docs/[id]` — document detail
+- `/docs/[id]/setup` — field placement
+- `/signers` — signer directory
+- `/settings` — workspace settings
+- `/share/[id]` — share links
+- `/sign/[id]`, `/sign/p/[id]`, `/sign/packet/[id]` — signing portals
 
 ## License
 
