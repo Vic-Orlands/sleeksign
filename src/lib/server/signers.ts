@@ -167,6 +167,75 @@ export async function createSignerGroup(
 	return { id };
 }
 
+export async function updateSignerGroup(
+	headers: HeadersInit,
+	input: {
+		workspaceId: string;
+		groupId: string;
+		name: string;
+		description?: string | null;
+		signerIds: string[];
+	},
+) {
+	const access = await requireWorkspaceAccess(headers, input.workspaceId, "signers:manage");
+	const group = await db.query.signerGroups.findFirst({
+		where: and(
+			eq(signerGroups.id, input.groupId),
+			eq(signerGroups.organizationId, input.workspaceId),
+		),
+	});
+	if (!group) throw new AccessError("Signer group not found", 404);
+
+	const nextSignerIds = [...new Set(input.signerIds.filter(Boolean))];
+	if (nextSignerIds.length === 0) {
+		throw new AccessError("Select at least one signer", 400);
+	}
+
+	const signerRows = await db.query.workspaceSigners.findMany({
+		where: eq(workspaceSigners.organizationId, input.workspaceId),
+	});
+	const signerIdSet = new Set(signerRows.map((signer) => signer.id));
+	if (nextSignerIds.some((signerId) => !signerIdSet.has(signerId))) {
+		throw new AccessError("One or more signers were not found", 404);
+	}
+
+	await db
+		.update(signerGroups)
+		.set({
+			name: input.name.trim() || group.name,
+			description: input.description?.trim() || null,
+			updatedAt: new Date(),
+		})
+		.where(eq(signerGroups.id, input.groupId));
+
+	await db.delete(signerGroupMembers).where(eq(signerGroupMembers.groupId, input.groupId));
+	await db.insert(signerGroupMembers).values(
+		nextSignerIds.map((signerId) => ({
+			id: nanoid(),
+			groupId: input.groupId,
+			signerId,
+		})),
+	);
+
+	await emitAuditEvent({
+		organizationId: input.workspaceId,
+		workspaceId: input.workspaceId,
+		teamId: group.teamId,
+		actorType: "user",
+		actorId: access.membership.userId,
+		actorEmail: access.session.user.email,
+		eventType: "signer-group.updated",
+		chainKey: `workspace:${input.workspaceId}`,
+		payload: {
+			groupId: input.groupId,
+			signerCount: nextSignerIds.length,
+		},
+		...getRequestAuditContext(headers),
+	});
+
+	return { id: input.groupId };
+}
+
 export async function deleteSignerGroup(
 	headers: HeadersInit,
 	workspaceId: string,

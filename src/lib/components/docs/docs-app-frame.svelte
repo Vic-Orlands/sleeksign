@@ -1,5 +1,5 @@
 <script lang="ts">
-	import DocsTopNav from "$lib/components/docs/docs-top-nav.svelte";
+	import DocsTopNav from "@/lib/components/docs/nav.svelte";
 	import type { TeamSummary, WorkspaceSummary } from "$lib/server/workspace";
 	import type { Snippet } from "svelte";
 

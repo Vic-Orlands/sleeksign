@@ -45,7 +45,7 @@
     <a
       href="/docs"
       data-sveltekit-preload-data="hover"
-      class="shrink-0 font-cursive text-[1.5rem] leading-none text-foreground"
+      class="shrink-0 font-cursive text-xl font-semibold leading-none text-foreground"
     >
       SleekSign
     </a>
@@ -61,7 +61,7 @@
           class={cn(
             "rounded-md mx-2 text-xs",
             active
-              ? "font-medium text-foreground"
+              ? "font-semibold text-foreground"
               : "text-muted-foreground hover:text-foreground",
           )}
         >

@@ -1,4 +1,4 @@
-import type { Field, RoleConfig } from "$lib/field-utils";
+import type { Field, RoleConfig, WorkflowMode } from "$lib/field-utils";
 
 export type SessionStatus = "pending" | "completed";
 
@@ -16,6 +16,25 @@ export type SessionRecord = {
 	completedAt?: string | number | Date | null;
 	deletedAt?: string | number | Date | null;
 	createdAt: string | number | Date;
+};
+
+export type PacketCopySummary = {
+	id: string;
+	roleName: string;
+	signerName?: string | null;
+	signerEmail?: string | null;
+	recipientType?: "email" | "signer" | "group" | "bulk" | null;
+	status: SessionStatus;
+	createdAt: string | number | Date;
+};
+
+export type PacketActivitySummary = {
+	id: string;
+	mode: WorkflowMode;
+	status: string;
+	createdAt: string | number | Date;
+	roleConfigs: RoleConfig[];
+	copies: PacketCopySummary[];
 };
 
 export type DocumentRecord = {
@@ -37,6 +56,7 @@ export type DocumentRecord = {
 	roleConfigs?: RoleConfig[];
 	fields?: Field[];
 	sessions?: SessionRecord[];
+	packets?: PacketActivitySummary[];
 };
 
 export type DocumentStatus = "Pending" | "In Progress" | "Completed";
@@ -67,12 +87,92 @@ export function getDocumentCounts(document: DocumentRecord) {
 	const sessions = document.sessions || [];
 	const completed = sessions.filter((session) => session.status === "completed").length;
 	const pending = sessions.length - completed;
+	const fields = document.fields || [];
+	const signatureFields = fields.filter((field) => field.type === "signature");
+	const requiredSignatures = signatureFields.filter((field) => field.required).length;
+	const optionalSignatures = signatureFields.length - requiredSignatures;
+	const requiredFields = fields.filter((field) => field.required).length;
+	const optionalFields = fields.length - requiredFields;
 
 	return {
-		fields: document.fields?.length || 0,
+		fields: fields.length,
 		pending,
 		completed,
 		total: sessions.length,
+		requiredFields,
+		optionalFields,
+		signatureFields: signatureFields.length,
+		requiredSignatures,
+		optionalSignatures,
+	};
+}
+
+export function getWorkflowModeLabel(mode: WorkflowMode | string) {
+	if (mode === "collaborative") return "Collaborative";
+	if (mode === "individual") return "Individual";
+	if (mode === "shared-base") return "Shared base";
+	return mode;
+}
+
+export function getRecipientTypeLabel(
+	type: PacketCopySummary["recipientType"] | string | null | undefined,
+) {
+	if (type === "signer") return "Directory signer";
+	if (type === "group") return "Group";
+	if (type === "bulk") return "Bulk CSV";
+	return "Email";
+}
+
+export function getFieldTypeLabel(type: string) {
+	if (type === "signature") return "Signature";
+	if (type === "text") return "Text";
+	if (type === "date") return "Date";
+	if (type === "checkbox") return "Checkbox";
+	return type;
+}
+
+export type SharedRecipient = PacketCopySummary & {
+	packetId: string;
+	mode: WorkflowMode;
+};
+
+export function getDocumentShareActivity(document: DocumentRecord) {
+	const packets = document.packets || [];
+	const copyIds = new Set(packets.flatMap((packet) => packet.copies.map((copy) => copy.id)));
+
+	const emailedRecipients: SharedRecipient[] = packets.flatMap((packet) =>
+		packet.copies
+			.filter((copy) => Boolean(copy.signerEmail?.trim()))
+			.map((copy) => ({
+				...copy,
+				packetId: packet.id,
+				mode: packet.mode,
+			})),
+	);
+
+	const linkPackets = packets.filter(
+		(packet) => !packet.copies.some((copy) => Boolean(copy.signerEmail?.trim())),
+	);
+
+	const linkSessions = (document.sessions || []).filter((session) => {
+		if (session.signerEmail?.trim()) return false;
+		if (session.id.startsWith("packet-")) return false;
+		if (copyIds.has(session.id)) return false;
+		return true;
+	});
+
+	const modes = [...new Set(packets.map((packet) => packet.mode))];
+	const signatureFields = (document.fields || []).filter((field) => field.type === "signature");
+
+	return {
+		packets,
+		modes,
+		emailedRecipients,
+		linkPackets,
+		linkSessions,
+		hasLinkShare: linkPackets.length > 0 || linkSessions.length > 0,
+		hasEmailShare: emailedRecipients.length > 0,
+		signatureFields,
 	};
 }
 

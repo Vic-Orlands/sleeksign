@@ -177,7 +177,7 @@
 
   {#if open}
     <div
-      class="absolute right-0 top-[calc(100%+0.5rem)] z-50 flex h-72 w-[min(92vw,28rem)] overflow-hidden rounded-lg border border-border bg-popover"
+      class="absolute left-0 top-[calc(100%+0.5rem)] z-50 flex h-58 w-[min(92vw,28rem)] overflow-hidden rounded-lg border border-border bg-popover"
     >
       <div class="flex min-h-0 min-w-0 flex-1 flex-col border-r border-border">
         <div class="shrink-0 border-b border-border px-3 py-2">
@@ -190,7 +190,7 @@
             <button
               type="button"
               class={cn(
-                "flex h-9 w-full items-center gap-2 px-3 text-left text-[13px] transition-colors hover:bg-muted",
+                "flex h-9 w-full items-center gap-2 px-3 text-left text-xs transition-colors hover:bg-muted",
                 viewedId === workspace.id
                   ? "bg-muted/60 text-foreground"
                   : "text-muted-foreground",
@@ -228,7 +228,7 @@
             type="button"
             variant="ghost"
             size="sm"
-            class="h-8 w-full justify-start gap-2 text-[13px]"
+            class="h-8 w-full justify-start gap-2 text-xs"
             onclick={() => {
               open = false;
               createWorkspaceOpen = true;
@@ -252,14 +252,14 @@
         </div>
         <div class="min-h-0 flex-1 overflow-auto py-1">
           {#if viewedTeams.length === 0}
-            <p class="px-3 py-4 text-[13px] text-muted-foreground">
+            <p class="px-3 py-4 text-xs text-muted-foreground">
               No teams yet.
             </p>
           {:else}
             {#each viewedTeams as team (team.id)}
               <button
                 type="button"
-                class="flex h-9 w-full items-center gap-2 px-3 text-left text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                class="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 onclick={() => switchWorkspace(viewedId, team.id)}
               >
                 <svg
@@ -294,7 +294,7 @@
             type="button"
             variant="ghost"
             size="sm"
-            class="h-8 w-full justify-start gap-2 text-[13px]"
+            class="h-8 w-full justify-start gap-2 text-xs"
             disabled={!viewedId}
             onclick={() => {
               open = false;
@@ -326,7 +326,7 @@
       <Input
         bind:value={newWorkspaceName}
         placeholder="Workspace name"
-        class="h-9 text-[13px]"
+        class="h-9 text-xs"
       />
       <DialogFooter>
         <Button
@@ -356,7 +356,7 @@
       <Input
         bind:value={newTeamName}
         placeholder="Team name"
-        class="h-9 text-[13px]"
+        class="h-9 text-xs"
       />
       <DialogFooter>
         <Button

@@ -1,5 +1,6 @@
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
+import { deleteDocument } from "$lib/server/documents";
 import { listDocumentsForAccess } from "$lib/server/page-data";
 import { shareDocumentForAccess } from "$lib/server/sharing";
 import {
@@ -46,6 +47,20 @@ export const actions: Actions = {
 			return { success: true, ...result };
 		} catch (error) {
 			return actionError(error, "Failed to share document");
+		}
+	},
+
+	deleteDocument: async ({ request }) => {
+		const data = await request.formData();
+		const documentId = formString(data, "documentId");
+		if (!documentId) return fail(400, { error: "Document ID required" });
+
+		try {
+			await requireAppAccess("manage");
+			await deleteDocument(request.headers, documentId);
+			return { success: true, message: "Document deleted" };
+		} catch (error) {
+			return actionError(error, "Failed to delete document");
 		}
 	},
 };

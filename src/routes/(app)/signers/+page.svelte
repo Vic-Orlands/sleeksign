@@ -57,6 +57,9 @@
 	let directorySignerToDelete = $state<DirectorySigner | null>(null);
 	let signerToDelete = $state<(SessionRecord & { documentName: string }) | null>(null);
 	let selectedGroup = $state<SignerGroup | null>(null);
+	let editGroupName = $state("");
+	let editGroupDescription = $state("");
+	let editGroupMemberIds = $state<string[]>([]);
 
 	const workspaceId = $derived(data.workspaceId || "");
 	const documents = $derived((data.documents || []) as DocumentRecord[]);
@@ -84,6 +87,28 @@
 	$effect(() => {
 		if (workspaceId) setCurrentWorkspaceId(workspaceId);
 	});
+
+	$effect(() => {
+		if (!selectedGroup) return;
+		if (!signerGroups.some((group) => group.id === selectedGroup?.id)) {
+			selectedGroup = null;
+		}
+	});
+
+	function openGroup(group: SignerGroup) {
+		selectedGroup = group;
+		editGroupName = group.name;
+		editGroupDescription = group.description || "";
+		editGroupMemberIds = (group.signers || []).map((signer) => signer.id);
+	}
+
+	function toggleEditGroupMember(id: string) {
+		if (editGroupMemberIds.includes(id)) {
+			editGroupMemberIds = editGroupMemberIds.filter((memberId) => memberId !== id);
+			return;
+		}
+		editGroupMemberIds = [...editGroupMemberIds, id];
+	}
 
 	function filterRows<T>(
 		rows: T[],
@@ -295,7 +320,7 @@
 										<button
 											type="button"
 											class="truncate text-[13px] font-medium text-foreground hover:underline"
-											onclick={() => (selectedGroup = group)}
+											onclick={() => openGroup(group)}
 										>
 											{group.name}
 										</button>
@@ -374,27 +399,115 @@
 
 {#if selectedGroup}
 	<div
-		class="sheet-panel fixed inset-y-0 right-0 z-50 w-[min(92vw,24rem)] border-l border-border bg-background p-5"
+		class="sheet-panel fixed inset-y-0 right-0 z-50 w-[min(96vw,40rem)] border-l border-border bg-background p-5"
 	>
-		<div class="flex items-start justify-between gap-3">
-			<div>
-				<h2 class="text-base font-semibold">{selectedGroup.name}</h2>
-				<p class="mt-1 text-[13px] text-muted-foreground">
-					{selectedGroup.signers?.length || 0} members
-				</p>
+		<form
+			method="POST"
+			action="?/updateGroup"
+			class="flex h-full flex-col"
+			use:enhance={() => {
+				const groupId = selectedGroup?.id;
+				busyAction = "update-group";
+				return async ({ result, update }) => {
+					busyAction = "";
+					const actionResult = result as ActionResult;
+					if (actionResult.type === "success") {
+						toast.success(
+							(actionResult.data as { message?: string } | undefined)?.message ||
+								"Group updated",
+						);
+						await update();
+						const latest = (
+							(data.signerGroups || []) as SignerGroup[]
+						).find((group) => group.id === groupId);
+						if (latest) openGroup(latest);
+						else selectedGroup = null;
+						return;
+					}
+					if (actionResult.type === "failure") {
+						toast.error(
+							(actionResult.data as { error?: string } | undefined)?.error ||
+								"Unable to update group",
+						);
+					}
+				};
+			}}
+		>
+			<input type="hidden" name="groupId" value={selectedGroup.id} />
+			<div class="flex items-start justify-between gap-3">
+				<div>
+					<h2 class="text-base font-semibold">Edit group</h2>
+					<p class="mt-1 text-[13px] text-muted-foreground">
+						{editGroupMemberIds.length} member{editGroupMemberIds.length === 1 ? "" : "s"}
+					</p>
+				</div>
+				<Button
+					type="button"
+					variant="ghost"
+					size="sm"
+					class="h-7"
+					onclick={() => (selectedGroup = null)}
+				>
+					Close
+				</Button>
 			</div>
-			<Button variant="ghost" size="sm" class="h-7" onclick={() => (selectedGroup = null)}>
-				Close
-			</Button>
-		</div>
-		<ul class="mt-4 space-y-3">
-			{#each selectedGroup.signers || [] as signer (signer.id)}
-				<li>
-					<p class="text-[13px] font-medium">{signer.name}</p>
-					<p class="text-[13px] text-muted-foreground">{signer.email}</p>
-				</li>
-			{/each}
-		</ul>
+
+			<div class="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-1 py-1">
+				<div class="space-y-1.5">
+					<label for="edit-group-title" class="text-[12px] font-medium text-foreground">
+						Title
+					</label>
+					<Input
+						id="edit-group-title"
+						name="name"
+						bind:value={editGroupName}
+						placeholder="Group name"
+						class="h-8 rounded-[8px] text-xs"
+						required
+					/>
+				</div>
+				<div class="space-y-1.5">
+					<label for="edit-group-description" class="text-[12px] font-medium text-foreground">
+						Description
+					</label>
+					<Input
+						id="edit-group-description"
+						name="description"
+						bind:value={editGroupDescription}
+						placeholder="Description (optional)"
+						class="h-8 rounded-[8px] text-xs"
+					/>
+				</div>
+				<div class="max-h-[min(50vh,22rem)] space-y-2 overflow-auto rounded-[8px] bg-muted/40 p-2">
+					{#each directorySigners as signer (signer.id)}
+						<label class="flex items-center gap-2 text-sm">
+							<input
+								type="checkbox"
+								name="signerIds"
+								value={signer.id}
+								checked={editGroupMemberIds.includes(signer.id)}
+								onchange={() => toggleEditGroupMember(signer.id)}
+							/>
+							<span class="min-w-0 truncate">{signer.name} · {signer.email}</span>
+						</label>
+					{/each}
+				</div>
+			</div>
+
+			<div class="mt-4 flex items-center justify-end gap-2 border-t border-border pt-4">
+				<Button
+					type="button"
+					variant="outline"
+					class="h-7"
+					onclick={() => (selectedGroup = null)}
+				>
+					Cancel
+				</Button>
+				<Button type="submit" class="h-7" loading={busyAction === "update-group"}>
+					Save changes
+				</Button>
+			</div>
+		</form>
 	</div>
 {/if}
 
