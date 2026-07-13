@@ -6,6 +6,7 @@ import {
 	deleteDirectorySigner,
 	deleteSignerGroup,
 	deleteSigningSession,
+	updateSignerGroup,
 } from "$lib/server/signers";
 import { loadSignersData } from "$lib/server/page-data";
 import {
@@ -103,6 +104,32 @@ export const actions: Actions = {
 			return { success: true, message: "Group created" };
 		} catch (error) {
 			return actionError(error, "Unable to create group");
+		}
+	},
+
+	updateGroup: async ({ request }) => {
+		const data = await request.formData();
+		const groupId = formString(data, "groupId");
+		const name = formString(data, "name");
+		const description = formString(data, "description");
+		const signerIds = data.getAll("signerIds").filter((v): v is string => typeof v === "string");
+
+		try {
+			const { access } = await requireAppAccess("signers:manage");
+			if (!groupId) return fail(400, { error: "Group ID required" });
+			if (!name) return fail(400, { error: "Group name is required" });
+			if (signerIds.length === 0) return fail(400, { error: "Select at least one signer" });
+
+			await updateSignerGroup(request.headers, {
+				workspaceId: access.workspaceId,
+				groupId,
+				name,
+				description: description || null,
+				signerIds,
+			});
+			return { success: true, message: "Group updated" };
+		} catch (error) {
+			return actionError(error, "Unable to update group");
 		}
 	},
 

@@ -285,7 +285,7 @@
 	>
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<aside
-			class="sheet-panel flex h-full w-[min(92vw,36rem)] flex-col border-l border-border bg-background"
+			class="sheet-panel flex h-full w-[min(96vw,40rem)] flex-col border-l border-border bg-background"
 			onclick={(event) => event.stopPropagation()}
 		>
 			<div class="border-b border-border px-5 py-4">
