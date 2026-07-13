@@ -20,6 +20,8 @@
     UploadSimpleIcon,
     CaretDownIcon,
     ArrowCounterClockwiseIcon,
+    TrashIcon,
+    ArchiveIcon,
   } from "phosphor-svelte";
 
   export type DashboardFilter =
@@ -136,9 +138,7 @@
 </script>
 
 <main class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-  <section
-    class="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col py-8"
-  >
+  <section class="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col py-8">
     <div
       class="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
     >
@@ -229,9 +229,7 @@
         class="w-full min-w-[720px] border-collapse table-auto md:table-fixed"
       >
         <colgroup>
-          <!-- Increase first column width: was ~w-48 (12rem/192px), then 20rem/320px, now set to 24rem/384px -->
           <col style="width: 24rem" />
-          <!-- The rest correspond to: Type, Status, Fields/Signatures, Date uploaded, actions -->
           {#if variant === "documents"}
             <col />
             <col />
@@ -269,7 +267,7 @@
                       class={cn(
                         "h-4",
                         colIndex === 0
-                          ? "w-[24rem]" /* was w-48, then w-80 (~20rem), now w-[24rem] */
+                          ? "w-[24rem]"
                           : colIndex === columns.length - 1
                             ? "ml-auto w-20"
                             : "w-20",
@@ -382,16 +380,7 @@
                           title="Archive"
                           onclick={() => onArchiveDocument(document)}
                         >
-                          <svg
-                            class="size-3.5"
-                            viewBox="0 0 256 256"
-                            fill="currentColor"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M224,48H32A16,16,0,0,0,16,64V88a16,16,0,0,0,16,16v88a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V104a16,16,0,0,0,16-16V64A16,16,0,0,0,224,48ZM208,192H48V104H208ZM224,88H32V64H224ZM96,136a8,8,0,0,1,8-8h48a8,8,0,0,1,0,16H104A8,8,0,0,1,96,136Z"
-                            />
-                          </svg>
+                          <ArchiveIcon class="size-3.5 text-emerald-600" />
                         </button>
                       {/if}
                       {#if onDeleteDocument}
@@ -402,16 +391,7 @@
                           title="Delete"
                           onclick={() => onDeleteDocument(document)}
                         >
-                          <svg
-                            class="size-3.5"
-                            viewBox="0 0 256 256"
-                            fill="currentColor"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M216,48H176V40a24,24,0,0,0-24-24H104A24,24,0,0,0,80,40v8H40a8,8,0,0,0,0,16h8V208a16,16,0,0,0,16,16H192a16,16,0,0,0,16-16V64h8a8,8,0,0,0,0-16ZM96,40a8,8,0,0,1,8-8h48a8,8,0,0,1,8,8v8H96Zm96,168H64V64H192ZM112,104v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Zm48,0v64a8,8,0,0,1-16,0V104a8,8,0,0,1,16,0Z"
-                            />
-                          </svg>
+                          <TrashIcon class="size-3.5 text-red-600" />
                         </button>
                       {/if}
                     </div>

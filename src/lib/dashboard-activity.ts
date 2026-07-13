@@ -1,4 +1,7 @@
-import type { SessionRecord } from "$lib/components/docs/types";
+import type {
+  PacketActivitySummary,
+  SessionRecord,
+} from "$lib/components/docs/types";
 import {
   fields,
   sessions,
@@ -7,7 +10,7 @@ import {
   signingPacketValues,
 } from "@/db/schema";
 import { areRoleFieldsComplete } from "@/lib/signing-workflows";
-import { parseRoleConfigs } from "@/lib/field-utils";
+import { parseRoleConfigs, type WorkflowMode } from "@/lib/field-utils";
 
 type LegacySession = typeof sessions.$inferSelect;
 type Packet = typeof signingPackets.$inferSelect & {
@@ -21,6 +24,25 @@ type DocumentWithActivity = {
   packets?: Packet[];
   [key: string]: unknown;
 };
+
+function buildPacketSummaries(document: DocumentWithActivity): PacketActivitySummary[] {
+  return (document.packets || []).map((packet) => ({
+    id: packet.id,
+    mode: packet.mode as WorkflowMode,
+    status: packet.status,
+    createdAt: packet.createdAt,
+    roleConfigs: parseRoleConfigs(packet.roleConfigs),
+    copies: (packet.copies || []).map((copy) => ({
+      id: copy.id,
+      roleName: copy.roleName,
+      signerName: copy.signerName,
+      signerEmail: copy.signerEmail,
+      recipientType: copy.recipientType,
+      status: copy.status === "completed" ? "completed" : "pending",
+      createdAt: copy.createdAt,
+    })),
+  }));
+}
 
 function buildDocumentSessions(document: DocumentWithActivity): SessionRecord[] {
   const legacySessions = (document.sessions || [])
@@ -111,10 +133,15 @@ function getSessionTimestamp(session: SessionRecord) {
 
 function serializeDocumentActivity<T extends DocumentWithActivity>(
   document: T,
-): T & { sessions: SessionRecord[] } {
+): Omit<T, "packets"> & {
+  sessions: SessionRecord[];
+  packets: PacketActivitySummary[];
+} {
+  const { packets: _rawPackets, ...rest } = document;
   return {
-    ...document,
+    ...(rest as Omit<T, "packets">),
     sessions: buildDocumentSessions(document),
+    packets: buildPacketSummaries(document),
   };
 }
 

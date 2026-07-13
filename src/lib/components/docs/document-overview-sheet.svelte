@@ -1,34 +1,66 @@
 <script lang="ts">
+	import { browser } from "$app/environment";
 	import { format } from "date-fns";
+	import { CopyIcon } from "phosphor-svelte";
 	import { toast } from "svelte-sonner";
 	import StatusBadge from "$lib/components/docs/status-badge.svelte";
-	import type { DocumentRecord } from "$lib/components/docs/types";
+	import type { DocumentRecord, PacketActivitySummary } from "$lib/components/docs/types";
 	import {
 		getDocumentCounts,
 		getDocumentSetupStatus,
+		getDocumentShareActivity,
 		getDocumentStatus,
+		getFieldTypeLabel,
+		getRecipientTypeLabel,
+		getWorkflowModeLabel,
 	} from "$lib/components/docs/types";
 	import Button from "$lib/components/ui/button.svelte";
 	import { postFormAction } from "$lib/form-action";
 	import type { WorkflowMode } from "$lib/field-utils";
+	import { cn } from "$lib/utils";
+
+	type ActivityTab = "email" | "signing" | "fields";
+
+	const ACTIVITY_TABS: Array<{ id: ActivityTab; label: string }> = [
+		{ id: "email", label: "Email Link" },
+		{ id: "signing", label: "Signing link" },
+		{ id: "fields", label: "Signature fields" },
+	];
 
 	let {
 		document: overviewDocument = null,
 		open = $bindable(false),
+		variant = "default",
 		onOpenSetup,
 	}: {
 		document?: DocumentRecord | null;
 		open?: boolean;
+		variant?: "default" | "activity";
 		onOpenSetup: (document: DocumentRecord) => void;
 	} = $props();
 
 	let isCreatingPacket = $state(false);
+	let activityTab = $state<ActivityTab>("email");
 
 	const detail = $derived(overviewDocument);
 	const counts = $derived(detail ? getDocumentCounts(detail) : null);
+	const activity = $derived(detail ? getDocumentShareActivity(detail) : null);
 	const allFieldsAssigned = $derived(
 		detail ? (detail.fields || []).every((field) => Boolean(field.assigneeRole)) : false,
 	);
+	const isActivity = $derived(variant === "activity");
+	const origin = $derived(browser ? window.location.origin : "");
+	const activityTabIndex = $derived(
+		Math.max(
+			0,
+			ACTIVITY_TABS.findIndex((tab) => tab.id === activityTab),
+		),
+	);
+
+	$effect(() => {
+		if (!open || !detail?.id) return;
+		activityTab = "email";
+	});
 
 	async function createSessionAndShare(mode: WorkflowMode = "shared-base") {
 		if (!detail) return;
@@ -52,6 +84,38 @@
 		}
 	}
 
+	function emailInviteUrl(packetId: string, roleName: string, copyId: string) {
+		return `${origin}/sign/packet/${packetId}?role=${encodeURIComponent(roleName)}&copyId=${encodeURIComponent(copyId)}`;
+	}
+
+	function signingEntryLinks(packet: PacketActivitySummary) {
+		if (!detail) return [];
+		const roles =
+			packet.roleConfigs.length > 0
+				? packet.roleConfigs
+				: (detail.roleConfigs || []).map((role) => ({
+						name: role.name,
+						scope: role.scope,
+					}));
+		return roles.map((role) => ({
+			role,
+			url: `${origin}/sign/p/${detail.id}?packet=${encodeURIComponent(packet.id)}&role=${encodeURIComponent(role.name)}`,
+		}));
+	}
+
+	function legacySessionUrl(sessionId: string) {
+		return `${origin}/sign/${sessionId}`;
+	}
+
+	async function copyLink(url: string, label = "Link") {
+		try {
+			await navigator.clipboard.writeText(url);
+			toast.success(`${label} copied`);
+		} catch {
+			toast.error("Unable to copy link");
+		}
+	}
+
 	function close() {
 		open = false;
 	}
@@ -62,13 +126,13 @@
 	<div class="fixed inset-0 z-50 flex justify-end bg-background/40" onclick={close}>
 		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<aside
-			class="flex h-full w-[min(92vw,28rem)] flex-col border-l border-border bg-background"
+			class="flex h-full w-[min(96vw,40rem)] flex-col border-l border-border bg-background"
 			onclick={(event) => event.stopPropagation()}
 		>
 			<div class="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
 				<div class="min-w-0">
 					<p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-						Overview
+						{isActivity ? "Shared activity" : "Overview"}
 					</p>
 					<h2 class="mt-1 truncate text-lg font-semibold tracking-tight">{detail.name}</h2>
 				</div>
@@ -84,7 +148,7 @@
 				</div>
 
 				{#if counts}
-					<div class="grid grid-cols-2 gap-3 text-[13px]">
+					<div class="grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
 						<div>
 							<p class="text-muted-foreground">Fields</p>
 							<p class="font-medium">{counts.fields}</p>
@@ -108,7 +172,232 @@
 					</div>
 				{/if}
 
-				{#if !allFieldsAssigned}
+				{#if activity && isActivity}
+					<section class="space-y-2">
+						<p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+							Workflow model
+						</p>
+						{#if activity.modes.length > 0}
+							<div class="flex flex-wrap gap-2">
+								{#each activity.modes as mode (mode)}
+									<span
+										class="rounded-md border border-border px-2 py-1 text-[12px] font-medium text-foreground"
+									>
+										{getWorkflowModeLabel(mode)}
+									</span>
+								{/each}
+							</div>
+						{:else}
+							<p class="text-[13px] text-muted-foreground">No packet model recorded yet.</p>
+						{/if}
+					</section>
+
+					<div>
+						<div class="relative grid grid-cols-3 border-b border-border">
+							{#each ACTIVITY_TABS as tab (tab.id)}
+								<button
+									type="button"
+									class={cn(
+										"pb-2.5 text-center text-[13px] transition-colors",
+										activityTab === tab.id
+											? "font-medium text-foreground"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onclick={() => (activityTab = tab.id)}
+								>
+									{tab.label}
+								</button>
+							{/each}
+							<div
+								class="pointer-events-none absolute bottom-0 left-0 h-0.5 w-1/3 bg-foreground transition-transform duration-300 ease-out"
+								style={`transform: translateX(${activityTabIndex * 100}%)`}
+							></div>
+						</div>
+
+						<div class="mt-4 overflow-hidden">
+							<div
+								class="flex transition-transform duration-300 ease-out"
+								style={`transform: translateX(-${activityTabIndex * 100}%)`}
+							>
+								<div class="w-full shrink-0 space-y-3 pr-1">
+									{#if activity.emailedRecipients.length > 0}
+										{#each activity.emailedRecipients as recipient (recipient.id)}
+											{@const url = emailInviteUrl(
+												recipient.packetId,
+												recipient.roleName,
+												recipient.id,
+											)}
+											<div class="rounded-md border border-border/70 px-3 py-3">
+												<div class="flex items-start justify-between gap-3">
+													<div class="min-w-0">
+														<p class="text-[13px] font-medium text-foreground">
+															{recipient.signerName || recipient.roleName}
+														</p>
+														<p class="text-[12px] text-muted-foreground">
+															{recipient.signerEmail}
+														</p>
+														<p class="mt-1 text-[11px] text-muted-foreground">
+															{getRecipientTypeLabel(recipient.recipientType)} ·
+															{getWorkflowModeLabel(recipient.mode)} · {recipient.status} ·
+															{format(new Date(recipient.createdAt), "MMM d, yyyy")}
+														</p>
+													</div>
+													<Button
+														variant="outline"
+														size="sm"
+														class="h-7 shrink-0 gap-1.5"
+														onclick={() => copyLink(url, "Email link")}
+													>
+														<CopyIcon class="size-3.5" />
+														Copy
+													</Button>
+												</div>
+												<p class="mt-2 truncate font-mono text-[11px] text-muted-foreground">
+													{url}
+												</p>
+											</div>
+										{/each}
+									{:else}
+										<p class="text-[13px] text-muted-foreground">Not shared via email.</p>
+									{/if}
+								</div>
+
+								<div class="w-full shrink-0 space-y-3 px-1">
+									{#if activity.hasLinkShare}
+										{#each activity.linkPackets as packet (packet.id)}
+											<div class="space-y-2 rounded-md border border-border/70 px-3 py-3">
+												<div>
+													<p class="text-[13px] font-medium text-foreground">
+														Link created · {getWorkflowModeLabel(packet.mode)}
+													</p>
+													<p class="mt-1 text-[11px] text-muted-foreground">
+														{packet.status} ·
+														{format(new Date(packet.createdAt), "MMM d, yyyy")} · Not emailed
+													</p>
+												</div>
+												{#each signingEntryLinks(packet) as { role, url } (`${packet.id}-${role.name}`)}
+													<div
+														class="flex items-start justify-between gap-3 rounded-md bg-muted/40 px-2.5 py-2"
+													>
+														<div class="min-w-0">
+															<p class="text-[12px] font-medium text-foreground">{role.name}</p>
+															<p class="truncate font-mono text-[11px] text-muted-foreground">
+																{url}
+															</p>
+														</div>
+														<Button
+															variant="outline"
+															size="sm"
+															class="h-7 shrink-0 gap-1.5"
+															onclick={() => copyLink(url, `${role.name} link`)}
+														>
+															<CopyIcon class="size-3.5" />
+															Copy
+														</Button>
+													</div>
+												{/each}
+											</div>
+										{/each}
+										{#each activity.linkSessions as session (session.id)}
+											{@const url = legacySessionUrl(session.id)}
+											<div class="rounded-md border border-border/70 px-3 py-3">
+												<div class="flex items-start justify-between gap-3">
+													<div class="min-w-0">
+														<p class="text-[13px] font-medium text-foreground">
+															Signing link session
+														</p>
+														<p class="mt-1 text-[11px] text-muted-foreground">
+															{session.status} ·
+															{format(new Date(session.createdAt), "MMM d, yyyy")} · Not emailed
+														</p>
+														<p class="mt-2 truncate font-mono text-[11px] text-muted-foreground">
+															{url}
+														</p>
+													</div>
+													<Button
+														variant="outline"
+														size="sm"
+														class="h-7 shrink-0 gap-1.5"
+														onclick={() => copyLink(url, "Signing link")}
+													>
+														<CopyIcon class="size-3.5" />
+														Copy
+													</Button>
+												</div>
+											</div>
+										{/each}
+									{:else}
+										<p class="text-[13px] text-muted-foreground">
+											No standalone signing link recorded.
+										</p>
+									{/if}
+								</div>
+
+								<div class="w-full shrink-0 space-y-3 pl-1">
+									{#if counts}
+										<p class="text-[13px] text-muted-foreground">
+											{counts.signatureFields} total · {counts.requiredSignatures} mandatory ·
+											{counts.optionalSignatures} optional
+										</p>
+									{/if}
+									{#if activity.signatureFields.length > 0}
+										<ul class="space-y-2">
+											{#each activity.signatureFields as field (field.id)}
+												<li
+													class="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-[13px]"
+												>
+													<div class="min-w-0">
+														<p class="font-medium text-foreground">
+															{getFieldTypeLabel(field.type)}
+															{#if field.assigneeRole}
+																· {field.assigneeRole}
+															{/if}
+														</p>
+														<p class="text-[11px] text-muted-foreground">
+															Page {field.page + 1}
+														</p>
+													</div>
+													<span
+														class="shrink-0 text-[11px] font-medium {field.required
+															? 'text-foreground'
+															: 'text-muted-foreground'}"
+													>
+														{field.required ? "Mandatory" : "Optional"}
+													</span>
+												</li>
+											{/each}
+										</ul>
+									{:else}
+										<p class="text-[13px] text-muted-foreground">
+											No signature fields on this document.
+										</p>
+									{/if}
+								</div>
+							</div>
+						</div>
+					</div>
+				{:else if activity && (activity.packets.length > 0 || activity.hasEmailShare || activity.hasLinkShare)}
+					<section class="space-y-2">
+						<p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+							Workflow model
+						</p>
+						{#if activity.modes.length > 0}
+							<div class="flex flex-wrap gap-2">
+								{#each activity.modes as mode (mode)}
+									<span
+										class="rounded-md border border-border px-2 py-1 text-[12px] font-medium text-foreground"
+									>
+										{getWorkflowModeLabel(mode)}
+									</span>
+								{/each}
+							</div>
+						{:else}
+							<p class="text-[13px] text-muted-foreground">No packet model recorded yet.</p>
+						{/if}
+					</section>
+				{/if}
+
+				{#if !allFieldsAssigned && !isActivity}
 					<p class="text-[13px] text-amber-700 dark:text-amber-400">
 						Assign every field to a signer role before sharing.
 					</p>
@@ -123,13 +412,15 @@
 				>
 					Open setup
 				</Button>
-				<Button
-					onclick={() => createSessionAndShare("shared-base")}
-					disabled={isCreatingPacket || !allFieldsAssigned || !(detail.fields || []).length}
-					class="w-full justify-center"
-				>
-					{isCreatingPacket ? "Preparing…" : "Share for signing"}
-				</Button>
+				{#if !isActivity}
+					<Button
+						onclick={() => createSessionAndShare("shared-base")}
+						disabled={isCreatingPacket || !allFieldsAssigned || !(detail.fields || []).length}
+						class="w-full justify-center"
+					>
+						{isCreatingPacket ? "Preparing…" : "Share for signing"}
+					</Button>
+				{/if}
 			</div>
 		</aside>
 	</div>
