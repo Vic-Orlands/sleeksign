@@ -30,7 +30,7 @@ function serializeDocumentRecord(doc: Record<string, unknown>) {
     roleConfigs,
     fields: rawFields.map((field) => ({
       ...field,
-      assigneeRole: field.assigneeRole || "",
+      assigneeRole: field.assigneeRole === "HR" ? "Owner" : field.assigneeRole || "",
     })) as Array<typeof fields.$inferSelect>,
   });
 }

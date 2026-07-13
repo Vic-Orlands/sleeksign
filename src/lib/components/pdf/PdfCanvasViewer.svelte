@@ -18,6 +18,7 @@
 		fitMode = "width",
 		class: className = "",
 		pageClassName = "",
+		scrollRoot = null,
 		onPageClick,
 		renderOverlay,
 		onDocumentLoad,
@@ -28,6 +29,8 @@
 		fitMode?: "width" | "page";
 		class?: string;
 		pageClassName?: string;
+		/** Scrollable viewport used for fit sizing + visible-page tracking */
+		scrollRoot?: HTMLElement | null;
 		onPageClick?: (pageIndex: number, point: { x: number; y: number }) => void;
 		renderOverlay?: Snippet<[pageIndex: number, metrics: PageMetrics]>;
 		onDocumentLoad?: (pageCount: number) => void;
@@ -35,8 +38,8 @@
 	} = $props();
 
 	let hostEl = $state<HTMLDivElement | null>(null);
-	let hostWidth = $state(720);
-	let hostHeight = $state(900);
+	let viewportWidth = $state(720);
+	let viewportHeight = $state(900);
 	let pdf = $state<PDFDocumentProxy | null>(null);
 	let pageCount = $state(0);
 	let error = $state<string | null>(null);
@@ -45,14 +48,20 @@
 	const pages = $derived(Array.from({ length: pageCount }, (_, index) => index));
 	const activePdf = $derived(loadedFileUrl === fileUrl ? pdf : null);
 	const activeError = $derived(loadedFileUrl === fileUrl ? error : null);
+	const resolvedScrollRoot = $derived(scrollRoot ?? hostEl);
+
 	const targetWidth = $derived.by(() => {
-		const availableWidth = Math.max(280, hostWidth - 8);
-		const availableHeight = Math.max(360, hostHeight - 8);
+		const pad = 32;
+		const availableWidth = Math.max(240, viewportWidth - pad);
+		const availableHeight = Math.max(320, viewportHeight - pad);
+
+		// 100% = fit to the selected mode; magnifier scales from that base.
 		const baseWidth =
 			fitMode === "page"
 				? Math.min(availableWidth, Math.round(availableHeight / 1.294))
-				: availableWidth;
-		return Math.max(240, Math.round(baseWidth * (zoom / 100)));
+				: Math.min(availableWidth, 900);
+
+		return Math.max(200, Math.round(baseWidth * (zoom / 100)));
 	});
 
 	onMount(() => {
@@ -60,14 +69,17 @@
 	});
 
 	$effect(() => {
-		const host = hostEl;
-		if (!host) return;
+		const root = scrollRoot ?? hostEl?.parentElement ?? hostEl;
+		if (!root) return;
 
-		const observer = new ResizeObserver(([entry]) => {
-			hostWidth = entry.contentRect.width;
-			hostHeight = entry.contentRect.height;
-		});
-		observer.observe(host);
+		const measure = () => {
+			viewportWidth = root.clientWidth || 720;
+			viewportHeight = root.clientHeight || 900;
+		};
+
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(root);
 		return () => observer.disconnect();
 	});
 
@@ -78,6 +90,9 @@
 		const task = pdfjs.getDocument({
 			url,
 			withCredentials: true,
+			disableAutoFetch: false,
+			disableStream: false,
+			rangeChunkSize: 65536,
 		});
 		task.promise
 			.then((doc) => {
@@ -104,7 +119,7 @@
 	});
 </script>
 
-<div bind:this={hostEl} class="min-h-[420px] w-full {className}" style="height: 100%;">
+<div bind:this={hostEl} class="w-full {className}">
 	{#if activeError}
 		<div
 			class="flex min-h-[420px] items-center justify-center rounded-lg border border-dashed border-destructive/30 bg-destructive/5 text-sm font-medium text-destructive"
@@ -123,6 +138,7 @@
 					{pageIndex}
 					{targetWidth}
 					{pageClassName}
+					scrollRoot={resolvedScrollRoot}
 					{onPageClick}
 					{renderOverlay}
 					{onVisiblePageChange}

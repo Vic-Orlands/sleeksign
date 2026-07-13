@@ -101,36 +101,40 @@
 			if (packetId) {
 				const copyRes = await fetch("/api/public-packet-copies", {
 					method: "POST",
+					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
 						packetId,
 						roleName: effectiveSignerRole,
-						signerName,
-						signerEmail,
+						signerName: signerName.trim(),
+						signerEmail: signerEmail.trim(),
 					}),
 				});
 				const copyData = await copyRes.json();
-				void goto(
-					`/sign/packet/${packetId}?role=${encodeURIComponent(effectiveSignerRole)}${
-						copyData.copyId ? `&copyId=${encodeURIComponent(copyData.copyId)}` : ""
-					}`,
-				);
+				if (!copyRes.ok) {
+					throw new Error(copyData.error || "Failed to prepare signing copy");
+				}
+				const nextUrl = `/sign/packet/${packetId}?role=${encodeURIComponent(effectiveSignerRole)}${
+					copyData.copyId ? `&copyId=${encodeURIComponent(copyData.copyId)}` : ""
+				}`;
+				await goto(nextUrl);
 				return;
 			}
 
 			const res = await fetch("/api/sessions", {
 				method: "POST",
+				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					documentId,
-					signerName,
-					signerEmail,
+					signerName: signerName.trim(),
+					signerEmail: signerEmail.trim(),
 					signerRole: effectiveSignerRole,
 				}),
 			});
 			const data = await res.json();
-			if (!data.sessionId) throw new Error("No session created");
-			void goto(`/sign/${data.sessionId}`);
-		} catch {
-			toast.error("Failed to initialize signing session");
+			if (!res.ok || !data.sessionId) throw new Error(data.error || "No session created");
+			await goto(`/sign/${data.sessionId}`);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Failed to initialize signing session");
 			isCreating = false;
 		}
 	}

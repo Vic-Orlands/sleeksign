@@ -67,7 +67,7 @@ export const GET: RequestHandler = async ({ request: req }) => {
           roleConfigs,
           fields: (doc.fields || []).map((field) => ({
             ...field,
-            assigneeRole: field.assigneeRole || "",
+            assigneeRole: field.assigneeRole === "HR" ? "Owner" : field.assigneeRole || "",
           })),
         });
       }),

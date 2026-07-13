@@ -41,11 +41,11 @@ export const documents = pgTable("documents", {
   teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
   signerRoles: text("signer_roles")
     .notNull()
-    .default('["HR","Employee","Contractor"]'),
+    .default('["Owner","Employee","Contractor"]'),
   roleConfigs: text("role_configs")
     .notNull()
     .default(
-      '[{"name":"HR","scope":"private"},{"name":"Employee","scope":"private"},{"name":"Contractor","scope":"private"}]',
+      '[{"name":"Owner","scope":"private"},{"name":"Employee","scope":"private"},{"name":"Contractor","scope":"private"}]',
     ),
   requireOtp: boolean("require_otp").notNull().default(false),
   isTemplate: boolean("is_template").notNull().default(false),

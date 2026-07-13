@@ -73,7 +73,8 @@ export async function listDocumentsForAccess(
 			roleConfigs,
 			fields: (doc.fields || []).map((field) => ({
 				...field,
-				assigneeRole: field.assigneeRole || "",
+				assigneeRole:
+					field.assigneeRole === "HR" ? "Owner" : field.assigneeRole || "",
 			})),
 			fileUrl:
 				doc.uploadStatus === "ready" && doc.storageKey
@@ -92,9 +93,6 @@ export async function getDocumentForAccess(
 		with: {
 			fields: true,
 			sessions: true,
-			packets: {
-				with: { copies: true },
-			},
 		},
 	});
 
@@ -123,7 +121,8 @@ export async function getDocumentForAccess(
 		roleConfigs,
 		fields: (doc.fields || []).map((field) => ({
 			...field,
-			assigneeRole: field.assigneeRole || "",
+			assigneeRole:
+				field.assigneeRole === "HR" ? "Owner" : field.assigneeRole || "",
 		})),
 		fileUrl:
 			doc.uploadStatus === "ready" && doc.storageKey

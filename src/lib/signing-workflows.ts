@@ -34,7 +34,8 @@ function serializeDocumentForWorkflow(
     roleConfigs,
     fields: (document.fields || []).map((field) => ({
       ...field,
-      assigneeRole: field.assigneeRole || "",
+      assigneeRole:
+        field.assigneeRole === "HR" ? "Owner" : field.assigneeRole || "",
     })),
   };
 }

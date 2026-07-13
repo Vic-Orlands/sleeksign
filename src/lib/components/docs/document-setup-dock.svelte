@@ -98,6 +98,14 @@
 		zoom = Math.min(150, Math.max(50, zoom + delta));
 	}
 
+	function goToPage(pageIndex: number) {
+		const target = Math.max(0, Math.min(pageCount - 1, pageIndex));
+		currentPage = target;
+		viewerEl
+			?.querySelector(`[data-pdf-page="${target}"]`)
+			?.scrollIntoView({ behavior: "smooth", block: "start" });
+	}
+
 	async function addField(page: number, point: { x: number; y: number }) {
 		if (selectedType === "select") return;
 
@@ -283,10 +291,14 @@
 					fileUrl={doc.fileUrl}
 					{zoom}
 					{fitMode}
-					class="min-h-full"
+					scrollRoot={viewerEl}
+					class="mx-auto"
 					pageClassName="relative border-t-8 border-zinc-300 bg-white ring-1 ring-black/10"
 					onPageClick={addField}
-					onDocumentLoad={(count) => (pageCount = count)}
+					onDocumentLoad={(count) => {
+						pageCount = count;
+						currentPage = 0;
+					}}
 					onVisiblePageChange={(pageIndex) => (currentPage = pageIndex)}
 					{renderOverlay}
 				/>
@@ -306,11 +318,8 @@
 				variant="ghost"
 				size="sm"
 				class="h-8"
-				disabled={currentPage <= 0}
-				onclick={() =>
-					viewerEl
-						?.querySelector(`[data-pdf-page="${Math.max(0, currentPage - 1)}"]`)
-						?.scrollIntoView({ behavior: "smooth", block: "start" })}
+				disabled={currentPage <= 0 || pageCount === 0}
+				onclick={() => goToPage(currentPage - 1)}
 			>
 				Prev
 			</Button>
@@ -323,17 +332,17 @@
 				size="sm"
 				class="h-8"
 				disabled={pageCount === 0 || currentPage >= pageCount - 1}
-				onclick={() =>
-					viewerEl
-						?.querySelector(`[data-pdf-page="${Math.min(pageCount - 1, currentPage + 1)}"]`)
-						?.scrollIntoView({ behavior: "smooth", block: "start" })}
+				onclick={() => goToPage(currentPage + 1)}
 			>
 				Next
 			</Button>
 			<select
 				class="h-8 rounded-md border border-border bg-background px-2 text-xs"
 				value={fitMode}
-				onchange={(event) => (fitMode = event.currentTarget.value as "width" | "page")}
+				onchange={(event) => {
+					fitMode = event.currentTarget.value as "width" | "page";
+					zoom = 100;
+				}}
 			>
 				<option value="width">Fit Width</option>
 				<option value="page">Fit Page</option>

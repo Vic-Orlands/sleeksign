@@ -20,13 +20,17 @@ export type Field = {
 
 export const UNASSIGNED_ROLE = "";
 
-export const DEFAULT_SIGNER_ROLES = ["HR", "Employee", "Contractor"] as const;
+export const DEFAULT_SIGNER_ROLES = ["Owner", "Employee", "Contractor"] as const;
 export const DEFAULT_ROLE_CONFIGS: RoleConfig[] = DEFAULT_SIGNER_ROLES.map(
   (name) => ({
     name,
     scope: "private",
   }),
 );
+
+function canonicalizeRoleName(name: string) {
+  return name === "HR" ? "Owner" : name;
+}
 
 export function normalizeRoleConfigs(value: unknown) {
   if (!Array.isArray(value)) {
@@ -36,7 +40,9 @@ export function normalizeRoleConfigs(value: unknown) {
   const roleConfigs = value
     .map((item) => {
       if (!item || typeof item !== "object") return null;
-      const name = String((item as { name?: unknown }).name || "").trim();
+      const name = canonicalizeRoleName(
+        String((item as { name?: unknown }).name || "").trim(),
+      );
       const scope = (item as { scope?: unknown }).scope === "shared"
         ? "shared"
         : "private";
@@ -63,7 +69,7 @@ export function normalizeSignerRoles(value: unknown) {
   }
 
   const roles = value
-    .map((item) => String(item || "").trim())
+    .map((item) => canonicalizeRoleName(String(item || "").trim()))
     .filter(Boolean)
     .filter((role, index, array) => array.indexOf(role) === index);
 

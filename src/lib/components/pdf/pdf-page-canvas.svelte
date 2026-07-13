@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from "svelte";
 	import type { Snippet } from "svelte";
 	import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 	import type { PageMetrics } from "./PdfCanvasViewer.svelte";
@@ -9,6 +8,7 @@
 		pageIndex,
 		targetWidth,
 		pageClassName = "",
+		scrollRoot = null,
 		onPageClick,
 		renderOverlay,
 		onVisiblePageChange,
@@ -17,6 +17,7 @@
 		pageIndex: number;
 		targetWidth: number;
 		pageClassName?: string;
+		scrollRoot?: HTMLElement | null;
 		onPageClick?: (pageIndex: number, point: { x: number; y: number }) => void;
 		renderOverlay?: Snippet<[pageIndex: number, metrics: PageMetrics]>;
 		onVisiblePageChange?: (pageIndex: number) => void;
@@ -29,13 +30,14 @@
 
 	$effect(() => {
 		let cancelled = false;
+		const width = targetWidth;
 
 		async function loadMetrics() {
 			const page: PDFPageProxy = await pdf.getPage(pageIndex + 1);
 			if (cancelled) return;
 
 			const baseViewport = page.getViewport({ scale: 1 });
-			const scale = targetWidth / baseViewport.width;
+			const scale = width / baseViewport.width;
 			const viewport = page.getViewport({ scale });
 			metrics = {
 				width: viewport.width,
@@ -50,7 +52,7 @@
 		};
 	});
 
-	onMount(() => {
+	$effect(() => {
 		const node = pageEl;
 		if (!node) return;
 
@@ -58,10 +60,14 @@
 			(entries) => {
 				for (const entry of entries) {
 					if (entry.isIntersecting) shouldRender = true;
-					if (entry.intersectionRatio >= 0.55) onVisiblePageChange?.(pageIndex);
+					if (entry.intersectionRatio >= 0.45) onVisiblePageChange?.(pageIndex);
 				}
 			},
-			{ rootMargin: "1200px 0px", threshold: [0, 0.55] },
+			{
+				root: scrollRoot,
+				rootMargin: "200px 0px",
+				threshold: [0, 0.45, 0.6],
+			},
 		);
 
 		observer.observe(node);
