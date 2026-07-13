@@ -22,6 +22,7 @@
 # misc
 .DS_Store
 *.pem
+.vscode/
 
 # debug
 npm-debug.log*
@@ -36,7 +37,10 @@ yarn-debug.log*
 static/uploads/
 public/uploads/
 
-docs/*
+# local agent / one-off tooling (not part of the app)
+/docs/
+/scripts/
+PLATFORM_BUILD_BRIEF.md
 
 # typescript
 *.tsbuildinfo
