@@ -194,20 +194,31 @@
   async function finalize() {
     isFinalizing = true;
     try {
-      const res = await fetch("/api/finalize", {
+      const res = await fetch(`/api/public-packets/${packetId}/context`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          packetId,
           roleName,
           copyId: copyId || null,
+          signerName: context?.signerName || null,
+          signerEmail: context?.signerEmail || null,
         }),
       });
-      if (!res.ok) throw new Error("Finalize failed");
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Finalize failed");
+
+      if (data.status === "waiting") {
+        toast.success(data.message || "Your part is complete. Waiting for others.");
+        return;
+      }
+
+      if (!data.url) throw new Error("Final PDF unavailable");
       finalPdfUrl = data.url;
       toast.success("Document finalized");
-    } catch {
-      toast.error("Failed to finalize document");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to finalize document",
+      );
     } finally {
       isFinalizing = false;
     }
