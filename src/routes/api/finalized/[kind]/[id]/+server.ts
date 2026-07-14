@@ -13,6 +13,7 @@ import {
 export const GET: RequestHandler = async ({ request: req, params }) => {
   try {
     const { kind, id } = params;
+    const download = new URL(req.url).searchParams.get("download") === "1";
 
     if (kind === "session") {
       const { signingSession } = await requireSigningSessionAccess(
@@ -26,7 +27,9 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
       }
 
       const url = await createReadUrl(signingSession.finalizedStorageKey, {
-        inlineName: `finalized_${signingSession.id}.pdf`,
+        ...(download
+          ? { downloadName: `finalized_${signingSession.id}.pdf` }
+          : { inlineName: `finalized_${signingSession.id}.pdf` }),
       });
       return Response.redirect(url);
     }
@@ -47,7 +50,9 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
       }
 
       const url = await createReadUrl(packet.finalizedStorageKey, {
-        inlineName: `packet_${packet.id}.pdf`,
+        ...(download
+          ? { downloadName: `packet_${packet.id}.pdf` }
+          : { inlineName: `packet_${packet.id}.pdf` }),
       });
       return Response.redirect(url);
     }
@@ -71,7 +76,9 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
       }
 
       const url = await createReadUrl(copy.finalizedStorageKey, {
-        inlineName: `copy_${copy.id}.pdf`,
+        ...(download
+          ? { downloadName: `copy_${copy.id}.pdf` }
+          : { inlineName: `copy_${copy.id}.pdf` }),
       });
       return Response.redirect(url);
     }

@@ -70,7 +70,7 @@ export async function createOtpChallenge(input: {
     lastSentAt: new Date(),
   });
 
-  const email = buildSignerOtpEmail({
+  const email = await buildSignerOtpEmail({
     code,
     roleName: input.roleName,
     baseUrl,
@@ -81,7 +81,6 @@ export async function createOtpChallenge(input: {
     to: input.recipientEmail,
     subject: email.subject,
     html: email.html,
-    text: email.text,
     fromName: branding.senderName,
   });
 

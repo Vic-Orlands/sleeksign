@@ -278,7 +278,7 @@
 					{/if}
 
 					<div class="flex flex-col items-center gap-2">
-						<Button type="submit" disabled={otpBusy} loading={otpBusy} class="h-11 w-full">
+						<Button type="submit" disabled={otpBusy} loading={otpBusy} class="w-full">
 							{otpSent ? "Verify OTP" : "Send OTP"}
 						</Button>
 						{#if otpSent}
@@ -342,7 +342,7 @@
 						/>
 					</label>
 
-					<Button type="submit" disabled={isCreating} loading={isCreating} loadingText="Starting..." class="h-11 w-full">
+					<Button type="submit" disabled={isCreating} loading={isCreating} loadingText="Starting..." class="w-full">
 						Start signing
 					</Button>
 				</form>

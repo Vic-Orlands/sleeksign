@@ -60,6 +60,7 @@ export async function listDocumentsForAccess(
 			packets: {
 				with: {
 					copies: true,
+					values: true,
 				},
 			},
 		},

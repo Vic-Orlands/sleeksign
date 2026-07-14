@@ -33,6 +33,9 @@ export type PacketActivitySummary = {
 	mode: WorkflowMode;
 	status: string;
 	createdAt: string | number | Date;
+	completedAt?: string | number | Date | null;
+	finalizedFileUrl?: string | null;
+	finalizedStorageKey?: string | null;
 	roleConfigs: RoleConfig[];
 	copies: PacketCopySummary[];
 };

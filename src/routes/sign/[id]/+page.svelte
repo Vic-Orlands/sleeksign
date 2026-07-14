@@ -17,12 +17,15 @@
 		signerRole?: string | null;
 		document: { name: string; fileUrl: string; fields: Field[] };
 		signatures?: SignatureRecord[];
+		finalizedFileUrl?: string | null;
 	};
 
 	let session = $state<SessionRecord | null>(null);
 	let loadError = $state<string | null>(null);
 	let isLoading = $state(true);
 	let isFinalizing = $state(false);
+	let signingComplete = $state(false);
+	let completionMessage = $state("Completing your document…");
 	let selectedField = $state<Field | null>(null);
 	let signatures = $state<Record<string, string>>({});
 	let isMakerOpen = $state(false);
@@ -38,6 +41,7 @@
 			const data = await res.json();
 			if (data.error) throw new Error(data.error);
 			session = data as SessionRecord;
+			if (data.status === "completed") finalPdfUrl = data.finalizedFileUrl || null;
 		} catch (error) {
 			loadError = error instanceof Error ? error.message : "Session not found";
 			session = null;
@@ -61,30 +65,22 @@
 		),
 	);
 	const requiredFields = $derived(fields.filter((field) => field.required));
-	const completedCount = $derived(
-		requiredFields.filter((field) => valueIsComplete(currentSignatures[field.id])).length,
-	);
 	const allFieldsSigned = $derived(
 		requiredFields.every((field) => valueIsComplete(currentSignatures[field.id])),
 	);
 
-	async function updateSignature(fieldId: string, value: string) {
+	function updateSignature(fieldId: string, value: string) {
 		signatures = { ...signatures, [fieldId]: value };
-		await fetch("/api/sessions", {
-			method: "PATCH",
-			body: JSON.stringify({ sessionId: sessionId, fieldId, value }),
-		});
-		toast.success("Field saved");
 	}
 
 	async function handleFieldClick(field: Field) {
 		if (session?.status === "completed") return;
 		if (field.type === "date") {
-			await updateSignature(field.id, format(new Date(), "yyyy-MM-dd"));
+			updateSignature(field.id, format(new Date(), "yyyy-MM-dd"));
 			return;
 		}
 		if (field.type === "checkbox") {
-			await updateSignature(field.id, currentSignatures[field.id] === "true" ? "false" : "true");
+			updateSignature(field.id, currentSignatures[field.id] === "true" ? "false" : "true");
 			return;
 		}
 		selectedField = field;
@@ -92,17 +88,21 @@
 	}
 
 	async function finalize() {
+		if (isFinalizing || session?.status === "completed" || !allFieldsSigned) return;
 		isFinalizing = true;
+		signingComplete = true;
 		try {
 			const res = await fetch("/api/finalize", {
 				method: "POST",
-				body: JSON.stringify({ sessionId: sessionId, }),
+				body: JSON.stringify({ sessionId, values: currentSignatures }),
 			});
 			if (!res.ok) throw new Error("Finalize failed");
 			const data = await res.json();
 			finalPdfUrl = data.url;
+			completionMessage = "Your signed PDF is ready.";
 			toast.success("Document finalized");
 		} catch {
+			signingComplete = false;
 			toast.error("Failed to finalize document");
 		} finally {
 			isFinalizing = false;
@@ -122,12 +122,16 @@
 		<h1 class="text-xl font-semibold">Unable to open this document</h1>
 		<p class="max-w-md text-sm text-muted-foreground">{loadError || "Session not found"}</p>
 	</div>
-{:else if finalPdfUrl}
+{:else if session.status === "completed" || finalPdfUrl || signingComplete}
 	<div class="flex min-h-screen items-center justify-center bg-(--paper) p-6">
 		<div class="w-full max-w-md border border-border bg-background p-8 text-center">
 			<h1 class="font-mono text-xs font-semibold uppercase tracking-widest">Document completed</h1>
-			<p class="mt-2 text-sm text-muted-foreground">Your signed PDF is ready.</p>
-			<Button class="mt-6 w-full" onclick={() => window.open(finalPdfUrl!, "_blank")}>Download signed PDF</Button>
+			<p class="mt-2 text-sm text-muted-foreground">
+				{finalPdfUrl || session.status === "completed" ? "Your signed PDF is ready." : completionMessage}
+			</p>
+			{#if finalPdfUrl}
+				<Button class="mt-6 w-full" onclick={() => window.open(finalPdfUrl!, "_blank")}>Download signed PDF</Button>
+			{/if}
 		</div>
 	</div>
 {:else}
@@ -139,9 +143,9 @@
 					{session.document.name}
 				</p>
 			</div>
-			<Button disabled={!allFieldsSigned} loading={isFinalizing} loadingText="Completing..." onclick={finalize}>
-				{allFieldsSigned ? "Complete" : `${completedCount}/${requiredFields.length} complete`}
-			</Button>
+			{#if allFieldsSigned}
+				<Button loading={isFinalizing} loadingText="Completing..." onclick={finalize}>Complete</Button>
+			{/if}
 		</header>
 
 		<main class="grid min-h-0 flex-1 md:grid-cols-[minmax(0,1fr)_280px]">
@@ -209,9 +213,9 @@
 <SignatureMaker
 	open={isMakerOpen}
 	onClose={() => (isMakerOpen = false)}
-	onConfirm={async (value) => {
+	onConfirm={(value) => {
 		if (!selectedField) return;
-		await updateSignature(selectedField.id, value);
+		updateSignature(selectedField.id, value);
 		isMakerOpen = false;
 	}}
 	type={selectedField?.type === "text" ? "text" : "signature"}

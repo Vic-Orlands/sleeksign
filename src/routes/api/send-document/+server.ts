@@ -170,7 +170,7 @@ export const POST: RequestHandler = async ({ request: req }) => {
         recipientSourceId: delivery.sourceId || null,
       })
       const inviteUrl = `${baseUrl}/sign/packet/${packetId}?role=${encodeURIComponent(delivery.roleName)}&copyId=${encodeURIComponent(copyId)}`
-      const message = buildBulkSendInviteEmail({
+      const message = await buildBulkSendInviteEmail({
         branding,
         documentName: access.document.name,
         roleName: delivery.roleName,
@@ -182,7 +182,6 @@ export const POST: RequestHandler = async ({ request: req }) => {
         to: delivery.email,
         subject: message.subject,
         html: message.html,
-        text: message.text,
         fromName: branding.senderName,
       })
     }

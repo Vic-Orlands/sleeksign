@@ -14,9 +14,11 @@ import {
   getVisibleFieldsForSigner,
 } from "@/lib/signing-workflows";
 import { db } from "@/db";
-import { signingPacketValues } from "@/db/schema";
+import { sessions, signatures, signingPacketValues } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
+import { valueIsComplete } from "@/lib/field-utils";
 
 export const POST: RequestHandler = async ({ request: req }) => {
   try {
@@ -28,6 +30,7 @@ export const POST: RequestHandler = async ({ request: req }) => {
       copyId,
       signerName,
       signerEmail,
+      values,
     }: {
       sessionId?: string;
       packetId?: string;
@@ -35,6 +38,7 @@ export const POST: RequestHandler = async ({ request: req }) => {
       copyId?: string | null;
       signerName?: string | null;
       signerEmail?: string | null;
+      values?: Record<string, string>;
     } = body;
 
     if (packetId) {
@@ -157,6 +161,71 @@ export const POST: RequestHandler = async ({ request: req }) => {
     if (!sessionId) {
       return Response.json(
         { error: "sessionId or packetId is required" },
+        { status: 400 },
+      );
+    }
+
+    const session = await db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: {
+        document: { with: { fields: true } },
+        signatures: true,
+      },
+    });
+
+    if (!session?.document) {
+      return Response.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    if (session.status === "completed" && session.finalizedFileUrl) {
+      return Response.json({ url: session.finalizedFileUrl, status: "completed" });
+    }
+
+    const submittedValues = Object.entries(values || {}).filter(
+      ([, value]) => typeof value === "string" && value.length > 0,
+    );
+    for (const [fieldId, value] of submittedValues) {
+      const targetField = session.document.fields.find((field) => field.id === fieldId);
+      if (
+        !targetField ||
+        (session.signerRole && targetField.assigneeRole !== session.signerRole)
+      ) {
+        return Response.json(
+          { error: "You can only fill fields assigned to your role" },
+          { status: 403 },
+        );
+      }
+
+      const existing = session.signatures.find((signature) => signature.fieldId === fieldId);
+      if (existing) {
+        await db
+          .update(signatures)
+          .set({ value })
+          .where(eq(signatures.id, existing.id));
+      } else {
+        await db.insert(signatures).values({
+          id: nanoid(),
+          sessionId,
+          fieldId,
+          value,
+        });
+      }
+    }
+
+    const mergedValues = {
+      ...Object.fromEntries(
+        session.signatures.map((signature) => [signature.fieldId, signature.value]),
+      ),
+      ...(values || {}),
+    };
+    const requiredFields = session.document.fields.filter(
+      (field) =>
+        field.required &&
+        (!session.signerRole || field.assigneeRole === session.signerRole),
+    );
+    if (!requiredFields.every((field) => valueIsComplete(mergedValues[field.id]))) {
+      return Response.json(
+        { error: "Complete all required fields first" },
         { status: 400 },
       );
     }

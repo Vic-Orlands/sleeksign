@@ -1,5 +1,5 @@
 import type { RequestHandler } from "./$types";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import { bulkSendJobs, bulkSendRows, signingPacketCopies, signingPacketValues } from "@/db/schema";
@@ -51,6 +51,16 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
           where: eq(signingPacketCopies.id, copyId),
         })
       : null;
+    const scope = roleName
+      ? getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode)
+      : "shared";
+    const roleValues = (scope === "private" ? copyValues : packet.values).filter(
+      (value) => value.roleName === roleName,
+    );
+    const roleCompleted =
+      packet.status === "completed" ||
+      copy?.status === "completed" ||
+      roleValues.some((value) => Boolean(value.completedAt));
     const branding = await getOrganizationBranding(packet.workspaceId);
 
     if (packet.requireOtp) {
@@ -121,6 +131,8 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
         packetId: packet.id,
         mode: packet.mode,
         status: packet.status,
+        roleCompleted,
+        completedUrl: copy?.finalizedFileUrl || packet.finalizedFileUrl || null,
         requireOtp: packet.requireOtp,
         roleName,
         copyId: copyId || null,
@@ -246,11 +258,13 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       copyId,
       signerName,
       signerEmail,
+      values,
     }: {
       roleName?: string;
       copyId?: string | null;
       signerName?: string;
       signerEmail?: string;
+      values?: Record<string, string>;
     } = await req.json();
 
     if (!roleName) {
@@ -281,8 +295,62 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       currentRole: roleName,
     });
     const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
+    const copy = copyId
+      ? await db.query.signingPacketCopies.findFirst({
+          where: eq(signingPacketCopies.id, copyId),
+        })
+      : null;
+
+    if (packet.status === "completed") {
+      return Response.json({ status: "completed", url: packet.finalizedFileUrl });
+    }
+
+    if (copy?.status === "completed") {
+      return Response.json({ status: "completed", url: copy.finalizedFileUrl });
+    }
+
+    const existingRoleValues = scope === "shared"
+      ? packet.values.filter((value) => value.roleName === roleName && !value.copyId)
+      : await db.query.signingPacketValues.findMany({
+          where: and(
+            eq(signingPacketValues.packetId, packet.id),
+            eq(signingPacketValues.copyId, copyId || ""),
+            eq(signingPacketValues.roleName, roleName),
+          ),
+        });
+    if (existingRoleValues.some((value) => Boolean(value.completedAt))) {
+      return Response.json({
+        status: "waiting",
+        message: "Your part is complete. Waiting for the remaining parties.",
+      });
+    }
+
+    const submittedValues = Object.entries(values || {}).filter(
+      ([, value]) => typeof value === "string" && value.length > 0,
+    );
+    for (const [fieldId, value] of submittedValues) {
+      const targetField = packet.document.fields.find((field) => field.id === fieldId);
+      if (!targetField || targetField.assigneeRole !== roleName) {
+        return Response.json(
+          { error: "You can only fill fields assigned to your role" },
+          { status: 403 },
+        );
+      }
+
+      await upsertPacketValue({
+        packetId: packet.id,
+        copyId: scope === "shared" ? null : copyId || null,
+        fieldId,
+        roleName,
+        value,
+        signerName,
+        signerEmail,
+      });
+    }
+
+    const refreshedPacket = await getPacket(id);
     const currentValues = getMergedValuesForSigner({
-      packetValues: packet.values,
+      packetValues: refreshedPacket.values,
       copyValues:
         copyId && scope === "private"
           ? await db.query.signingPacketValues.findMany({
@@ -300,6 +368,19 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
         { status: 400 },
       );
     }
+
+    await db
+      .update(signingPacketValues)
+      .set({ completedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(signingPacketValues.packetId, packet.id),
+          eq(signingPacketValues.roleName, roleName),
+          scope === "shared"
+            ? isNull(signingPacketValues.copyId)
+            : eq(signingPacketValues.copyId, copyId || ""),
+        ),
+      );
 
     if (scope === "shared") {
       const finalizedPacket = await finalizeSigningPacket({

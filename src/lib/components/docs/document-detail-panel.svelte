@@ -1,7 +1,6 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import {
-    CopyIcon,
     FileArrowUpIcon,
     PaperPlaneTiltIcon,
     PencilSimpleIcon,
@@ -11,6 +10,7 @@
   } from "phosphor-svelte";
   import { toast } from "svelte-sonner";
   import AuditTimeline from "$lib/components/docs/audit-timeline.svelte";
+  import CopyLinkButton from "$lib/components/docs/copy-link-button.svelte";
   import SignerTimeline from "$lib/components/docs/signer-timeline.svelte";
   import type { DocumentRecord } from "$lib/components/docs/types";
   import { getDocumentCounts } from "$lib/components/docs/types";
@@ -20,15 +20,14 @@
     type RoleConfig,
     type WorkflowMode,
   } from "$lib/field-utils";
+  import {
+    fetchSigningPackets,
+    getCachedPackets,
+    upsertCachedPacket,
+    type PacketSummary,
+  } from "$lib/packet-cache";
   import { cn } from "$lib/utils";
   import { workspaceStore } from "$lib/workspace-store.svelte";
-
-  type PacketSummary = {
-    id: string;
-    mode: WorkflowMode;
-    status: string;
-    roleConfigs: Array<{ name: string; scope: "shared" | "private" }>;
-  };
 
   type TeamRecord = { id: string; name: string };
 
@@ -95,6 +94,7 @@
   }>({ documentId: "", teamId: null, requireOtp: null });
 
   let packets = $state<PacketSummary[]>([]);
+  let packetsReady = $state(false);
   let auditLogs = $state<AuditRecord[]>([]);
   let jobs = $state<BulkSendJob[]>([]);
   let teams = $state<TeamRecord[]>([]);
@@ -192,15 +192,25 @@
     const documentId = doc.id;
     let cancelled = false;
 
+    const cached = getCachedPackets(documentId);
+    if (cached) {
+      packets = cached;
+      packetsReady = true;
+    } else {
+      packetsReady = false;
+    }
+
     void (async () => {
       try {
-        const res = await fetch(
-          `/api/signing-packets?documentId=${encodeURIComponent(documentId)}`,
-        );
-        const data = await res.json();
-        if (!cancelled) packets = Array.isArray(data) ? data : [];
+        const next = await fetchSigningPackets(documentId, {
+          force: Boolean(cached),
+        });
+        if (cancelled) return;
+        packets = next;
       } catch {
-        if (!cancelled) packets = [];
+        if (!cancelled && !getCachedPackets(documentId)) packets = [];
+      } finally {
+        if (!cancelled) packetsReady = true;
       }
     })();
 
@@ -422,7 +432,8 @@
         status: "active",
         roleConfigs,
       };
-      packets = [packet, ...packets];
+      packets = upsertCachedPacket(doc.id, packet);
+      packetsReady = true;
       toast.success("Share packet created");
       return packet;
     } catch {
@@ -761,9 +772,10 @@
                 >
                   Role links
                 </p>
-                {#each getPacketRoleLinks(selectedPacket) as { role, url } (`${selectedPacket.id}-${role.name}`)}
+                {#each getPacketRoleLinks(selectedPacket) as { role, url }, index (`${selectedPacket.id}-${role.name}`)}
                   <div
-                    class="grid min-w-0 grid-cols-1 gap-2 rounded-3xl bg-background p-3 shadow-sm sm:grid-cols-[minmax(0,1fr)_auto]"
+                    class="role-link-enter grid min-w-0 grid-cols-1 gap-2 rounded-3xl bg-background p-3 shadow-sm sm:grid-cols-[minmax(0,1fr)_auto]"
+                    style={`animation-delay: ${index * 60}ms`}
                   >
                     <div class="min-w-0">
                       <p
@@ -779,21 +791,21 @@
                         {url}
                       </p>
                     </div>
-                    <Button
-                      variant="outline"
-                      class="w-full sm:w-auto"
-                      disabled={!canShare}
-                      onclick={() =>
-                        guardShareAction(() => {
-                          void navigator.clipboard.writeText(url);
-                          toast.success(`${role.name} link copied`);
-                        })}
-                    >
-                      <CopyIcon class="size-4" />
-                      Copy
-                    </Button>
+                    <CopyLinkButton {url} disabled={!canShare} />
                   </div>
                 {/each}
+              </div>
+            {:else if !packetsReady}
+              <div class="grid gap-2">
+                <p
+                  class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+                >
+                  Role links
+                </p>
+                <div
+                  class="h-16 animate-pulse rounded-3xl bg-muted/50"
+                  aria-hidden="true"
+                ></div>
               </div>
             {:else}
               <p class="text-sm text-muted-foreground">

@@ -8,6 +8,7 @@
 	import Button from "$lib/components/ui/button.svelte";
 	import Sheet from "$lib/components/ui/sheet.svelte";
 	import type { Field } from "$lib/field-utils";
+	import { fetchSigningPackets } from "$lib/packet-cache";
 
 	let { data } = $props();
 
@@ -34,6 +35,12 @@
 	const isDocumentUploading = $derived(
 		Boolean(document) && (!document?.fileUrl || document.uploadStatus === "pending_upload"),
 	);
+
+	$effect(() => {
+		const documentId = document?.id;
+		if (!documentId) return;
+		void fetchSigningPackets(documentId).catch(() => undefined);
+	});
 
 	function updateFields(documentId: string, fields: Field[]) {
 		fieldsByDocId = { ...fieldsByDocId, [documentId]: fields };
@@ -64,6 +71,7 @@
 			toast.error("Add at least one field before sharing");
 			return;
 		}
+		void fetchSigningPackets(document.id).catch(() => undefined);
 		shareOpen = true;
 	}
 

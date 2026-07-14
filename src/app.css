@@ -310,6 +310,29 @@ body:not(.landing-page):not(.auth-page) [role="dialog"] {
   }
 }
 
+@keyframes role-link-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.role-link-enter {
+  animation: role-link-enter 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .role-link-enter {
+    animation: none;
+  }
+}
+
 /* Auth form view transitions — shared names morph between signin/signup/forgot/reset */
 @supports (view-transition-name: none) {
   ::view-transition-old(root),
