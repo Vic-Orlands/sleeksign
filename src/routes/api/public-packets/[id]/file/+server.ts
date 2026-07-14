@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { signingPacketCopies } from "@/db/schema";
-import { createReadUrl } from "@/lib/r2-storage";
+import { getR2ObjectStream } from "@/lib/r2-storage";
 import { isOtpVerified } from "@/lib/signer-otp";
 import { getPacket } from "@/lib/signing-workflows";
 
@@ -44,12 +44,34 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
       return Response.json({ error: "Document not found" }, { status: 404 });
     }
 
-    const readUrl = await createReadUrl(packet.document.storageKey, {
-      inlineName: packet.document.name,
+    const range = req.headers.get("range") || undefined;
+    const object = await getR2ObjectStream(packet.document.storageKey, range);
+    const stream = object.body;
+    if (!stream) {
+      return Response.json({ error: "Document not found" }, { status: 404 });
+    }
+
+    const safeName = packet.document.name.replace(/"/g, "");
+    const headers = new Headers({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename="${safeName}"`,
+      "Cache-Control": "private, max-age=300",
+      "Accept-Ranges": "bytes",
     });
 
-    return Response.redirect(readUrl);
-  } catch {
+    if (object.contentLength != null) {
+      headers.set("Content-Length", String(object.contentLength));
+    }
+    if (object.contentRange) {
+      headers.set("Content-Range", object.contentRange);
+    }
+
+    return new Response(stream, {
+      status: range ? 206 : 200,
+      headers,
+    });
+  } catch (error) {
+    console.error("Public packet file proxy error:", error);
     return Response.json({ error: "Document not found" }, { status: 404 });
   }
-}
+};

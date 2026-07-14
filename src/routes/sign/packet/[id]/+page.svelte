@@ -21,6 +21,7 @@
 
 	let context = $state<PacketContext | null>(null);
 	let otpRequired = $state(false);
+	let otpSent = $state(false);
 	let otpEmail = $state("");
 	let otpCode = $state("");
 	let otpBusy = $state(false);
@@ -47,6 +48,8 @@
 			const body = await res.json();
 			if (res.status === 403 && body?.verificationRequired) {
 				otpRequired = true;
+				otpSent = false;
+				otpCode = "";
 				otpEmail = body.recipientEmail || "";
 				context = null;
 				return;
@@ -54,6 +57,7 @@
 			if (!res.ok || body.error) throw new Error(body.error || "Failed to load document");
 			context = body as PacketContext;
 			otpRequired = false;
+			otpSent = false;
 		} catch (error) {
 			loadError = error instanceof Error ? error.message : "Failed to load document";
 		} finally {
@@ -73,10 +77,15 @@
 	);
 
 	async function sendOtp() {
+		if (!otpEmail.trim()) {
+			toast.error("Enter your email address");
+			return;
+		}
 		otpBusy = true;
 		try {
 			const res = await fetch(`/api/public-packets/${packetId}/otp`, {
 				method: "POST",
+				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					action: "send",
 					roleName,
@@ -85,6 +94,7 @@
 				}),
 			});
 			if (!res.ok) throw new Error("Failed to send code");
+			otpSent = true;
 			toast.success("Verification code sent");
 		} catch {
 			toast.error("Unable to send verification code");
@@ -94,10 +104,15 @@
 	}
 
 	async function verifyOtp() {
+		if (!otpCode.trim()) {
+			toast.error("Enter the verification code");
+			return;
+		}
 		otpBusy = true;
 		try {
 			const res = await fetch(`/api/public-packets/${packetId}/otp`, {
 				method: "POST",
+				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					action: "verify",
 					roleName,
@@ -172,12 +187,32 @@
 	<div class="flex min-h-screen items-center justify-center bg-(--paper) p-6">
 		<div class="w-full max-w-md space-y-4 border border-border bg-background p-6">
 			<h1 class="text-lg font-semibold">Verify your email</h1>
+			<p class="text-sm text-muted-foreground">
+				Enter your email to receive a one-time code before signing.
+			</p>
 			<Input bind:value={otpEmail} type="email" placeholder="Recipient email" />
-			<div class="flex gap-2">
-				<Button variant="outline" loading={otpBusy} onclick={sendOtp}>Send code</Button>
+			{#if otpSent}
+				<Input bind:value={otpCode} placeholder="Verification code" />
+			{/if}
+			<div class="flex flex-col items-center gap-2">
+				<Button
+					class="w-full"
+					loading={otpBusy}
+					onclick={() => void (otpSent ? verifyOtp() : sendOtp())}
+				>
+					{otpSent ? "Verify OTP" : "Send OTP"}
+				</Button>
+				{#if otpSent}
+					<button
+						type="button"
+						class="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
+						disabled={otpBusy}
+						onclick={() => void sendOtp()}
+					>
+						Resend OTP
+					</button>
+				{/if}
 			</div>
-			<Input bind:value={otpCode} placeholder="Verification code" />
-			<Button loading={otpBusy} onclick={verifyOtp}>Verify and continue</Button>
 		</div>
 	</div>
 {:else if loadError || !context}
