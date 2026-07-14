@@ -122,19 +122,30 @@
 </script>
 
 {#if open && detail}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="fixed inset-0 z-50 flex justify-end bg-background/40" onclick={close}>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div class="fixed inset-0 z-50 flex justify-end">
+		<button
+			type="button"
+			class="absolute inset-0 bg-background/40"
+			aria-label="Close overview"
+			onclick={close}
+		></button>
 		<aside
-			class="flex h-full w-[min(96vw,40rem)] flex-col border-l border-border bg-background"
-			onclick={(event) => event.stopPropagation()}
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="document-overview-title"
+			class="relative flex h-full w-[min(96vw,40rem)] flex-col border-l border-border bg-background"
 		>
 			<div class="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
 				<div class="min-w-0">
 					<p class="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
 						{isActivity ? "Shared activity" : "Overview"}
 					</p>
-					<h2 class="mt-1 truncate text-lg font-semibold tracking-tight">{detail.name}</h2>
+					<h2
+						id="document-overview-title"
+						class="mt-1 truncate text-lg font-semibold tracking-tight"
+					>
+						{detail.name}
+					</h2>
 				</div>
 				<Button variant="ghost" size="sm" onclick={close}>Close</Button>
 			</div>

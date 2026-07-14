@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { onMount, untrack } from "svelte";
 	import type { Snippet } from "svelte";
 	import * as pdfjs from "pdfjs-dist";
 	import type { PDFDocumentProxy } from "pdfjs-dist";
@@ -29,7 +29,6 @@
 		fitMode?: "width" | "page";
 		class?: string;
 		pageClassName?: string;
-		/** Scrollable viewport used for fit sizing + visible-page tracking */
 		scrollRoot?: HTMLElement | null;
 		onPageClick?: (pageIndex: number, point: { x: number; y: number }) => void;
 		renderOverlay?: Snippet<[pageIndex: number, metrics: PageMetrics]>;
@@ -54,13 +53,10 @@
 		const pad = 32;
 		const availableWidth = Math.max(240, viewportWidth - pad);
 		const availableHeight = Math.max(320, viewportHeight - pad);
-
-		// 100% = fit to the selected mode; magnifier scales from that base.
 		const baseWidth =
 			fitMode === "page"
 				? Math.min(availableWidth, Math.round(availableHeight / 1.294))
 				: Math.min(availableWidth, 900);
-
 		return Math.max(200, Math.round(baseWidth * (zoom / 100)));
 	});
 
@@ -72,21 +68,36 @@
 		const root = scrollRoot ?? hostEl?.parentElement ?? hostEl;
 		if (!root) return;
 
+		let frame = 0;
 		const measure = () => {
-			viewportWidth = root.clientWidth || 720;
-			viewportHeight = root.clientHeight || 900;
+			const nextWidth = root.clientWidth || 720;
+			const nextHeight = root.clientHeight || 900;
+			if (Math.abs(nextWidth - viewportWidth) < 8 && Math.abs(nextHeight - viewportHeight) < 8) {
+				return;
+			}
+			viewportWidth = nextWidth;
+			viewportHeight = nextHeight;
+		};
+
+		const scheduleMeasure = () => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(measure);
 		};
 
 		measure();
-		const observer = new ResizeObserver(measure);
+		const observer = new ResizeObserver(scheduleMeasure);
 		observer.observe(root);
-		return () => observer.disconnect();
+		return () => {
+			cancelAnimationFrame(frame);
+			observer.disconnect();
+		};
 	});
 
+	// Load the PDF from fileUrl only. Callbacks must not be effect dependencies or
+	// every field selection/drag re-render destroys and remounts the document.
 	$effect(() => {
 		const url = fileUrl;
 		let cancelled = false;
-
 		const task = pdfjs.getDocument({
 			url,
 			withCredentials: true,
@@ -94,14 +105,22 @@
 			disableStream: false,
 			rangeChunkSize: 65536,
 		});
+
 		task.promise
 			.then((doc) => {
-				if (cancelled) return;
+				if (cancelled) {
+					void doc.destroy();
+					return;
+				}
+				const previous = untrack(() => pdf);
 				pdf = doc;
 				pageCount = doc.numPages;
 				error = null;
 				loadedFileUrl = url;
-				onDocumentLoad?.(doc.numPages);
+				untrack(() => onDocumentLoad?.(doc.numPages));
+				if (previous && previous !== doc) {
+					void previous.destroy();
+				}
 			})
 			.catch(() => {
 				if (!cancelled) {
@@ -114,7 +133,7 @@
 
 		return () => {
 			cancelled = true;
-			task.destroy();
+			void task.destroy();
 		};
 	});
 </script>

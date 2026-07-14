@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from "svelte";
 	import type { Snippet } from "svelte";
 	import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from "pdfjs-dist";
 	import type { PageMetrics } from "./PdfCanvasViewer.svelte";
@@ -27,23 +28,54 @@
 	let canvasEl = $state<HTMLCanvasElement | null>(null);
 	let metrics = $state<PageMetrics | null>(null);
 	let shouldRender = $state(pageIndex === 0);
+	let renderedKey = $state("");
+
+	function isCancelledRenderError(error: unknown) {
+		return (
+			Boolean(error) &&
+			typeof error === "object" &&
+			"name" in error &&
+			(error as { name?: string }).name === "RenderingCancelledException"
+		);
+	}
 
 	$effect(() => {
 		let cancelled = false;
 		const width = targetWidth;
+		const doc = pdf;
+		const index = pageIndex;
 
 		async function loadMetrics() {
-			const page: PDFPageProxy = await pdf.getPage(pageIndex + 1);
-			if (cancelled) return;
+			try {
+				const page: PDFPageProxy = await doc.getPage(index + 1);
+				if (cancelled) return;
 
-			const baseViewport = page.getViewport({ scale: 1 });
-			const scale = width / baseViewport.width;
-			const viewport = page.getViewport({ scale });
-			metrics = {
-				width: viewport.width,
-				height: viewport.height,
-				scale,
-			};
+				const baseViewport = page.getViewport({ scale: 1 });
+				const scale = width / baseViewport.width;
+				const viewport = page.getViewport({ scale });
+				const nextWidth = viewport.width;
+				const nextHeight = viewport.height;
+
+				const current = untrack(() => metrics);
+				if (
+					current &&
+					Math.abs(current.width - nextWidth) < 0.5 &&
+					Math.abs(current.height - nextHeight) < 0.5 &&
+					Math.abs(current.scale - scale) < 0.0001
+				) {
+					return;
+				}
+
+				metrics = {
+					width: nextWidth,
+					height: nextHeight,
+					scale,
+				};
+			} catch (error) {
+				if (!cancelled && !isCancelledRenderError(error)) {
+					console.error(error);
+				}
+			}
 		}
 
 		void loadMetrics();
@@ -54,17 +86,20 @@
 
 	$effect(() => {
 		const node = pageEl;
+		const root = scrollRoot;
 		if (!node) return;
 
 		const observer = new IntersectionObserver(
 			(entries) => {
 				for (const entry of entries) {
 					if (entry.isIntersecting) shouldRender = true;
-					if (entry.intersectionRatio >= 0.45) onVisiblePageChange?.(pageIndex);
+					if (entry.intersectionRatio >= 0.45) {
+						untrack(() => onVisiblePageChange?.(pageIndex));
+					}
 				}
 			},
 			{
-				root: scrollRoot,
+				root,
 				rootMargin: "200px 0px",
 				threshold: [0, 0.45, 0.6],
 			},
@@ -77,28 +112,43 @@
 	$effect(() => {
 		if (!metrics || !shouldRender) return;
 
+		const scale = metrics.scale;
+		const width = metrics.width;
+		const height = metrics.height;
+		const doc = pdf;
+		const index = pageIndex;
+		const key = `${index}:${scale.toFixed(5)}:${Math.round(width)}x${Math.round(height)}`;
+
+		if (untrack(() => renderedKey) === key) return;
+
 		let cancelled = false;
 		let renderTask: RenderTask | null = null;
-		const nextMetrics = metrics;
 
 		async function renderPage() {
-			const page: PDFPageProxy = await pdf.getPage(pageIndex + 1);
-			if (cancelled) return;
+			try {
+				const page: PDFPageProxy = await doc.getPage(index + 1);
+				if (cancelled) return;
 
-			const viewport = page.getViewport({ scale: nextMetrics.scale });
-			const canvas = canvasEl;
-			const context = canvas?.getContext("2d");
-			if (!canvas || !context) return;
+				const viewport = page.getViewport({ scale });
+				const canvas = canvasEl;
+				const context = canvas?.getContext("2d", { alpha: false });
+				if (!canvas || !context) return;
 
-			const ratio = window.devicePixelRatio || 1;
-			canvas.width = Math.floor(viewport.width * ratio);
-			canvas.height = Math.floor(viewport.height * ratio);
-			canvas.style.width = `${viewport.width}px`;
-			canvas.style.height = `${viewport.height}px`;
-			context.setTransform(ratio, 0, 0, ratio, 0, 0);
+				const ratio = window.devicePixelRatio || 1;
+				canvas.width = Math.floor(viewport.width * ratio);
+				canvas.height = Math.floor(viewport.height * ratio);
+				canvas.style.width = `${width}px`;
+				canvas.style.height = `${height}px`;
+				context.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-			renderTask = page.render({ canvasContext: context, viewport });
-			await renderTask.promise;
+				renderTask = page.render({ canvasContext: context, viewport });
+				await renderTask.promise;
+				if (!cancelled) renderedKey = key;
+			} catch (error) {
+				if (!cancelled && !isCancelledRenderError(error)) {
+					console.error(error);
+				}
+			}
 		}
 
 		void renderPage();

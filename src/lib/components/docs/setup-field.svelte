@@ -34,11 +34,19 @@
 		originW: number;
 		originH: number;
 	}>(null);
+	let draft = $state<Partial<Field> | null>(null);
 
-	const leftPx = $derived((field.x / 100) * metrics.width);
-	const topPx = $derived((field.y / 100) * metrics.height);
-	const widthPx = $derived((field.width / 100) * metrics.width);
-	const heightPx = $derived((field.height / 100) * metrics.height);
+	const display = $derived({
+		x: draft?.x ?? field.x,
+		y: draft?.y ?? field.y,
+		width: draft?.width ?? field.width,
+		height: draft?.height ?? field.height,
+	});
+
+	const leftPx = $derived((display.x / 100) * metrics.width);
+	const topPx = $derived((display.y / 100) * metrics.height);
+	const widthPx = $derived((display.width / 100) * metrics.width);
+	const heightPx = $derived((display.height / 100) * metrics.height);
 
 	function toPercentX(px: number) {
 		return (px / metrics.width) * 100;
@@ -54,30 +62,36 @@
 		const dy = event.clientY - dragState.startY;
 
 		if (dragState.mode === "move") {
-			onPersist({
+			draft = {
 				x: toPercentX(dragState.originX + dx),
 				y: toPercentY(dragState.originY + dy),
-			});
+			};
 			return;
 		}
 
-		onPersist({
+		draft = {
 			x: toPercentX(dragState.originX),
 			y: toPercentY(dragState.originY),
 			width: toPercentX(Math.max(24, dragState.originW + dx)),
 			height: toPercentY(Math.max(16, dragState.originH + dy)),
-		});
+		};
 	}
 
 	function endDrag() {
 		if (!dragState) return;
+		const next = draft;
 		dragState = null;
 		window.removeEventListener("pointermove", onPointerMove);
 		window.removeEventListener("pointerup", endDrag);
+		if (next) {
+			onPersist(next);
+			draft = null;
+		}
 	}
 
 	function startMove(event: PointerEvent) {
 		event.stopPropagation();
+		event.preventDefault();
 		onSelect();
 		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 		dragState = {
@@ -95,6 +109,8 @@
 
 	function startResize(event: PointerEvent) {
 		event.stopPropagation();
+		event.preventDefault();
+		onSelect();
 		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
 		dragState = {
 			mode: "resize",

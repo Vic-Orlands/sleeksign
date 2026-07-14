@@ -143,11 +143,7 @@
 	>
 		<div class="min-w-0">
 			<div class="flex items-center gap-2">
-				<span
-					class="flex size-6 items-center justify-center bg-primary font-mono text-[10px] font-bold text-primary-foreground"
-				>
-					S
-				</span>
+
 				<h2 class="font-mono text-xs font-semibold uppercase tracking-widest">Signer Review</h2>
 				<span
 					class="rounded-none border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest"

@@ -122,7 +122,7 @@
 				<Button variant="outline" onclick={() => goto("/docs")}>Back to documents</Button>
 			</div>
 		{:else if document}
-			{#key `${document.id}:${document.fileUrl}`}
+			{#key document.id}
 				<DocumentSetupDock {document} onFieldsChange={updateFields} fullHeight />
 			{/key}
 		{:else}

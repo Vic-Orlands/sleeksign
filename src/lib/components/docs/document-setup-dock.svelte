@@ -94,6 +94,21 @@
 		onFieldsChange?.(doc.id, nextFields);
 	}
 
+	function selectField(fieldId: string) {
+		if (selectedFieldId === fieldId) return;
+		selectedFieldId = fieldId;
+	}
+
+	function handleDocumentLoad(count: number) {
+		pageCount = count;
+		if (currentPage >= count) currentPage = Math.max(0, count - 1);
+	}
+
+	function handleVisiblePageChange(pageIndex: number) {
+		if (currentPage === pageIndex) return;
+		currentPage = pageIndex;
+	}
+
 	function bumpZoom(delta: number) {
 		zoom = Math.min(150, Math.max(50, zoom + delta));
 	}
@@ -151,14 +166,22 @@
 	}
 
 	async function persistField(fieldId: string, updates: Partial<Field>) {
-		const nextFields = fields.map((field) =>
-			field.id === fieldId ? (clampField({ ...field, ...updates }) as Field) : field,
-		);
+		const current = fields.find((item) => item.id === fieldId);
+		if (!current) return;
+
+		const nextField = clampField({ ...current, ...updates }) as Field;
+		const unchanged =
+			nextField.x === current.x &&
+			nextField.y === current.y &&
+			nextField.width === current.width &&
+			nextField.height === current.height &&
+			nextField.required === current.required &&
+			nextField.assigneeRole === current.assigneeRole;
+		if (unchanged) return;
+
+		const nextFields = fields.map((field) => (field.id === fieldId ? nextField : field));
 		updateLocalFields(nextFields);
 		selectedFieldId = fieldId;
-
-		const field = nextFields.find((item) => item.id === fieldId);
-		if (!field) return;
 
 		isSaving = true;
 		try {
@@ -166,12 +189,12 @@
 				"updateField",
 				{
 					fieldId,
-					x: field.x,
-					y: field.y,
-					width: field.width,
-					height: field.height,
-					required: field.required,
-					assigneeRole: field.assigneeRole,
+					x: nextField.x,
+					y: nextField.y,
+					width: nextField.width,
+					height: nextField.height,
+					required: nextField.required,
+					assigneeRole: nextField.assigneeRole,
 				},
 				{ apply: false },
 			);
@@ -234,7 +257,7 @@
 			selected={selectedFieldId === field.id}
 			toneClass={fieldToneMap[field.type]}
 			labelClass={fieldLabelToneMap[field.type]}
-			onSelect={() => (selectedFieldId = field.id)}
+			onSelect={() => selectField(field.id)}
 			onPersist={(updates) => persistField(field.id, updates)}
 			onDelete={() => deleteField(field.id)}
 		/>
@@ -285,23 +308,25 @@
 			</div>
 		</div>
 
-		<div bind:this={viewerEl} class="sleek-grid min-h-0 overflow-auto bg-zinc-100 p-3 dark:bg-[#121214]">
+		<div
+			bind:this={viewerEl}
+			class="sleek-grid min-h-0 overflow-auto bg-zinc-100 p-3 [scrollbar-gutter:stable] dark:bg-[#121214]"
+		>
 			{#if doc.fileUrl}
-				<PdfCanvasViewer
-					fileUrl={doc.fileUrl}
-					{zoom}
-					{fitMode}
-					scrollRoot={viewerEl}
-					class="mx-auto"
-					pageClassName="relative border-t-8 border-zinc-300 bg-white ring-1 ring-black/10"
-					onPageClick={addField}
-					onDocumentLoad={(count) => {
-						pageCount = count;
-						currentPage = 0;
-					}}
-					onVisiblePageChange={(pageIndex) => (currentPage = pageIndex)}
-					{renderOverlay}
-				/>
+				{#key doc.fileUrl}
+					<PdfCanvasViewer
+						fileUrl={doc.fileUrl}
+						{zoom}
+						{fitMode}
+						scrollRoot={viewerEl}
+						class="mx-auto"
+						pageClassName="relative overflow-visible border-t-8 border-zinc-300 bg-white ring-1 ring-black/10"
+						onPageClick={addField}
+						onDocumentLoad={handleDocumentLoad}
+						onVisiblePageChange={handleVisiblePageChange}
+						{renderOverlay}
+					/>
+				{/key}
 			{:else}
 				<div
 					class="mx-auto flex min-h-64 w-full items-center justify-center rounded-lg border border-dashed border-border bg-background px-6 text-center text-sm text-muted-foreground"
