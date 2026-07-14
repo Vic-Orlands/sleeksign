@@ -31,6 +31,9 @@ function buildPacketSummaries(document: DocumentWithActivity): PacketActivitySum
     mode: packet.mode as WorkflowMode,
     status: packet.status,
     createdAt: packet.createdAt,
+    completedAt: packet.completedAt || null,
+    finalizedFileUrl: packet.finalizedFileUrl || null,
+    finalizedStorageKey: packet.finalizedStorageKey || null,
     roleConfigs: parseRoleConfigs(packet.roleConfigs),
     copies: (packet.copies || []).map((copy) => ({
       id: copy.id,
