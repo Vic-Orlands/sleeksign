@@ -85,6 +85,39 @@ export const PATCH: RequestHandler = async ({ request: req }) => {
   try {
     const { sessionId, fieldId, value } = await req.json();
 
+    if (!sessionId || !fieldId || typeof value !== "string") {
+      return Response.json(
+        { error: "sessionId, fieldId, and value are required" },
+        { status: 400 },
+      );
+    }
+
+    const session = await db.query.sessions.findFirst({
+      where: eq(sessions.id, sessionId),
+      with: {
+        document: {
+          with: {
+            fields: true,
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      return Response.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    const targetField = session.document.fields.find((field) => field.id === fieldId);
+    if (
+      !targetField ||
+      (session.signerRole && targetField.assigneeRole !== session.signerRole)
+    ) {
+      return Response.json(
+        { error: "You can only fill fields assigned to your role" },
+        { status: 403 },
+      );
+    }
+
     // Upsert signature: if exists for this session/field, update it.
     const existing = await db.query.signatures.findFirst({
       where: and(

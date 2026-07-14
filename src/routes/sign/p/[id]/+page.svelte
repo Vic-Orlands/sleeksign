@@ -8,6 +8,7 @@
 	type PublicDocument = { id: string; name: string; signerRoles: string[] };
 	type PublicPacket = {
 		id: string;
+		requireOtp?: boolean;
 		roleConfigs: Array<{ name: string; scope: "shared" | "private" }>;
 		document: { id: string; name: string };
 	};
@@ -21,6 +22,13 @@
 	let signerName = $state("");
 	let signerEmail = $state("");
 	let signerRole = $state("");
+
+	let step = $state<"details" | "otp">("details");
+	let pendingPacketUrl = $state<string | null>(null);
+	let pendingCopyId = $state<string | null>(null);
+	let otpSent = $state(false);
+	let otpCode = $state("");
+	let otpBusy = $state(false);
 
 	const documentId = $derived($page.params.id);
 	const packetId = $derived($page.url.searchParams.get("packet") || "");
@@ -76,6 +84,65 @@
 				: roleOptions[0] || "",
 	);
 
+	async function sendOtp() {
+		const email = signerEmail.trim();
+		if (!email) {
+			toast.error("Enter your email address");
+			return;
+		}
+		if (!packetId) return;
+
+		otpBusy = true;
+		try {
+			const res = await fetch(`/api/public-packets/${packetId}/otp`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					action: "send",
+					roleName: effectiveSignerRole,
+					copyId: pendingCopyId,
+					recipientEmail: email,
+				}),
+			});
+			if (!res.ok) throw new Error("Failed to send code");
+			otpSent = true;
+			toast.success("Verification code sent");
+		} catch {
+			toast.error("Unable to send verification code");
+		} finally {
+			otpBusy = false;
+		}
+	}
+
+	async function verifyOtp() {
+		if (!otpCode.trim()) {
+			toast.error("Enter the verification code");
+			return;
+		}
+		if (!packetId || !pendingPacketUrl) return;
+
+		otpBusy = true;
+		try {
+			const res = await fetch(`/api/public-packets/${packetId}/otp`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					action: "verify",
+					roleName: effectiveSignerRole,
+					copyId: pendingCopyId,
+					recipientEmail: signerEmail.trim(),
+					code: otpCode.trim(),
+				}),
+			});
+			if (!res.ok) throw new Error("Invalid code");
+			toast.success("Verified");
+			await goto(pendingPacketUrl);
+		} catch {
+			toast.error("Verification failed");
+			otpBusy = false;
+		}
+	}
+
 	async function startSigning(event: SubmitEvent) {
 		event.preventDefault();
 		if (!signerName.trim()) {
@@ -116,6 +183,23 @@
 				const nextUrl = `/sign/packet/${packetId}?role=${encodeURIComponent(effectiveSignerRole)}${
 					copyData.copyId ? `&copyId=${encodeURIComponent(copyData.copyId)}` : ""
 				}`;
+
+				if (packet?.requireOtp) {
+					if (!signerEmail.trim()) {
+						toast.error("Email is required for verification");
+						isCreating = false;
+						return;
+					}
+					pendingPacketUrl = nextUrl;
+					pendingCopyId = copyData.copyId || null;
+					otpCode = "";
+					otpSent = false;
+					step = "otp";
+					isCreating = false;
+					void sendOtp();
+					return;
+				}
+
 				await goto(nextUrl);
 				return;
 			}
@@ -165,38 +249,104 @@
 				</div>
 			</section>
 
-			<form class="flex flex-col gap-5 p-8" onsubmit={startSigning}>
-				<div>
-					<h2 class="font-mono text-xs font-semibold uppercase tracking-widest">Before you start</h2>
-					<p class="mt-1 text-sm text-muted-foreground">Enter your legal name for the signed PDF.</p>
-				</div>
+			{#if step === "otp"}
+				<form
+					class="flex flex-col gap-5 p-8"
+					onsubmit={(event) => {
+						event.preventDefault();
+						void (otpSent ? verifyOtp() : sendOtp());
+					}}
+				>
+					<div>
+						<h2 class="font-mono text-xs font-semibold uppercase tracking-widest">Verify your email</h2>
+						<p class="mt-1 text-sm text-muted-foreground">
+							Enter the one-time code we sent to {signerEmail.trim() || "your email"} to continue as
+							{effectiveSignerRole}.
+						</p>
+					</div>
 
-				<label class="flex flex-col gap-1.5 text-sm">
-					<span>Signing as</span>
-					<select
-						class="h-11 rounded-md border border-border px-2"
-						value={effectiveSignerRole}
-						disabled={Boolean(requestedRole && roleOptions.includes(requestedRole))}
-						onchange={(event) => (signerRole = event.currentTarget.value)}
-					>
-						{#each roleOptions as role (role)}<option value={role}>{role}</option>{/each}
-					</select>
-				</label>
+					<label class="flex flex-col gap-1.5 text-sm">
+						<span>Email address</span>
+						<Input bind:value={signerEmail} type="email" placeholder="john@company.com" class="h-11" />
+					</label>
 
-				<label class="flex flex-col gap-1.5 text-sm">
-					<span>Your full name</span>
-					<Input bind:value={signerName} placeholder="John Doe" required class="h-11" />
-				</label>
+					{#if otpSent}
+						<label class="flex flex-col gap-1.5 text-sm">
+							<span>Verification code</span>
+							<Input bind:value={otpCode} placeholder="Enter code" class="h-11" autocomplete="one-time-code" />
+						</label>
+					{/if}
 
-				<label class="flex flex-col gap-1.5 text-sm">
-					<span>Email address</span>
-					<Input bind:value={signerEmail} type="email" placeholder="john@company.com" class="h-11" />
-				</label>
+					<div class="flex flex-col items-center gap-2">
+						<Button type="submit" disabled={otpBusy} loading={otpBusy} class="h-11 w-full">
+							{otpSent ? "Verify OTP" : "Send OTP"}
+						</Button>
+						{#if otpSent}
+							<button
+								type="button"
+								class="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
+								disabled={otpBusy}
+								onclick={() => void sendOtp()}
+							>
+								Resend OTP
+							</button>
+						{/if}
+						<button
+							type="button"
+							class="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+							disabled={otpBusy}
+							onclick={() => {
+								step = "details";
+								otpCode = "";
+								otpSent = false;
+								pendingPacketUrl = null;
+								pendingCopyId = null;
+							}}
+						>
+							Back to details
+						</button>
+					</div>
+				</form>
+			{:else}
+				<form class="flex flex-col gap-5 p-8" onsubmit={startSigning}>
+					<div>
+						<h2 class="font-mono text-xs font-semibold uppercase tracking-widest">Before you start</h2>
+						<p class="mt-1 text-sm text-muted-foreground">Enter your legal name for the signed PDF.</p>
+					</div>
 
-				<Button type="submit" disabled={isCreating} loading={isCreating} loadingText="Starting..." class="h-11 w-full">
-					Start signing
-				</Button>
-			</form>
+					<label class="flex flex-col gap-1.5 text-sm">
+						<span>Signing as</span>
+						<select
+							class="h-11 rounded-md border border-border px-2"
+							value={effectiveSignerRole}
+							disabled={Boolean(requestedRole && roleOptions.includes(requestedRole))}
+							onchange={(event) => (signerRole = event.currentTarget.value)}
+						>
+							{#each roleOptions as role (role)}<option value={role}>{role}</option>{/each}
+						</select>
+					</label>
+
+					<label class="flex flex-col gap-1.5 text-sm">
+						<span>Your full name</span>
+						<Input bind:value={signerName} placeholder="John Doe" required class="h-11" />
+					</label>
+
+					<label class="flex flex-col gap-1.5 text-sm">
+						<span>Email address{packet?.requireOtp ? "" : " (optional)"}</span>
+						<Input
+							bind:value={signerEmail}
+							type="email"
+							placeholder="john@company.com"
+							required={Boolean(packet?.requireOtp)}
+							class="h-11"
+						/>
+					</label>
+
+					<Button type="submit" disabled={isCreating} loading={isCreating} loadingText="Starting..." class="h-11 w-full">
+						Start signing
+					</Button>
+				</form>
+			{/if}
 		</main>
 	</div>
 {/if}

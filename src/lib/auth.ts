@@ -18,6 +18,7 @@ import { getOrganizationBranding, getWorkspaceBaseUrl } from "@/lib/branding";
 import {
   buildInvitationEmail,
   buildResetPasswordEmail,
+  buildWelcomeEmail,
 } from "@/lib/email/messages";
 import { sendTransactionalEmail } from "@/lib/email/send-email";
 
@@ -73,6 +74,29 @@ export const auth = betterAuth({
         text: message.text,
         fromName: branding?.senderName,
       });
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          try {
+            const message = buildWelcomeEmail({
+              userName: user.name,
+              workspaceUrl: getBaseUrl(),
+            });
+            await sendTransactionalEmail({
+              to: user.email,
+              subject: message.subject,
+              html: message.html,
+              text: message.text,
+              fromName: "SleekSign",
+            });
+          } catch (error) {
+            console.error("Failed to send welcome email:", error);
+          }
+        },
+      },
     },
   },
   user: {

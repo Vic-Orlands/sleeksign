@@ -189,6 +189,15 @@ export const PATCH: RequestHandler = async ({ request: req, params }) => {
         { status: 403 },
       );
     }
+
+    const targetField = packet.document.fields.find((field) => field.id === fieldId);
+    if (!targetField || targetField.assigneeRole !== roleName) {
+      return Response.json(
+        { error: "You can only fill fields assigned to your role" },
+        { status: 403 },
+      );
+    }
+
     const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
 
     await upsertPacketValue({
