@@ -20,6 +20,7 @@
     type RoleConfig,
     type WorkflowMode,
   } from "$lib/field-utils";
+  import { cn } from "$lib/utils";
   import { workspaceStore } from "$lib/workspace-store.svelte";
 
   type PacketSummary = {
@@ -57,6 +58,19 @@
   };
   type BulkBusyAction = "" | "parse" | "send" | "draft";
   type TabValue = "overview" | "link" | "bulk" | "activity";
+  type ActivityView = "audit" | "signer";
+  type SendPath = "email" | "signer" | "group";
+
+  const SEND_PATHS: Array<{ id: SendPath; label: string }> = [
+    { id: "email", label: "Single email" },
+    { id: "signer", label: "Single signer" },
+    { id: "group", label: "Group" },
+  ];
+
+  const ACTIVITY_VIEWS: Array<{ id: ActivityView; label: string }> = [
+    { id: "audit", label: "Audit trail" },
+    { id: "signer", label: "Signer Timeline" },
+  ];
 
   let {
     document: doc,
@@ -71,6 +85,7 @@
   } = $props();
 
   let activeTab = $state<TabValue>("overview");
+  let activityView = $state<ActivityView>("audit");
   let isCreatingPacket = $state(false);
   let selectedMode = $state<WorkflowMode>("individual");
   let documentOverrides = $state<{
@@ -95,7 +110,7 @@
   let defaultRoleName = $state("");
   let bulkBusyAction = $state<BulkBusyAction>("");
 
-  let sendPath = $state<"email" | "signer" | "group">("email");
+  let sendPath = $state<SendPath>("email");
   let recipientName = $state("");
   let recipientEmail = $state("");
   let selectedSignerId = $state("");
@@ -151,9 +166,23 @@
     },
   ];
 
-  const selectedModeOption = $derived(
-    modeOptions.find((option) => option.mode === selectedMode) ||
-      modeOptions[0],
+  const selectedModeIndex = $derived(
+    Math.max(
+      0,
+      modeOptions.findIndex((option) => option.mode === selectedMode),
+    ),
+  );
+  const sendPathIndex = $derived(
+    Math.max(
+      0,
+      SEND_PATHS.findIndex((path) => path.id === sendPath),
+    ),
+  );
+  const activityViewIndex = $derived(
+    Math.max(
+      0,
+      ACTIVITY_VIEWS.findIndex((view) => view.id === activityView),
+    ),
   );
 
   let csvInputEl = $state<HTMLInputElement | null>(null);
@@ -659,62 +688,70 @@
               How do you want to share this document?
             </p>
 
-            <div class="grid grid-cols-3 gap-1 rounded-lg bg-muted/50 p-1">
+            <div class="relative grid grid-cols-3 border-b border-border">
               {#each modeOptions as option (option.mode)}
                 <button
                   type="button"
                   onclick={() => (selectedMode = option.mode)}
-                  class="rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors {selectedMode ===
-                  option.mode
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'}"
+                  class={cn(
+                    "pb-2.5 text-center text-[12px] transition-colors",
+                    selectedMode === option.mode
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
                 >
                   {option.tab}
                 </button>
               {/each}
+              <div
+                class="pointer-events-none absolute bottom-0 left-0 h-0.5 w-1/3 bg-foreground transition-transform duration-300 ease-out"
+                style={`transform: translateX(${selectedModeIndex * 100}%)`}
+              ></div>
             </div>
 
-            <div class="mb-4">
-              <h2
-                class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+            <div class="overflow-hidden">
+              <div
+                class="flex transition-transform duration-300 ease-out"
+                style={`transform: translateX(-${selectedModeIndex * 100}%)`}
               >
-                {selectedModeOption.mode}
-              </h2>
-              <p class="mt-1 text-sm font-medium text-foreground">
-                {selectedModeOption.title}
-              </p>
-              <p class="mt-1 text-sm text-muted-foreground">
-                {selectedModeOption.copy}
-              </p>
+                {#each modeOptions as option (option.mode)}
+                  <div class="w-full shrink-0 px-0.5">
+                    <h2 class="mt-1 text-sm font-medium text-foreground">
+                      {option.title}
+                    </h2>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                      {option.copy}
+                    </p>
+                  </div>
+                {/each}
+              </div>
             </div>
 
-            <div>
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <h2
-                    class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
-                  >
-                    Active packet
-                  </h2>
-                  <p class="mt-2 text-sm text-foreground">
-                    {selectedPacket
-                      ? `Packet ${selectedPacket.id.slice(0, 10)}`
-                      : "No packet matches the current role setup yet."}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  disabled={!canShare || isCreatingPacket}
-                  loading={isCreatingPacket}
-                  loadingText="Creating..."
-                  onclick={() =>
-                    guardShareAction(() => {
-                      void ensurePacket(selectedMode);
-                    })}
+            <div class="flex items-start justify-between gap-3 mt-4">
+              <div>
+                <h2
+                  class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
                 >
-                  {selectedPacket ? "Reuse Packet" : "Create Packet"}
-                </Button>
+                  Active packet
+                </h2>
+                <p class="mt-2 text-sm text-foreground">
+                  {selectedPacket
+                    ? `Packet ${selectedPacket.id.slice(0, 10)}`
+                    : "No packet matches the current role setup yet."}
+                </p>
               </div>
+              <Button
+                variant="outline"
+                disabled={!canShare || isCreatingPacket}
+                loading={isCreatingPacket}
+                loadingText="Creating..."
+                onclick={() =>
+                  guardShareAction(() => {
+                    void ensurePacket(selectedMode);
+                  })}
+              >
+                {selectedPacket ? "Reuse Packet" : "Create Packet"}
+              </Button>
             </div>
 
             {#if selectedPacket}
@@ -773,63 +810,84 @@
                 Send document
               </p>
               <div class="mt-3 grid gap-3">
-                <div class="grid grid-cols-3 gap-2">
-                  {#each [{ id: "email", label: "Single email" }, { id: "signer", label: "Single signer" }, { id: "group", label: "Group" }] as path (path.id)}
-                    <button
-                      type="button"
-                      onclick={() => (sendPath = path.id as typeof sendPath)}
-                      class="rounded-2xl px-3 py-2 text-left text-sm transition-colors {sendPath ===
-                      path.id
-                        ? 'bg-muted text-foreground'
-                        : 'bg-muted/35 hover:bg-muted/60'}"
-                    >
-                      {path.label}
-                    </button>
-                  {/each}
-                </div>
-
-                {#if sendPath === "email"}
-                  <div class="grid gap-3 sm:grid-cols-2">
-                    <input
-                      value={recipientName}
-                      oninput={(e) => (recipientName = e.currentTarget.value)}
-                      placeholder="Recipient name"
-                      class="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
-                    />
-                    <input
-                      value={recipientEmail}
-                      oninput={(e) => (recipientEmail = e.currentTarget.value)}
-                      placeholder="Recipient email"
-                      class="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
-                    />
+                <div>
+                  <div class="relative grid grid-cols-3 border-b border-border">
+                    {#each SEND_PATHS as path (path.id)}
+                      <button
+                        type="button"
+                        onclick={() => (sendPath = path.id)}
+                        class={cn(
+                          "pb-2.5 text-center text-[12px] transition-colors",
+                          sendPath === path.id
+                            ? "font-medium text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {path.label}
+                      </button>
+                    {/each}
+                    <div
+                      class="pointer-events-none absolute bottom-0 left-0 h-0.5 w-1/3 bg-foreground transition-transform duration-300 ease-out"
+                      style={`transform: translateX(${sendPathIndex * 100}%)`}
+                    ></div>
                   </div>
-                {:else if sendPath === "signer"}
-                  <select
-                    value={selectedSignerId}
-                    onchange={(e) => (selectedSignerId = e.currentTarget.value)}
-                    class="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
-                  >
-                    <option value="">Choose a workspace signer</option>
-                    {#each directorySigners as signer (signer.id)}
-                      <option value={signer.id}
-                        >{signer.name} · {signer.email}</option
-                      >
-                    {/each}
-                  </select>
-                {:else}
-                  <select
-                    value={selectedGroupId}
-                    onchange={(e) => (selectedGroupId = e.currentTarget.value)}
-                    class="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
-                  >
-                    <option value="">Choose a signer group</option>
-                    {#each signerGroups as group (group.id)}
-                      <option value={group.id}
-                        >{group.name} · {group.signers.length} signers</option
-                      >
-                    {/each}
-                  </select>
-                {/if}
+
+                  <div class="mt-3 overflow-hidden">
+                    <div
+                      class="flex transition-transform duration-300 ease-out"
+                      style={`transform: translateX(-${sendPathIndex * 100}%)`}
+                    >
+                      <div class="w-full shrink-0 pr-1">
+                        <div class="grid gap-3 sm:grid-cols-2">
+                          <input
+                            value={recipientName}
+                            oninput={(e) =>
+                              (recipientName = e.currentTarget.value)}
+                            placeholder="Recipient name"
+                            class="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
+                          />
+                          <input
+                            value={recipientEmail}
+                            oninput={(e) =>
+                              (recipientEmail = e.currentTarget.value)}
+                            placeholder="Recipient email"
+                            class="rounded-2xl bg-muted/35 px-3 py-2 text-sm"
+                          />
+                        </div>
+                      </div>
+                      <div class="w-full shrink-0 px-1">
+                        <select
+                          value={selectedSignerId}
+                          onchange={(e) =>
+                            (selectedSignerId = e.currentTarget.value)}
+                          class="w-full rounded-2xl bg-muted/35 px-3 py-2 text-sm"
+                        >
+                          <option value="">Choose a workspace signer</option>
+                          {#each directorySigners as signer (signer.id)}
+                            <option value={signer.id}
+                              >{signer.name} · {signer.email}</option
+                            >
+                          {/each}
+                        </select>
+                      </div>
+                      <div class="w-full shrink-0 pl-1">
+                        <select
+                          value={selectedGroupId}
+                          onchange={(e) =>
+                            (selectedGroupId = e.currentTarget.value)}
+                          class="w-full rounded-2xl bg-muted/35 px-3 py-2 text-sm"
+                        >
+                          <option value="">Choose a signer group</option>
+                          {#each signerGroups as group (group.id)}
+                            <option value={group.id}
+                              >{group.name} · {group.signers.length} signers</option
+                            >
+                          {/each}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
                 <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                   <select
@@ -938,7 +996,7 @@
                     {/each}
                   </select>
                 </div>
-                <div class="flex flex-wrap gap-2">
+                <div class="flex flex-wrap gap-2 mt-2">
                   <Button
                     variant="outline"
                     disabled={bulkBusy}
@@ -972,11 +1030,11 @@
 
             {#if csvPreview.length > 0}
               <div>
-                <p
+                <h2
                   class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
                 >
                   Preview
-                </p>
+                </h2>
                 <div class="mt-3 grid gap-2">
                   {#each csvPreview.slice(0, 5) as row, index (`${String(row.signerEmail || index)}-${index}`)}
                     <div class="rounded-2xl bg-muted/35 px-3 py-2 text-sm">
@@ -990,12 +1048,12 @@
               </div>
             {/if}
 
-            <div>
-              <p
+            <div class="mt-4">
+              <h2
                 class="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
               >
                 Job status
-              </p>
+              </h2>
               <div class="mt-3 grid gap-2">
                 {#if jobs.length === 0}
                   <p class="text-sm text-muted-foreground">
@@ -1022,19 +1080,40 @@
           </div>
         {:else if activeTab === "activity"}
           <div>
-            <h3
-              class="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest"
-            >
-              Audit trail
-            </h3>
-            <AuditTimeline logs={auditLogs} />
-            <div class="my-4 h-px bg-border"></div>
-            <h3
-              class="mb-4 font-mono text-[10px] font-semibold uppercase tracking-widest"
-            >
-              Signer Timeline
-            </h3>
-            <SignerTimeline sessions={doc.sessions || []} />
+            <div class="relative grid grid-cols-2 border-b border-border">
+              {#each ACTIVITY_VIEWS as view (view.id)}
+                <button
+                  type="button"
+                  onclick={() => (activityView = view.id)}
+                  class={cn(
+                    "pb-2.5 text-center text-[12px] transition-colors",
+                    activityView === view.id
+                      ? "font-medium text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {view.label}
+                </button>
+              {/each}
+              <div
+                class="pointer-events-none absolute bottom-0 left-0 h-0.5 w-1/2 bg-foreground transition-transform duration-300 ease-out"
+                style={`transform: translateX(${activityViewIndex * 100}%)`}
+              ></div>
+            </div>
+
+            <div class="mt-4 overflow-hidden">
+              <div
+                class="flex transition-transform duration-300 ease-out"
+                style={`transform: translateX(-${activityViewIndex * 100}%)`}
+              >
+                <div class="w-full shrink-0 pr-1">
+                  <AuditTimeline logs={auditLogs} />
+                </div>
+                <div class="w-full shrink-0 pl-1">
+                  <SignerTimeline sessions={doc.sessions || []} />
+                </div>
+              </div>
+            </div>
           </div>
         {/if}
       </div>
