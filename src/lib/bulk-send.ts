@@ -245,7 +245,7 @@ export async function sendBulkSendJob(jobId: string) {
         .where(eq(bulkSendRows.id, row.id));
 
       if (job.sendImmediately) {
-        const message = buildBulkSendInviteEmail({
+        const message = await buildBulkSendInviteEmail({
           branding,
           documentName: doc.name,
           roleName: row.roleName,
@@ -257,7 +257,6 @@ export async function sendBulkSendJob(jobId: string) {
           to: row.signerEmail,
           subject: message.subject,
           html: message.html,
-          text: message.text,
           fromName: branding.senderName,
         });
 

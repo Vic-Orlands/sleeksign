@@ -8,7 +8,6 @@ type SendTransactionalEmailInput = {
   to: string;
   subject: string;
   html: string;
-  text: string;
   fromName?: string;
 };
 
@@ -16,7 +15,6 @@ export async function sendTransactionalEmail({
   to,
   subject,
   html,
-  text,
   fromName,
 }: SendTransactionalEmailInput) {
   const from = process.env.RESEND_FROM_EMAIL;
@@ -30,11 +28,10 @@ export async function sendTransactionalEmail({
   }
 
   const response = await resend.emails.send({
-    from: fromName ? `${fromName} <${from}>` : from,
+    from: `SleekSign <${from}>`,
     to,
     subject,
     html,
-    text,
   });
 
   if (response.error) {

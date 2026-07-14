@@ -61,7 +61,7 @@ export const auth = betterAuth({
       const branding = lastWorkspaceId
         ? await getOrganizationBranding(lastWorkspaceId)
         : undefined;
-      const message = buildResetPasswordEmail({
+      const message = await buildResetPasswordEmail({
         url,
         userName: user.name,
         branding,
@@ -71,7 +71,6 @@ export const auth = betterAuth({
         to: user.email,
         subject: message.subject,
         html: message.html,
-        text: message.text,
         fromName: branding?.senderName,
       });
     },
@@ -81,7 +80,7 @@ export const auth = betterAuth({
       create: {
         after: async (user) => {
           try {
-            const message = buildWelcomeEmail({
+            const message = await buildWelcomeEmail({
               userName: user.name,
               workspaceUrl: getBaseUrl(),
             });
@@ -89,7 +88,6 @@ export const auth = betterAuth({
               to: user.email,
               subject: message.subject,
               html: message.html,
-              text: message.text,
               fromName: "SleekSign",
             });
           } catch (error) {
@@ -125,7 +123,7 @@ export const auth = betterAuth({
           getWorkspaceBaseUrl(branding, getBaseUrl()),
         ).toString();
 
-        const message = buildInvitationEmail({
+        const message = await buildInvitationEmail({
           inviteUrl: url,
           organizationName: organization.name,
           inviterName: inviter.user.name,
@@ -136,7 +134,6 @@ export const auth = betterAuth({
           to: email,
           subject: message.subject,
           html: message.html,
-          text: message.text,
           fromName: branding?.senderName || organization.name,
         });
       },
