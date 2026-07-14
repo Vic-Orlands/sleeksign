@@ -120,31 +120,33 @@ export function buildSignerOtpEmail({
 	baseUrl: string;
 	branding?: Partial<BrandingTokenSet>;
 }) {
-	const subject = `Your verification code for SleekSign`;
-	const headline = "Your verification code for SleekSign";
+	const subject = `Your SleekSign verification code: ${code}`;
+	const headline = "Verify before viewing";
 	const body = [
-		`Use this code to continue signing as ${roleName}.`,
-		"This code expires in 10 minutes. You can also continue from the button below if you still have the signing window open.",
+		`Enter this 6-digit code to continue as ${roleName}.`,
+		"The code expires in 10 minutes. If you did not request access, you can ignore this email.",
 	];
+	const supportNote = "This one-time code protects access to the signing session.";
 
 	return {
 		subject,
 		html: renderEmailHtml({
-			preheader: `${subject}: ${code}`,
+			preheader: subject,
+			eyebrow: "Signer verification",
 			headline,
 			body,
-			ctaLabel: "Continue to signing",
+			ctaLabel: "Open Signing Session",
 			ctaUrl: baseUrl,
-			supportNote: "",
+			supportNote,
 			code,
 			branding: withBranding(branding),
 		}),
 		text: renderEmailText({
 			headline,
 			body,
-			ctaLabel: "Continue to signing",
+			ctaLabel: "Open Signing Session",
 			ctaUrl: baseUrl,
-			supportNote: "Enter this code in the signing window to continue.",
+			supportNote,
 			code,
 		}),
 	};

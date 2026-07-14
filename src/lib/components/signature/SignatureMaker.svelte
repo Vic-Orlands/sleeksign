@@ -24,21 +24,43 @@
 		textSuggestions?: Array<{ label: string; value: string }>;
 	} = $props();
 
-	let activeTab = $state(type === "text" ? "text" : "type");
-	let name = $state(defaultValue.startsWith("data:image") ? "" : defaultValue);
-	let textValue = $state(defaultValue);
-	let typedPreviewUrl = $state(defaultValue.startsWith("data:image") ? defaultValue : "");
+	let activeTab = $state<"type" | "draw" | "upload" | "text">("type");
+	let name = $state("");
+	let textValue = $state("");
+	let typedPreviewUrl = $state("");
 	let isConfirming = $state(false);
 	let canvasEl = $state<HTMLCanvasElement | null>(null);
 	let pad = $state<SignaturePad | null>(null);
 	let drawHasContent = $state(false);
+	let wasOpen = $state(false);
+
+	function isImageDataUrl(value: string) {
+		return value.startsWith("data:image");
+	}
+
+	function plainTextOrEmpty(value: string) {
+		return isImageDataUrl(value) ? "" : value;
+	}
 
 	onMount(() => {
 		return () => pad?.off();
 	});
 
 	$effect(() => {
-		if (!open || activeTab !== "draw" || !canvasEl) return;
+		const isOpen = open;
+		if (isOpen && !wasOpen) {
+			activeTab = type === "text" ? "text" : "type";
+			name = type === "signature" ? plainTextOrEmpty(defaultValue) : "";
+			textValue = type === "text" ? plainTextOrEmpty(defaultValue) : "";
+			typedPreviewUrl =
+				type === "signature" && isImageDataUrl(defaultValue) ? defaultValue : "";
+			drawHasContent = false;
+		}
+		wasOpen = isOpen;
+	});
+
+	$effect(() => {
+		if (!open || type !== "signature" || activeTab !== "draw" || !canvasEl) return;
 		const instance = new SignaturePad(canvasEl, {
 			penColor: "black",
 			minWidth: 1.5,
@@ -57,8 +79,10 @@
 	});
 
 	$effect(() => {
-		if (activeTab !== "type" || !name.trim()) {
-			typedPreviewUrl = defaultValue.startsWith("data:image") ? defaultValue : "";
+		if (!open || type !== "signature" || activeTab !== "type") return;
+
+		if (!name.trim()) {
+			typedPreviewUrl = isImageDataUrl(defaultValue) ? defaultValue : "";
 			return;
 		}
 
@@ -83,11 +107,15 @@
 		isConfirming = true;
 		let value = "";
 
-		if (activeTab === "text") value = textValue.trim();
-		else if (activeTab === "type" && typedPreviewUrl) value = typedPreviewUrl;
-		else if (activeTab === "draw" && pad && !pad.isEmpty()) value = pad.toDataURL("image/png");
-
 		try {
+			if (type === "text") {
+				value = textValue.trim();
+			} else if (activeTab === "type" && typedPreviewUrl) {
+				value = typedPreviewUrl;
+			} else if (activeTab === "draw" && pad && !pad.isEmpty()) {
+				value = pad.toDataURL("image/png");
+			}
+
 			if (value) await onConfirm(value);
 			onClose();
 		} finally {
@@ -107,7 +135,7 @@
 	}
 
 	const canConfirm = $derived(
-		activeTab === "text"
+		type === "text"
 			? textValue.trim().length > 0
 			: activeTab === "type"
 				? Boolean(typedPreviewUrl)
@@ -135,7 +163,7 @@
 						<span class="mt-1 block truncate text-sm font-medium">{suggestion.value}</span>
 					</button>
 				{/each}
-				<Input bind:value={textValue} placeholder="Enter details..." />
+				<Input bind:value={textValue} placeholder="Enter details..." autocomplete="name" />
 			</div>
 		{:else}
 			<div class="flex gap-2 border-b border-border pb-3">
@@ -149,7 +177,7 @@
 						class="rounded-md px-3 py-1.5 text-xs {activeTab === tab.id
 							? 'bg-primary text-primary-foreground'
 							: 'bg-muted text-muted-foreground'}"
-						onclick={() => (activeTab = tab.id)}
+						onclick={() => (activeTab = tab.id as "type" | "draw" | "upload")}
 					>
 						{tab.label}
 					</button>
@@ -158,7 +186,7 @@
 
 			{#if activeTab === "type"}
 				<div class="space-y-4 py-4">
-					<Input bind:value={name} placeholder="Type your name..." />
+					<Input bind:value={name} placeholder="Type your name..." autocomplete="name" />
 					{#if typedPreviewUrl}
 						<img src={typedPreviewUrl} alt="Signature preview" class="mx-auto max-h-32" />
 					{/if}

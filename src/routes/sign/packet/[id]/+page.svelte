@@ -14,6 +14,8 @@
     roleName: string;
     copyId?: string | null;
     requireOtp?: boolean;
+    signerName?: string | null;
+    signerEmail?: string | null;
     document: { id?: string; name: string; fileUrl: string; fields: Field[] };
     fields: Field[];
     values: Record<string, string>;
@@ -387,7 +389,7 @@
                   void handleFieldClick(field);
                 }}
               >
-                {#if complete && field.type === "signature"}
+                {#if complete && (field.type === "signature" || value?.startsWith("data:image"))}
                   <SignatureValue {value} class="h-full w-full px-2 py-1" />
                 {:else if complete}
                   <span class="truncate px-2 text-xs font-semibold"
@@ -410,7 +412,7 @@
                 style:height="{(field.height / 100) * metrics.height}px"
                 title={`Assigned to ${field.assigneeRole}`}
               >
-                {#if complete && field.type === "signature"}
+                {#if complete && (field.type === "signature" || value?.startsWith("data:image"))}
                   <SignatureValue
                     {value}
                     class="h-full w-full px-2 py-1 opacity-80"
@@ -444,5 +446,16 @@
     isMakerOpen = false;
   }}
   type={selectedField?.type === "text" ? "text" : "signature"}
-  defaultValue={currentValues[selectedField?.id || ""] || ""}
+  defaultValue={
+    currentValues[selectedField?.id || ""] ||
+    (selectedField?.type === "signature" ? context?.signerName || "" : "")
+  }
+  textSuggestions={[
+    ...(context?.signerName
+      ? [{ label: "Full name", value: context.signerName }]
+      : []),
+    ...(context?.signerEmail
+      ? [{ label: "Email address", value: context.signerEmail }]
+      : []),
+  ]}
 />
