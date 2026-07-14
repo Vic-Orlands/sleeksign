@@ -11,6 +11,9 @@
 
   type PacketContext = {
     packetId: string;
+    status: "active" | "completed";
+    roleCompleted?: boolean;
+    completedUrl?: string | null;
     roleName: string;
     copyId?: string | null;
     requireOtp?: boolean;
@@ -35,6 +38,8 @@
   let selectedField = $state<Field | null>(null);
   let isMakerOpen = $state(false);
   let finalPdfUrl = $state<string | null>(null);
+  let signingComplete = $state(false);
+  let completionMessage = $state("Your signed fields have been submitted.");
 
   const packetId = $derived($page.params.id);
   const roleName = $derived($page.url.searchParams.get("role") || "");
@@ -68,6 +73,13 @@
       if (!res.ok || body.error)
         throw new Error(body.error || "Failed to load document");
       context = body as PacketContext;
+      if (body.roleCompleted || body.status === "completed") {
+        signingComplete = true;
+        finalPdfUrl = body.completedUrl || null;
+        completionMessage = body.completedUrl
+          ? "The document is complete and ready to download."
+          : "Your part is complete. Waiting for the remaining parties.";
+      }
       documentName = body.document?.name || "";
       otpRequired = false;
       otpSent = false;
@@ -156,19 +168,8 @@
     }
   }
 
-  async function updateValue(fieldId: string, value: string) {
+  function updateValue(fieldId: string, value: string) {
     values = { ...values, [fieldId]: value };
-    await fetch(`/api/public-packets/${packetId}/context`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        roleName,
-        copyId: copyId || null,
-        fieldId,
-        value,
-      }),
-    });
-    toast.success("Field saved");
   }
 
   async function handleFieldClick(field: Field) {
@@ -177,11 +178,11 @@
       return;
     }
     if (field.type === "date") {
-      await updateValue(field.id, format(new Date(), "yyyy-MM-dd"));
+      updateValue(field.id, format(new Date(), "yyyy-MM-dd"));
       return;
     }
     if (field.type === "checkbox") {
-      await updateValue(
+      updateValue(
         field.id,
         currentValues[field.id] === "true" ? "false" : "true",
       );
@@ -192,7 +193,10 @@
   }
 
   async function finalize() {
+    if (isFinalizing || signingComplete || !allFieldsSigned) return;
     isFinalizing = true;
+    signingComplete = true;
+    completionMessage = "Completing your document…";
     try {
       const res = await fetch(`/api/public-packets/${packetId}/context`, {
         method: "POST",
@@ -202,20 +206,30 @@
           copyId: copyId || null,
           signerName: context?.signerName || null,
           signerEmail: context?.signerEmail || null,
+          values: Object.fromEntries(
+            editableFields.map((field) => [field.id, currentValues[field.id] || ""]),
+          ),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Finalize failed");
 
       if (data.status === "waiting") {
-        toast.success(data.message || "Your part is complete. Waiting for others.");
+        signingComplete = true;
+        completionMessage = data.message || "Your part is complete. Waiting for the remaining parties.";
+        toast.success(
+          data.message || "Your part is complete. Waiting for others.",
+        );
         return;
       }
 
       if (!data.url) throw new Error("Final PDF unavailable");
       finalPdfUrl = data.url;
+      signingComplete = true;
+      completionMessage = "The document is complete and ready to download.";
       toast.success("Document finalized");
     } catch (error) {
+      signingComplete = false;
       toast.error(
         error instanceof Error ? error.message : "Failed to finalize document",
       );
@@ -256,16 +270,16 @@
         class="sleek-grid border-b border-border bg-background p-8 lg:border-b-0 lg:border-r"
       >
         <h1
-          class="mt-6 max-w-[17rem] font-mono text-2xl font-semibold uppercase leading-tight sm:max-w-full sm:text-3xl"
+          class="mt-6 max-w-68 font-mono text-2xl font-semibold uppercase leading-tight sm:max-w-full sm:text-3xl"
         >
           Review and sign securely
         </h1>
-        <p class="mt-3 max-w-md leading-7 text-muted-foreground">
+        <p class="mt-3 max-w-md text-sm text-muted-foreground">
           Verify your email before you can open the document and complete your
           fields.
         </p>
         {#if documentName}
-          <div class="mt-8 border border-border bg-background p-4">
+          <div class="mt-8">
             <p
               class="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground"
             >
@@ -284,11 +298,13 @@
         }}
       >
         <div>
-          <h2 class="font-mono text-xs font-semibold uppercase tracking-widest">
+          <h2 class="font-mono text-xs font-semibold uppercase tracking-wider">
             Verify your email
           </h2>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Enter your email to receive a one-time code before signing as {roleName}.
+          <p class="mt-1 w-[80%] text-sm text-muted-foreground">
+            Enter your email to receive a one-time code before signing as <b
+              >{roleName}</b
+            >.
           </p>
         </div>
 
@@ -315,7 +331,7 @@
         {/if}
 
         <div class="flex flex-col items-center gap-2">
-          <Button type="submit" class="h-11 w-full" loading={otpBusy}>
+          <Button type="submit" class="w-full" loading={otpBusy}>
             {otpSent ? "Verify OTP" : "Send OTP"}
           </Button>
           {#if otpSent}
@@ -336,7 +352,7 @@
   <div class="flex h-screen items-center justify-center bg-background">
     {loadError || "Document not found"}
   </div>
-{:else if finalPdfUrl}
+{:else if signingComplete || finalPdfUrl}
   <div class="flex min-h-screen items-center justify-center bg-(--paper) p-6">
     <div
       class="w-full max-w-md border border-border bg-background p-8 text-center"
@@ -344,11 +360,14 @@
       <h1 class="font-mono text-xs font-semibold uppercase tracking-widest">
         Document completed
       </h1>
-      <Button
-        class="mt-6 w-full"
-        onclick={() => window.open(finalPdfUrl!, "_blank")}
-        >Download signed PDF</Button
-      >
+      <p class="mt-2 text-sm text-muted-foreground">{completionMessage}</p>
+      {#if finalPdfUrl}
+        <Button
+          class="mt-6 w-full"
+          onclick={() => window.open(finalPdfUrl!, "_blank")}
+          >Download signed PDF</Button
+        >
+      {/if}
     </div>
   </div>
 {:else}
@@ -364,13 +383,9 @@
           {context.document.name} · {context.roleName}
         </p>
       </div>
-      <Button
-        disabled={!allFieldsSigned}
-        loading={isFinalizing}
-        onclick={finalize}
-      >
-        Complete
-      </Button>
+      {#if allFieldsSigned}
+        <Button loading={isFinalizing} onclick={finalize}>Complete</Button>
+      {/if}
     </header>
     <section
       class="sleek-grid min-h-0 flex-1 overflow-auto bg-zinc-100 px-6 py-8"
@@ -451,16 +466,14 @@
 <SignatureMaker
   open={isMakerOpen}
   onClose={() => (isMakerOpen = false)}
-  onConfirm={async (value) => {
+  onConfirm={(value) => {
     if (!selectedField || !isEditable(selectedField)) return;
-    await updateValue(selectedField.id, value);
+    updateValue(selectedField.id, value);
     isMakerOpen = false;
   }}
   type={selectedField?.type === "text" ? "text" : "signature"}
-  defaultValue={
-    currentValues[selectedField?.id || ""] ||
-    (selectedField?.type === "signature" ? context?.signerName || "" : "")
-  }
+  defaultValue={currentValues[selectedField?.id || ""] ||
+    (selectedField?.type === "signature" ? context?.signerName || "" : "")}
   textSuggestions={[
     ...(context?.signerName
       ? [{ label: "Full name", value: context.signerName }]

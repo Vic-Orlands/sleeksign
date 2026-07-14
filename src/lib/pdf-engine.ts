@@ -90,6 +90,10 @@ export async function finalizeDocument(sessionId: string) {
 
   if (!session || !session.documentId) throw new Error("Session not found");
 
+  if (session.status === "completed" && session.finalizedFileUrl) {
+    return session.finalizedFileUrl;
+  }
+
   const docData = await db.query.documents.findFirst({
     where: eq(documents.id, session.documentId),
   });
