@@ -161,7 +161,7 @@ export const DELETE: RequestHandler = async ({ request: req, params }) => {
   try {
     const { id } = params;
     const access = await requireDocumentAccess(req.headers, id, "manage", {
-      ensureEnterpriseSetup: false,
+      ensureWorkspaceSetup: false,
     });
     const hasBody =
       Number(req.headers.get("content-length") || 0) > 0 ||
