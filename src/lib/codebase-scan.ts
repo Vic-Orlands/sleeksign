@@ -147,32 +147,31 @@ export const sleeksignScan: ScanData = {
 			}),
 			node("document-setup", "Document setup", "entry", {
 				sub: "/docs/[id]/setup",
-				group: "Signing",
+				group: "Domain",
 				sourceRef: "src/routes/(app)/docs/[id]/setup",
 			}),
 			node("upload-api", "PDF upload API", "entry", {
 				sub: "/api/uploads/*",
-				group: "Signing",
+				group: "Domain",
 				sourceRef: "src/routes/api/uploads",
 			}),
 			node("send-api", "Send document API", "entry", {
 				sub: "/api/send-document",
-				group: "Signing",
+				group: "Domain",
 				sourceRef: "src/routes/api/send-document",
 			}),
 			node("signing-page", "Signing session", "entry", {
 				sub: "/sign/packet/[id]",
-				group: "Signing",
+				group: "Domain",
 				sourceRef: "src/routes/sign/packet/[id]",
 			}),
 			node("finalize-api", "Finalize API", "entry", {
 				sub: "/api/finalize",
-				group: "Signing",
+				group: "Domain",
 				sourceRef: "src/routes/api/finalize",
 			}),
 			node("signing-workflow", "Signing workflow", "service", {
 				sub: "packets · copies · values",
-				group: "Signing",
 				detail: "Creates signing packets, recipient copies, and participant field values.",
 				sourceRef: "src/lib/signing-workflows.ts",
 			}),
@@ -204,7 +203,6 @@ export const sleeksignScan: ScanData = {
 			}),
 			node("audit-chain", "Audit chain", "service", {
 				sub: "tamper-evident custody",
-				group: "Trust",
 				sourceRef: "src/lib/audit.ts",
 			}),
 			node("bulk-send-api", "Bulk send API", "entry", {

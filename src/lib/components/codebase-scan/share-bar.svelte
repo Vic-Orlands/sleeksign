@@ -43,10 +43,12 @@
 		align-items: center;
 		gap: 16px;
 		transform: translateX(-50%);
-		border: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
 		border-radius: 999px;
 		background: color-mix(in oklab, var(--card) 70%, transparent);
 		padding: 10px 20px;
+		box-shadow:
+			0 1px 2px rgb(0 0 0 / 0.04),
+			0 4px 16px rgb(0 0 0 / 0.06);
 		backdrop-filter: blur(12px);
 	}
 	button {
@@ -61,10 +63,11 @@
 		font-weight: 500;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		transition: color 160ms ease, opacity 160ms ease;
+		transition: all 300ms ease;
 		cursor: default;
 	}
-	button :global(svg) { width: 12px; height: 12px; opacity: 0.8; transition: transform 160ms ease; }
+	button:hover { color: var(--foreground); }
+	button :global(svg) { width: 12px; height: 12px; opacity: 0.8; transition: transform 300ms ease; }
 	button.active { color: var(--foreground); }
 	button.active :global(svg) { transform: scale(1.1); }
 	button.dimmed { opacity: 0.4; }

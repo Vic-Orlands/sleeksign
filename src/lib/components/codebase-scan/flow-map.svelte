@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount, tick } from "svelte";
+	import MagnifyingGlassMinus from "phosphor-svelte/lib/MagnifyingGlassMinus";
+	import MagnifyingGlassPlus from "phosphor-svelte/lib/MagnifyingGlassPlus";
 	import type {
 		FoldedNode,
 		ScanData,
@@ -176,6 +178,19 @@
 		drag = undefined;
 	}
 
+	function zoomBy(factor: number) {
+		if (!viewportEl) return;
+		const centerX = viewportEl.clientWidth / 2;
+		const centerY = viewportEl.clientHeight / 2;
+		const scale = Math.min(3, Math.max(0.2, transform.k * factor));
+		const ratio = scale / transform.k;
+		transform = {
+			k: scale,
+			x: centerX - (centerX - transform.x) * ratio,
+			y: centerY - (centerY - transform.y) * ratio,
+		};
+	}
+
 	onMount(() => {
 		let cancelled = false;
 		const degree = new Map<string, number>();
@@ -200,7 +215,7 @@
 		const handleWheel = (event: WheelEvent) => {
 			if (!viewportEl) return;
 			event.preventDefault();
-			if (event.ctrlKey) {
+			if (event.ctrlKey || event.metaKey) {
 				const bounds = viewportEl.getBoundingClientRect();
 				const centerX = event.clientX - bounds.left;
 				const centerY = event.clientY - bounds.top;
@@ -233,6 +248,28 @@
 </script>
 
 <section class="map">
+	<div class="zoom-controls" role="group" aria-label="Zoom">
+		<button
+			type="button"
+			aria-label="Zoom in"
+			onclick={(event) => {
+				event.stopPropagation();
+				zoomBy(1.25);
+			}}
+		>
+			<MagnifyingGlassPlus aria-hidden="true" />
+		</button>
+		<button
+			type="button"
+			aria-label="Zoom out"
+			onclick={(event) => {
+				event.stopPropagation();
+				zoomBy(0.8);
+			}}
+		>
+			<MagnifyingGlassMinus aria-hidden="true" />
+		</button>
+	</div>
 	<div
 		bind:this={viewportEl}
 		class="viewport"
@@ -378,6 +415,33 @@
 
 <style>
 	.map { position: absolute; z-index: 10; inset: 0; }
+	.zoom-controls {
+		position: absolute;
+		z-index: 25;
+		right: 24px;
+		bottom: 88px;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.zoom-controls button {
+		display: grid;
+		width: 36px;
+		height: 36px;
+		place-items: center;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: var(--background);
+		color: var(--foreground);
+		cursor: pointer;
+	}
+	.zoom-controls button :global(svg) { width: 16px; height: 16px; }
+	.zoom-controls button:hover {
+		background: color-mix(in oklab, var(--background) 88%, var(--foreground));
+	}
+	@media (max-width: 760px) {
+		.zoom-controls { right: 12px; bottom: 76px; }
+	}
 	.viewport {
 		position: absolute;
 		inset: 0;
@@ -434,13 +498,13 @@
 		color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
 		font-size: 12px;
 		white-space: nowrap;
-		transition: opacity 200ms ease;
+		transition: opacity 300ms ease;
 	}
 	.edge-label.dimmed { opacity: 0.15; }
 	.node-wrap {
 		position: absolute;
-		animation: node-in 550ms cubic-bezier(0.16, 1, 0.3, 1) both;
-		transition: opacity 260ms ease;
+		animation: node-in 550ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+		transition: opacity 300ms ease;
 	}
 	.node-wrap.dimmed { opacity: 0.25; }
 	.node-card {
