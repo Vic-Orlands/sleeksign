@@ -32,7 +32,7 @@
 
 	function isCancelledRenderError(error: unknown) {
 		return (
-			Boolean(error) &&
+			error !== null &&
 			typeof error === "object" &&
 			"name" in error &&
 			(error as { name?: string }).name === "RenderingCancelledException"

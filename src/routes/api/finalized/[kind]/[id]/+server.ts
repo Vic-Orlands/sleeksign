@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { signingPacketCopies, signingPackets } from "@/db/schema";
 import { createReadUrl } from "@/lib/r2-storage";
+import { findArtifactVerification } from "@/lib/document-verification";
 import {
   AccessError,
   requireDocumentAccess,
@@ -22,11 +23,12 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
         "read",
       );
 
-      if (signingSession.status !== "completed" || !signingSession.finalizedStorageKey) {
+      const receipt = await findArtifactVerification("session", id);
+      if (signingSession.status !== "completed" || receipt?.status !== "active") {
         return Response.json({ error: "Document not found" }, { status: 404 });
       }
 
-      const url = await createReadUrl(signingSession.finalizedStorageKey, {
+      const url = await createReadUrl(receipt.finalizedStorageKey, {
         ...(download
           ? { downloadName: `finalized_${signingSession.id}.pdf` }
           : { inlineName: `finalized_${signingSession.id}.pdf` }),
@@ -45,11 +47,12 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
 
       await requireDocumentAccess(req.headers, packet.documentId, "read");
 
-      if (packet.status !== "completed" || !packet.finalizedStorageKey) {
+      const receipt = await findArtifactVerification("packet", id);
+      if (packet.status !== "completed" || receipt?.status !== "active") {
         return Response.json({ error: "Document not found" }, { status: 404 });
       }
 
-      const url = await createReadUrl(packet.finalizedStorageKey, {
+      const url = await createReadUrl(receipt.finalizedStorageKey, {
         ...(download
           ? { downloadName: `packet_${packet.id}.pdf` }
           : { inlineName: `packet_${packet.id}.pdf` }),
@@ -71,11 +74,12 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
 
       await requireDocumentAccess(req.headers, copy.packet.documentId, "read");
 
-      if (copy.status !== "completed" || !copy.finalizedStorageKey) {
+      const receipt = await findArtifactVerification("copy", id);
+      if (copy.status !== "completed" || receipt?.status !== "active") {
         return Response.json({ error: "Document not found" }, { status: 404 });
       }
 
-      const url = await createReadUrl(copy.finalizedStorageKey, {
+      const url = await createReadUrl(receipt.finalizedStorageKey, {
         ...(download
           ? { downloadName: `copy_${copy.id}.pdf` }
           : { inlineName: `copy_${copy.id}.pdf` }),

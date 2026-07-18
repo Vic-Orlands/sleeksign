@@ -1,10 +1,12 @@
 import {
   boolean,
+  index,
   integer,
   pgTable,
   real,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -95,9 +97,6 @@ export const sessions = pgTable("sessions", {
     .notNull()
     .default(false),
   verificationMode: text("verification_mode").notNull().default("none"),
-  evidenceSnapshot: text("evidence_snapshot"),
-  certificateId: text("certificate_id"),
-  certificateHash: text("certificate_hash"),
   finalizedFileUrl: text("finalized_file_url"),
   finalizedStorageKey: text("finalized_storage_key"),
   completedAt: timestamp("completed_at", { withTimezone: false }),
@@ -142,9 +141,6 @@ export const signingPackets = pgTable("signing_packets", {
     .default("active"),
   finalizedFileUrl: text("finalized_file_url"),
   finalizedStorageKey: text("finalized_storage_key"),
-  evidenceSnapshot: text("evidence_snapshot"),
-  certificateId: text("certificate_id"),
-  certificateHash: text("certificate_hash"),
   completedAt: timestamp("completed_at", { withTimezone: false }),
   createdAt: timestamp("created_at", { withTimezone: false })
     .notNull()
@@ -173,9 +169,6 @@ export const signingPacketCopies = pgTable("signing_packet_copies", {
     .default("pending"),
   finalizedFileUrl: text("finalized_file_url"),
   finalizedStorageKey: text("finalized_storage_key"),
-  evidenceSnapshot: text("evidence_snapshot"),
-  certificateId: text("certificate_id"),
-  certificateHash: text("certificate_hash"),
   bulkSendJobId: text("bulk_send_job_id"),
   bulkSendRowId: text("bulk_send_row_id"),
   completedAt: timestamp("completed_at", { withTimezone: false }),
@@ -403,10 +396,57 @@ export const auditLogs = pgTable("audit_logs", {
   payload: text("payload").notNull().default("{}"),
   eventHash: text("event_hash").notNull(),
   previousEventHash: text("previous_event_hash"),
-  createdAt: timestamp("created_at", { withTimezone: false })
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
+
+export const documentVerifications = pgTable(
+  "document_verifications",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => authOrganization.id, { onDelete: "cascade" }),
+    teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    artifactType: text("artifact_type")
+      .$type<"session" | "packet" | "copy">()
+      .notNull(),
+    artifactId: text("artifact_id").notNull(),
+    status: text("status").$type<"active" | "revoked">().notNull().default("active"),
+    sourceDocumentHash: text("source_document_hash").notNull(),
+    finalizedDocumentHash: text("finalized_document_hash").notNull(),
+    manifest: text("manifest").notNull(),
+    manifestHash: text("manifest_hash").notNull(),
+    signature: text("signature").notNull(),
+    signatureAlgorithm: text("signature_algorithm").notNull(),
+    keyVersion: text("key_version").notNull(),
+    publicKeyFingerprint: text("public_key_fingerprint").notNull(),
+    auditChainKey: text("audit_chain_key").notNull(),
+    auditRootHash: text("audit_root_hash").notNull(),
+    auditEventCount: integer("audit_event_count").notNull(),
+    finalizedStorageKey: text("finalized_storage_key").notNull(),
+    finalizedAt: timestamp("finalized_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revocationReason: text("revocation_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("document_verifications_artifact_unique").on(
+      table.artifactType,
+      table.artifactId,
+    ),
+    index("document_verifications_document_idx").on(table.documentId),
+    index("document_verifications_finalized_hash_idx").on(
+      table.finalizedDocumentHash,
+    ),
+  ],
+);
 
 export const signerVerificationChallenges = pgTable(
   "signer_verification_challenges",
@@ -627,7 +667,26 @@ export const documentsRelations = relations(documents, ({ one, many }) => ({
   fields: many(fields),
   sessions: many(sessions),
   packets: many(signingPackets),
+  verifications: many(documentVerifications),
 }));
+
+export const documentVerificationsRelations = relations(
+  documentVerifications,
+  ({ one }) => ({
+    document: one(documents, {
+      fields: [documentVerifications.documentId],
+      references: [documents.id],
+    }),
+    organization: one(authOrganization, {
+      fields: [documentVerifications.organizationId],
+      references: [authOrganization.id],
+    }),
+    team: one(teams, {
+      fields: [documentVerifications.teamId],
+      references: [teams.id],
+    }),
+  }),
+);
 
 export const fieldsRelations = relations(fields, ({ one, many }) => ({
   document: one(documents, {

@@ -57,7 +57,6 @@ function getAppOrigins() {
   for (const value of [
     process.env.BETTER_AUTH_URL,
     process.env.NEXT_PUBLIC_BETTER_AUTH_URL,
-    process.env.PUBLIC_APP_URL,
   ]) {
     if (!value) continue;
     try {
@@ -212,9 +211,16 @@ async function getR2ObjectStream(key: string, range?: string) {
   let stream: ReadableStream<Uint8Array> | null = null;
 
   if (body && typeof body === "object" && "transformToWebStream" in body) {
-    stream = (body as { transformToWebStream: () => ReadableStream<Uint8Array> }).transformToWebStream();
-  } else if (body instanceof ReadableStream) {
-    stream = body;
+    stream = (
+      body as { transformToWebStream: () => ReadableStream<Uint8Array> }
+    ).transformToWebStream();
+  } else if (
+    body &&
+    typeof body === "object" &&
+    typeof ReadableStream !== "undefined" &&
+    ReadableStream.prototype.isPrototypeOf(body)
+  ) {
+    stream = body as unknown as ReadableStream<Uint8Array>;
   } else if (body) {
     const bytes = await bodyToBytes(body);
     stream = new ReadableStream({
@@ -277,7 +283,9 @@ async function bodyToBytes(body: unknown): Promise<Uint8Array> {
   }
 
   const chunks: Uint8Array[] = [];
-  for await (const chunk of body as AsyncIterable<Uint8Array | Buffer | string>) {
+  for await (const chunk of body as AsyncIterable<
+    Uint8Array | Buffer | string
+  >) {
     if (typeof chunk === "string") {
       chunks.push(Buffer.from(chunk));
     } else {

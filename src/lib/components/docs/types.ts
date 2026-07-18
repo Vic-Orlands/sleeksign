@@ -8,6 +8,7 @@ export type SessionRecord = {
 	status: SessionStatus;
 	finalizedFileUrl?: string | null;
 	finalizedStorageKey?: string | null;
+	verificationId?: string | null;
 	signerName?: string | null;
 	signerEmail?: string | null;
 	signerRole?: string | null;
@@ -26,6 +27,7 @@ export type PacketCopySummary = {
 	recipientType?: "email" | "signer" | "group" | "bulk" | null;
 	status: SessionStatus;
 	createdAt: string | number | Date;
+	verificationId?: string | null;
 };
 
 export type PacketActivitySummary = {
@@ -36,8 +38,17 @@ export type PacketActivitySummary = {
 	completedAt?: string | number | Date | null;
 	finalizedFileUrl?: string | null;
 	finalizedStorageKey?: string | null;
+	verificationId?: string | null;
 	roleConfigs: RoleConfig[];
 	copies: PacketCopySummary[];
+};
+
+export type DocumentVerificationSummary = {
+	id: string;
+	artifactType: "session" | "packet" | "copy";
+	artifactId: string;
+	status: "active" | "revoked";
+	finalizedAt: string | number | Date;
 };
 
 export type DocumentRecord = {
@@ -60,6 +71,7 @@ export type DocumentRecord = {
 	fields?: Field[];
 	sessions?: SessionRecord[];
 	packets?: PacketActivitySummary[];
+	verifications?: DocumentVerificationSummary[];
 };
 
 export type DocumentStatus = "Pending" | "In Progress" | "Completed";

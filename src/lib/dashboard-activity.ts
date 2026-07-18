@@ -4,6 +4,7 @@ import type {
 } from "$lib/components/docs/types";
 import {
   fields,
+  documentVerifications,
   sessions,
   signingPacketCopies,
   signingPackets,
@@ -12,7 +13,8 @@ import {
 import { areRoleFieldsComplete } from "@/lib/signing-workflows";
 import { parseRoleConfigs, type WorkflowMode } from "@/lib/field-utils";
 
-type LegacySession = typeof sessions.$inferSelect;
+type DirectSession = typeof sessions.$inferSelect;
+type Verification = typeof documentVerifications.$inferSelect;
 type Packet = typeof signingPackets.$inferSelect & {
   copies?: Array<typeof signingPacketCopies.$inferSelect>;
   values?: Array<typeof signingPacketValues.$inferSelect>;
@@ -20,8 +22,9 @@ type Packet = typeof signingPackets.$inferSelect & {
 type DocumentWithActivity = {
   id?: string;
   fields?: Array<typeof fields.$inferSelect>;
-  sessions?: LegacySession[];
+  sessions?: DirectSession[];
   packets?: Packet[];
+  verifications?: Verification[];
   [key: string]: unknown;
 };
 
@@ -34,6 +37,10 @@ function buildPacketSummaries(document: DocumentWithActivity): PacketActivitySum
     completedAt: packet.completedAt || null,
     finalizedFileUrl: packet.finalizedFileUrl || null,
     finalizedStorageKey: packet.finalizedStorageKey || null,
+    verificationId:
+      document.verifications?.find(
+        (item) => item.artifactType === "packet" && item.artifactId === packet.id,
+      )?.id || null,
     roleConfigs: parseRoleConfigs(packet.roleConfigs),
     copies: (packet.copies || []).map((copy) => ({
       id: copy.id,
@@ -43,12 +50,16 @@ function buildPacketSummaries(document: DocumentWithActivity): PacketActivitySum
       recipientType: copy.recipientType,
       status: copy.status === "completed" ? "completed" : "pending",
       createdAt: copy.createdAt,
+      verificationId:
+        document.verifications?.find(
+          (item) => item.artifactType === "copy" && item.artifactId === copy.id,
+        )?.id || null,
     })),
   }));
 }
 
 function buildDocumentSessions(document: DocumentWithActivity): SessionRecord[] {
-  const legacySessions = (document.sessions || [])
+  const directSessions = (document.sessions || [])
     .filter((session) => !session.deletedAt)
     .map((session) => ({
       ...session,
@@ -56,13 +67,17 @@ function buildDocumentSessions(document: DocumentWithActivity): SessionRecord[] 
       finalizedStorageKey: session.finalizedStorageKey || null,
       completedAt: session.completedAt || null,
       deletedAt: session.deletedAt || null,
+      verificationId:
+        document.verifications?.find(
+          (item) => item.artifactType === "session" && item.artifactId === session.id,
+        )?.id || null,
     }));
 
   const packetSessions = (document.packets || []).flatMap((packet) =>
     buildPacketSessions(document, packet),
   );
 
-  return [...legacySessions, ...packetSessions].sort(
+  return [...directSessions, ...packetSessions].sort(
     (left, right) => getSessionTimestamp(right) - getSessionTimestamp(left),
   );
 }
@@ -102,6 +117,10 @@ function buildPacketSessions(
           : "pending",
         finalizedFileUrl: packet.finalizedFileUrl || null,
         finalizedStorageKey: packet.finalizedStorageKey || null,
+        verificationId:
+          document.verifications?.find(
+            (item) => item.artifactType === "packet" && item.artifactId === packet.id,
+          )?.id || null,
         signerName: firstValue?.signerName || role.name,
         signerEmail: firstValue?.signerEmail || null,
         signerRole: role.name,
@@ -125,6 +144,10 @@ function buildPacketSessions(
     signerRole: copy.roleName,
     createdAt: copy.createdAt,
     completedAt: copy.completedAt || null,
+    verificationId:
+      document.verifications?.find(
+        (item) => item.artifactType === "copy" && item.artifactId === copy.id,
+      )?.id || null,
   }) satisfies SessionRecord);
 
   return [...sharedRoleSessions, ...copySessions];

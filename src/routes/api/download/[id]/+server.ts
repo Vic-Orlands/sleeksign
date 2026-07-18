@@ -1,6 +1,7 @@
 import type { RequestHandler } from "./$types";
 
 import { createReadUrl } from "@/lib/r2-storage";
+import { findArtifactVerification } from "@/lib/document-verification";
 import { requireSigningSessionAccess, AccessError } from "@/lib/server-access";
 
 export const GET: RequestHandler = async ({ request: req, params }) => {
@@ -19,14 +20,15 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
       );
     }
 
-    if (!signingSession.finalizedStorageKey) {
+    const receipt = await findArtifactVerification("session", id);
+    if (receipt?.status !== "active") {
       return Response.json(
         { error: "Document not found or not completed" },
         { status: 404 },
       );
     }
 
-    const url = await createReadUrl(signingSession.finalizedStorageKey, {
+    const url = await createReadUrl(receipt.finalizedStorageKey, {
       downloadName: `finalized_${signingSession.id}.pdf`,
     });
     return Response.redirect(url);

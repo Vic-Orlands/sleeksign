@@ -5,6 +5,7 @@ allowBuilds:
   esbuild: true
   fsevents: true
   msw: true
+  protobufjs: true
   sharp: true
   uglifyjs-webpack-plugin: true
   unrs-resolver: true

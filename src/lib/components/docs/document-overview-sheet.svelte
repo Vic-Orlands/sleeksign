@@ -103,7 +103,7 @@
 		}));
 	}
 
-	function legacySessionUrl(sessionId: string) {
+	function directSessionUrl(sessionId: string) {
 		return `${origin}/sign/${sessionId}`;
 	}
 
@@ -310,7 +310,7 @@
 											</div>
 										{/each}
 										{#each activity.linkSessions as session (session.id)}
-											{@const url = legacySessionUrl(session.id)}
+											{@const url = directSessionUrl(session.id)}
 											<div class="rounded-md border border-border/70 px-3 py-3">
 												<div class="flex items-start justify-between gap-3">
 													<div class="min-w-0">

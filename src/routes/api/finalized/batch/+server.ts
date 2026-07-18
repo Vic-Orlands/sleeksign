@@ -5,6 +5,7 @@ import JSZip from "jszip";
 import { db } from "@/db";
 import { signingPacketCopies, signingPackets } from "@/db/schema";
 import { getObjectBytes } from "@/lib/r2-storage";
+import { findArtifactVerification } from "@/lib/document-verification";
 import {
   AccessError,
   requireDocumentAccess,
@@ -46,7 +47,8 @@ export const POST: RequestHandler = async ({ request }) => {
           "read",
         );
         if (signingSession.status === "completed") {
-          storageKey = signingSession.finalizedStorageKey;
+          const receipt = await findArtifactVerification("session", item.id);
+          if (receipt?.status === "active") storageKey = receipt.finalizedStorageKey;
         }
       } else if (item.kind === "packet") {
         const packet = await db.query.signingPackets.findFirst({
@@ -54,7 +56,10 @@ export const POST: RequestHandler = async ({ request }) => {
         });
         if (packet) {
           await requireDocumentAccess(request.headers, packet.documentId, "read");
-          if (packet.status === "completed") storageKey = packet.finalizedStorageKey;
+          if (packet.status === "completed") {
+            const receipt = await findArtifactVerification("packet", item.id);
+            if (receipt?.status === "active") storageKey = receipt.finalizedStorageKey;
+          }
         }
       } else if (item.kind === "copy") {
         const copy = await db.query.signingPacketCopies.findFirst({
@@ -63,7 +68,10 @@ export const POST: RequestHandler = async ({ request }) => {
         });
         if (copy?.packet) {
           await requireDocumentAccess(request.headers, copy.packet.documentId, "read");
-          if (copy.status === "completed") storageKey = copy.finalizedStorageKey;
+          if (copy.status === "completed") {
+            const receipt = await findArtifactVerification("copy", item.id);
+            if (receipt?.status === "active") storageKey = receipt.finalizedStorageKey;
+          }
         }
       }
 

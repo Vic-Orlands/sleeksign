@@ -175,7 +175,7 @@
 			if (!parties.some((party) => party.status === "completed")) return [];
 			return [makeGroup({ groupId: `packet:${packet.id}`, document, sessions: parties, createdAt: packet.createdAt })];
 		});
-		const legacyGroups = (document.sessions || [])
+		const directGroups = (document.sessions || [])
 			.filter(
 				(session) =>
 					session.status === "completed" &&
@@ -190,7 +190,7 @@
 					createdAt: session.createdAt,
 				}),
 			);
-		return [...packetGroups, ...legacyGroups];
+		return [...packetGroups, ...directGroups];
 	}
 
 	function getDownloadItems(sessions: SignedSession[], documentName: string) {
@@ -359,6 +359,7 @@
 							{#each sessionGroups as group (group.groupId)}
 								{@const session = group.sessions.find((party) => party.status === "completed") || group.sessions[0]}
 								{@const downloadUrl = group.sessions.find((party) => party.finalizedFileUrl)?.finalizedFileUrl}
+								{@const verificationId = group.sessions.find((party) => party.verificationId)?.verificationId}
 								<tr class="group border-b border-border/50 transition-colors hover:bg-accent/50">
 									<td class="py-2.5">
 										<input
@@ -439,6 +440,18 @@
 													</svg>
 												</span>
 											{/if}
+											{#if verificationId}
+												<a
+													href={`/verify/${verificationId}`}
+													target="_blank"
+													rel="noreferrer"
+													class="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-muted"
+													aria-label="Verify document integrity"
+													title="Verify integrity"
+												>
+													<svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 4.5 6v5.2c0 4.6 3.2 8.2 7.5 9.8 4.3-1.6 7.5-5.2 7.5-9.8V6L12 3Z" /><path d="m8.7 12 2.1 2.1 4.6-4.7" /></svg>
+												</a>
+											{/if}
 											{#if group.groupId.startsWith("session:") && session}
 												<button
 													type="button"
@@ -468,6 +481,7 @@
 
 {#if selectedGroup}
 	{@const selectedDownloadUrl = selectedGroup.sessions.find((party) => party.finalizedFileUrl)?.finalizedFileUrl}
+	{@const selectedVerificationId = selectedGroup.sessions.find((party) => party.verificationId)?.verificationId}
 	<div class="sheet-overlay fixed inset-0 z-50 flex justify-end bg-background/40">
 		<button
 			type="button"
@@ -495,6 +509,9 @@
 								<svg class="size-3.5" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z" /></svg>
 								Download
 							</a>
+						{/if}
+						{#if selectedVerificationId}
+							<a href={`/verify/${selectedVerificationId}`} target="_blank" rel="noreferrer" class="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-muted">Verify</a>
 						{/if}
 						<button type="button" class="inline-flex size-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close overview" onclick={() => (selectedGroup = null)}>
 							<svg class="size-4" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66a8,8,0,0,1-11.32-11.32L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z" /></svg>

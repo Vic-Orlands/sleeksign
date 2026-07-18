@@ -57,6 +57,7 @@ export async function listDocumentsForAccess(
 		with: {
 			sessions: true,
 			fields: true,
+			verifications: true,
 			packets: {
 				with: {
 					copies: true,
@@ -94,6 +95,7 @@ export async function getDocumentForAccess(
 		with: {
 			fields: true,
 			sessions: true,
+			verifications: true,
 		},
 	});
 
