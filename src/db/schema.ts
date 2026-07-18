@@ -204,36 +204,6 @@ export const signingPacketValues = pgTable("signing_packet_values", {
     .defaultNow(),
 });
 
-export const permissionRoles = pgTable("permission_roles", {
-  id: text("id").primaryKey(),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => authOrganization.id, { onDelete: "cascade" }),
-  teamId: text("team_id").references(() => teams.id, { onDelete: "cascade" }),
-  scope: text("scope").$type<"organization" | "team">().notNull(),
-  name: text("name").notNull(),
-  description: text("description"),
-  systemKey: text("system_key"),
-  isSystem: boolean("is_system").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: false })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: false })
-    .notNull()
-    .defaultNow(),
-});
-
-export const permissionRolePermissions = pgTable("permission_role_permissions", {
-  id: text("id").primaryKey(),
-  roleId: text("role_id")
-    .notNull()
-    .references(() => permissionRoles.id, { onDelete: "cascade" }),
-  permission: text("permission").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: false })
-    .notNull()
-    .defaultNow(),
-});
-
 export const teamMembers = pgTable("team_members", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id")
@@ -245,23 +215,6 @@ export const teamMembers = pgTable("team_members", {
   memberId: text("member_id")
     .notNull()
     .references(() => authMember.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: false })
-    .notNull()
-    .defaultNow(),
-});
-
-export const memberRoleAssignments = pgTable("member_role_assignments", {
-  id: text("id").primaryKey(),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => authOrganization.id, { onDelete: "cascade" }),
-  memberId: text("member_id")
-    .notNull()
-    .references(() => authMember.id, { onDelete: "cascade" }),
-  roleId: text("role_id")
-    .notNull()
-    .references(() => permissionRoles.id, { onDelete: "cascade" }),
-  teamId: text("team_id").references(() => teams.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
@@ -469,7 +422,12 @@ export const signerVerificationChallenges = pgTable(
       onDelete: "cascade",
     }),
     roleName: text("role_name"),
+    signerName: text("signer_name"),
     recipientEmail: text("recipient_email").notNull(),
+    verificationMethod: text("verification_method")
+      .$type<"identity" | "email_otp">()
+      .notNull()
+      .default("email_otp"),
     codeHash: text("code_hash").notNull(),
     verificationToken: text("verification_token"),
     expiresAt: timestamp("expires_at", { withTimezone: false }).notNull(),

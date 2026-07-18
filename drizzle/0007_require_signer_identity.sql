@@ -1,0 +1,2 @@
+ALTER TABLE "signer_verification_challenges" ADD COLUMN "signer_name" text;--> statement-breakpoint
+ALTER TABLE "signer_verification_challenges" ADD COLUMN "verification_method" text DEFAULT 'email_otp' NOT NULL;
