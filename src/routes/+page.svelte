@@ -9,6 +9,7 @@
   import type { Component } from "svelte";
 
   import { inview } from "$lib/actions/inview";
+  import UseCaseSlider from "$lib/components/marketing/use-case-slider.svelte";
 
   let PacketModelShowcase = $state<Component | null>(null);
 
@@ -317,56 +318,11 @@
     </div>
   </section>
 
-  <!-- Final Section -->
-  <section
-    class="relative z-10 mx-auto flex w-[85%] max-w-5xl flex-col items-center py-24 text-center"
-  >
-    <div
-      class="flex max-w-3xl flex-col items-center transition-all duration-800 ease-out"
-      class:opacity-0={!finalSectionInView}
-      class:scale-95={!finalSectionInView}
-      class:opacity-100={finalSectionInView}
-      class:scale-100={finalSectionInView}
-      use:inview={{
-        rootMargin: "-100px",
-        callback: (inView) => {
-          if (inView) finalSectionInView = true;
-        },
-      }}
-    >
-      <p
-        class="mb-6 text-[9px] font-medium uppercase tracking-[0.2em] text-orange-500/70"
-      >
-        Built for operations
-      </p>
-      <h2
-        class="text-[26px] font-light leading-[1.2] tracking-tight text-foreground sm:text-[32px]"
-      >
-        Everything after the
-        <span
-          class="-ml-1 pr-1 font-cursive text-[36px] italic leading-[0.5] text-stone-500/80 sm:text-[46px]"
-        >
-          graph
-        </span>
-        still lives inside the same system.
-      </h2>
-      <p
-        class="relative mb-6 mt-8 max-w-xl text-center text-[14px] font-light leading-[1.8] text-muted-foreground"
-      >
-        <span class="absolute -left-4 -top-2 font-cursive text-4xl">&quot;</span
-        >
-        Place fields directly on the source PDF, assign roles, stop sharing when
-        fields are still unassigned, and track signed files.
-        <span class="absolute -right-4 bottom-0 font-cursive text-4xl"
-          >&quot;</span
-        >
-      </p>
-    </div>
-  </section>
+  <UseCaseSlider />
 
   <!-- Features and Use Cases Outline -->
   <section
-    class="relative z-10 mb-20 flex w-full justify-center py-12 lg:py-18"
+    class="relative z-10 mb-20 flex w-full justify-center py-12 lg:py-30 lg:pb-20"
   >
     <div class="grid w-fit grid-cols-1 items-center lg:grid-cols-2">
       <div
@@ -466,18 +422,136 @@
             </li>
           {/each}
         </ul>
-        <div class="mt-4">
-          <a
-            href="/docs"
-            class="group inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.15em] text-foreground transition-colors hover:text-orange-500"
-          >
-            <ArrowRight
-              class="size-4 transition-transform group-hover:translate-x-1"
-            />
-            Explore the dashboard
-          </a>
-        </div>
       </div>
     </div>
   </section>
+
+  <!-- Final Section -->
+  <section
+    class="relative z-10 mx-auto flex w-[85%] max-w-5xl flex-col items-center py-10 pb-28 text-center"
+  >
+    <div
+      class="flex max-w-3xl flex-col items-center transition-all duration-800 ease-out"
+      class:opacity-0={!finalSectionInView}
+      class:scale-95={!finalSectionInView}
+      class:opacity-100={finalSectionInView}
+      class:scale-100={finalSectionInView}
+      use:inview={{
+        rootMargin: "-100px",
+        callback: (inView) => {
+          if (inView) finalSectionInView = true;
+        },
+      }}
+    >
+      <p
+        class="mb-6 text-[9px] font-medium uppercase tracking-[0.2em] text-orange-500/70"
+      >
+        Built for operations
+      </p>
+      <h2
+        class="text-[26px] font-light leading-[1.2] tracking-tight text-foreground sm:text-[32px]"
+      >
+        Everything after the
+        <span
+          class="-ml-1 pr-1 font-cursive text-[36px] italic leading-[0.5] text-stone-500/80 sm:text-[46px]"
+        >
+          graph
+        </span>
+        still lives inside the same system.
+      </h2>
+      <p
+        class="relative mb-6 mt-8 max-w-xl text-center text-[14px] font-light leading-[1.8] text-muted-foreground"
+      >
+        <span class="absolute -left-4 -top-2 font-cursive text-4xl">&quot;</span
+        >
+        Place fields directly on the source PDF, assign roles, stop sharing when
+        fields are still unassigned, and track signed files.
+        <span class="absolute -right-4 bottom-0 font-cursive text-4xl"
+          >&quot;</span
+        >
+      </p>
+      <a
+        href="/signup"
+        class="group inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.15em] text-foreground transition-colors hover:text-orange-500"
+      >
+        Start signing
+        <ArrowRight
+          class="size-3.5 transition-transform group-hover:translate-x-1"
+        />
+      </a>
+    </div>
+  </section>
+
+  <footer class="relative z-10 border-t border-border/70">
+    <div class="mx-auto w-[90%] max-w-7xl py-12 sm:py-14">
+      <div
+        class="grid gap-12 sm:grid-cols-[minmax(0,1.6fr)_repeat(2,minmax(120px,0.5fr))]"
+      >
+        <div class="max-w-xl">
+          <a
+            href="/"
+            aria-label="SleekSign home"
+            class="inline-block font-cursive text-3xl font-semibold leading-none text-foreground sm:text-4xl"
+          >
+            SleekSign
+          </a>
+          <p
+            class="mt-6 max-w-md text-[14px] font-light leading-[1.8] text-muted-foreground"
+          >
+            One calm workspace for preparing, routing, signing, and verifying
+            the documents your team depends on.
+          </p>
+        </div>
+
+        <nav aria-label="Product links">
+          <p
+            class="mb-5 text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground"
+          >
+            Product
+          </p>
+          <ul class="space-y-3 text-[13px] font-light text-foreground/75">
+            <li>
+              <a class="transition-colors hover:text-orange-500" href="/docs"
+                >Workspace</a
+              >
+            </li>
+            <li>
+              <a class="transition-colors hover:text-orange-500" href="/verify"
+                >Verify a document</a
+              >
+            </li>
+            <li>
+              <a
+                class="transition-colors hover:text-orange-500"
+                href="/scan/sleeksign-1esdmd">Codebase scan</a
+              >
+            </li>
+          </ul>
+        </nav>
+
+        <nav aria-label="Account links">
+          <p
+            class="mb-5 text-[9px] font-medium uppercase tracking-[0.2em] text-muted-foreground"
+          >
+            Account
+          </p>
+          <ul class="space-y-3 text-[13px] font-light text-foreground/75">
+            <li>
+              <a class="transition-colors hover:text-orange-500" href="/signin"
+                >Sign in</a
+              >
+            </li>
+            <li>
+              <a class="transition-colors hover:text-orange-500" href="/signup"
+                >Create workspace</a
+              >
+            </li>
+            <li class="text-muted-foreground">
+              © {new Date().getFullYear()} SleekSign
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+  </footer>
 </main>
