@@ -40,6 +40,11 @@ Default roles: Owner, Employee, Contractor.
 3. Apply database migrations
 4. `pnpm dev` → open `/` then `/docs`
 
+## Engineering notes
+
+- [How we use Google Cloud KMS to verify SleekSign documents](docs/blog/how-we-use-google-cloud-kms-to-verify-sleeksign-documents.md)
+- [Document verification operations](DOCUMENT_VERIFICATION.md)
+
 ## License
 
 MIT

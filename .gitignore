@@ -38,7 +38,10 @@ static/uploads/
 public/uploads/
 
 # local agent / one-off tooling (not part of the app)
-/docs/
+/docs/*
+!/docs/blog/
+/docs/blog/*
+!/docs/blog/how-we-use-google-cloud-kms-to-verify-sleeksign-documents.md
 /scripts/
 PLATFORM_BUILD_BRIEF.md
 
