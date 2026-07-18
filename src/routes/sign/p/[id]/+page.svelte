@@ -85,6 +85,10 @@
 	);
 
 	async function sendOtp() {
+		if (!signerName.trim()) {
+			toast.error("Enter your full name");
+			return;
+		}
 		const email = signerEmail.trim();
 		if (!email) {
 			toast.error("Enter your email address");
@@ -101,6 +105,7 @@
 					action: "send",
 					roleName: effectiveSignerRole,
 					copyId: pendingCopyId,
+					signerName: signerName.trim(),
 					recipientEmail: email,
 				}),
 			});
@@ -147,6 +152,10 @@
 		event.preventDefault();
 		if (!signerName.trim()) {
 			toast.error("Enter your full name");
+			return;
+		}
+		if (!signerEmail.trim()) {
+			toast.error("Enter your email address");
 			return;
 		}
 		if (!effectiveSignerRole) {
@@ -266,8 +275,13 @@
 					</div>
 
 					<label class="flex flex-col gap-1.5 text-sm">
+						<span>Your full name</span>
+						<Input bind:value={signerName} autocomplete="name" required class="h-11" />
+					</label>
+
+					<label class="flex flex-col gap-1.5 text-sm">
 						<span>Email address</span>
-						<Input bind:value={signerEmail} type="email" placeholder="john@company.com" class="h-11" />
+						<Input bind:value={signerEmail} type="email" autocomplete="email" placeholder="john@company.com" required class="h-11" />
 					</label>
 
 					{#if otpSent}
@@ -332,12 +346,13 @@
 					</label>
 
 					<label class="flex flex-col gap-1.5 text-sm">
-						<span>Email address{packet?.requireOtp ? "" : " (optional)"}</span>
+						<span>Email address</span>
 						<Input
 							bind:value={signerEmail}
 							type="email"
+							autocomplete="email"
 							placeholder="john@company.com"
-							required={Boolean(packet?.requireOtp)}
+							required
 							class="h-11"
 						/>
 					</label>

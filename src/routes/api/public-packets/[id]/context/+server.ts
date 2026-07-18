@@ -17,6 +17,10 @@ import { finalizeSigningPacket, finalizeSigningPacketCopy } from "@/lib/pdf-engi
 import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
 import { getOtpRecipientEmail, isOtpVerified } from "@/lib/signer-otp";
 import { getOrganizationBranding } from "@/lib/branding";
+import {
+  establishSignerIdentity,
+  resolvePacketSignerIdentity,
+} from "@/lib/signer-identity";
 
 export const GET: RequestHandler = async ({ request: req, params }) => {
   try {
@@ -51,6 +55,12 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
           where: eq(signingPacketCopies.id, copyId),
         })
       : null;
+    if (
+      copyId &&
+      (!copy || copy.packetId !== packet.id || copy.roleName !== roleName)
+    ) {
+      return Response.json({ error: "Signing invitation not found" }, { status: 404 });
+    }
     const scope = roleName
       ? getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode)
       : "shared";
@@ -75,6 +85,7 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
           {
             error: "Verification required",
             verificationRequired: true,
+            signerName: copy?.signerName || "",
             recipientEmail:
               copy?.signerEmail ||
               (await getOtpRecipientEmail({
@@ -87,6 +98,22 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
       }
     }
 
+    const identity = await resolvePacketSignerIdentity({
+      packetId: packet.id,
+      copyId: copyId || null,
+      roleName,
+      requestHeaders: req.headers,
+    });
+    if (!identity) {
+      return Response.json(
+        {
+          error: "Signer identity required",
+          identityRequired: true,
+        },
+        { status: 428 },
+      );
+    }
+
     await emitAuditEvent({
       organizationId: packet.workspaceId,
       teamId: packet.teamId,
@@ -95,7 +122,7 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
       packetId: packet.id,
       packetCopyId: copyId || null,
       actorType: "signer",
-      actorEmail: copy?.signerEmail || null,
+      actorEmail: identity.email,
       eventType: "signer.viewed",
       chainKey: copyId ? `packet-copy:${copyId}` : `packet:${packet.id}`,
       payload: { roleName },
@@ -136,8 +163,8 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
         requireOtp: packet.requireOtp,
         roleName,
         copyId: copyId || null,
-        signerName: copy?.signerName || null,
-        signerEmail: copy?.signerEmail || null,
+        signerName: identity.name,
+        signerEmail: identity.email,
         branding,
         document: {
           ...packet.document,
@@ -161,6 +188,48 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
   }
 }
 
+export const PUT: RequestHandler = async ({ request: req, params }) => {
+  try {
+    const { id } = params;
+    const {
+      roleName,
+      copyId,
+      signerName,
+      signerEmail,
+    }: {
+      roleName?: string;
+      copyId?: string | null;
+      signerName?: string;
+      signerEmail?: string;
+    } = await req.json();
+
+    if (!roleName) {
+      return Response.json({ error: "Role name is required" }, { status: 400 });
+    }
+
+    const identity = await establishSignerIdentity({
+      packetId: id,
+      copyId: copyId || null,
+      roleName,
+      name: signerName || "",
+      email: signerEmail || "",
+      requestHeaders: req.headers,
+    });
+
+    return Response.json({ identity });
+  } catch (error) {
+    return Response.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to confirm signer identity",
+      },
+      { status: 400 },
+    );
+  }
+};
+
 export const PATCH: RequestHandler = async ({ request: req, params }) => {
   try {
     const { id } = params;
@@ -169,15 +238,11 @@ export const PATCH: RequestHandler = async ({ request: req, params }) => {
       roleName,
       copyId,
       value,
-      signerName,
-      signerEmail,
     }: {
       fieldId?: string;
       roleName?: string;
       copyId?: string | null;
       value?: string;
-      signerName?: string;
-      signerEmail?: string;
     } = await req.json();
 
     if (!fieldId || !roleName || typeof value !== "string") {
@@ -201,6 +266,18 @@ export const PATCH: RequestHandler = async ({ request: req, params }) => {
         { status: 403 },
       );
     }
+    const identity = await resolvePacketSignerIdentity({
+      packetId: packet.id,
+      copyId: copyId || null,
+      roleName,
+      requestHeaders: req.headers,
+    });
+    if (!identity) {
+      return Response.json(
+        { error: "Full name and email address are required" },
+        { status: 428 },
+      );
+    }
 
     const targetField = packet.document.fields.find((field) => field.id === fieldId);
     if (!targetField || targetField.assigneeRole !== roleName) {
@@ -218,8 +295,8 @@ export const PATCH: RequestHandler = async ({ request: req, params }) => {
       fieldId,
       roleName,
       value,
-      signerName,
-      signerEmail,
+      signerName: identity.name,
+      signerEmail: identity.email,
     });
 
     await emitAuditEvent({
@@ -230,7 +307,7 @@ export const PATCH: RequestHandler = async ({ request: req, params }) => {
       packetId: packet.id,
       packetCopyId: scope === "shared" ? null : copyId || null,
       actorType: "signer",
-      actorEmail: signerEmail || null,
+      actorEmail: identity.email,
       eventType: "field.completed",
       chainKey:
         scope === "shared"
@@ -256,14 +333,10 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
     const {
       roleName,
       copyId,
-      signerName,
-      signerEmail,
       values,
     }: {
       roleName?: string;
       copyId?: string | null;
-      signerName?: string;
-      signerEmail?: string;
       values?: Record<string, string>;
     } = await req.json();
 
@@ -286,6 +359,18 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       return Response.json(
         { error: "Verification required" },
         { status: 403 },
+      );
+    }
+    const identity = await resolvePacketSignerIdentity({
+      packetId: packet.id,
+      copyId: copyId || null,
+      roleName,
+      requestHeaders: req.headers,
+    });
+    if (!identity) {
+      return Response.json(
+        { error: "Full name and email address are required" },
+        { status: 428 },
       );
     }
     const visibleFields = getVisibleFieldsForSigner({
@@ -343,8 +428,8 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
         fieldId,
         roleName,
         value,
-        signerName,
-        signerEmail,
+        signerName: identity.name,
+        signerEmail: identity.email,
       });
     }
 
@@ -386,8 +471,8 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       const finalizedPacket = await finalizeSigningPacket({
         packetId: packet.id,
         roleName,
-        signerName: signerName || null,
-        signerEmail: signerEmail || null,
+        signerName: identity.name,
+        signerEmail: identity.email,
       });
 
       if (finalizedPacket) {
@@ -403,7 +488,7 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
           documentId: packet.document.id,
           packetId: packet.id,
           actorType: "signer",
-          actorEmail: signerEmail || null,
+          actorEmail: identity.email,
           eventType: "packet.finalized",
           chainKey: `packet:${packet.id}`,
           payload: { roleName, storageProvider: "r2" },
@@ -429,8 +514,8 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       packetId: packet.id,
       copyId,
       roleName,
-      signerName: signerName || null,
-      signerEmail: signerEmail || null,
+      signerName: identity.name,
+      signerEmail: identity.email,
     });
 
     await completePacketCopy(copyId, finalizedCopy.url, finalizedCopy.storageKey);
@@ -466,7 +551,7 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       packetId: packet.id,
       packetCopyId: copyId,
       actorType: "signer",
-      actorEmail: signerEmail || null,
+      actorEmail: identity.email,
       eventType: "packet-copy.finalized",
       chainKey: `packet-copy:${copyId}`,
       payload: { roleName, storageProvider: "r2" },

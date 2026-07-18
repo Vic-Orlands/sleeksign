@@ -33,6 +33,7 @@ export async function createOtpChallenge(input: {
   packetId: string;
   copyId?: string | null;
   roleName: string;
+  signerName: string;
   recipientEmail: string;
   requestHeaders: Headers;
 }) {
@@ -63,7 +64,9 @@ export async function createOtpChallenge(input: {
     packetId: packet.id,
     copyId: input.copyId || null,
     roleName: input.roleName,
+    signerName: input.signerName,
     recipientEmail: input.recipientEmail,
+    verificationMethod: "email_otp",
     codeHash: hashValue(code),
     verificationToken: token,
     expiresAt: new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000),
@@ -124,6 +127,7 @@ export async function verifyOtpChallenge(input: {
     where: and(
       eq(signerVerificationChallenges.packetId, input.packetId),
       eq(signerVerificationChallenges.roleName, input.roleName),
+      eq(signerVerificationChallenges.verificationMethod, "email_otp"),
       input.copyId
         ? eq(signerVerificationChallenges.copyId, input.copyId)
         : isNull(signerVerificationChallenges.copyId),
@@ -218,6 +222,7 @@ export async function isOtpVerified(input: {
     where: and(
       eq(signerVerificationChallenges.packetId, input.packetId),
       eq(signerVerificationChallenges.roleName, input.roleName),
+      eq(signerVerificationChallenges.verificationMethod, "email_otp"),
       input.copyId
         ? eq(signerVerificationChallenges.copyId, input.copyId)
         : isNull(signerVerificationChallenges.copyId),
@@ -231,6 +236,44 @@ export async function isOtpVerified(input: {
       challenge.verificationToken === token &&
       challenge.expiresAt.getTime() >= Date.now(),
   );
+}
+
+export async function getVerifiedOtpIdentity(input: {
+  packetId: string;
+  copyId?: string | null;
+  roleName: string;
+}) {
+  const event = getRequestEvent();
+  const token = event.cookies.get(
+    getCookieName(input.packetId, input.roleName, input.copyId),
+  );
+  if (!token) return null;
+
+  const challenge = await db.query.signerVerificationChallenges.findFirst({
+    where: and(
+      eq(signerVerificationChallenges.packetId, input.packetId),
+      eq(signerVerificationChallenges.roleName, input.roleName),
+      eq(signerVerificationChallenges.verificationMethod, "email_otp"),
+      input.copyId
+        ? eq(signerVerificationChallenges.copyId, input.copyId)
+        : isNull(signerVerificationChallenges.copyId),
+    ),
+    orderBy: [desc(signerVerificationChallenges.createdAt)],
+  });
+
+  if (
+    !challenge?.verifiedAt ||
+    !challenge.signerName ||
+    challenge.verificationToken !== token ||
+    challenge.expiresAt.getTime() < Date.now()
+  ) {
+    return null;
+  }
+
+  return {
+    name: challenge.signerName,
+    email: challenge.recipientEmail,
+  };
 }
 
 export async function getOtpRecipientEmail(input: {

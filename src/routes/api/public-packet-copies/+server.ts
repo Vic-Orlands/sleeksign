@@ -3,6 +3,10 @@ import type { RequestHandler } from "./$types";
 import { createPacketCopy, getPacket } from "@/lib/signing-workflows";
 import { getStorageScopeForRole } from "@/lib/signing-workflows";
 import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
+import {
+  establishSignerIdentity,
+  parseSignerIdentity,
+} from "@/lib/signer-identity";
 
 export const POST: RequestHandler = async ({ request: req }) => {
   try {
@@ -25,18 +29,29 @@ export const POST: RequestHandler = async ({ request: req }) => {
       );
     }
 
+    const identity = parseSignerIdentity({
+      name: signerName,
+      email: signerEmail,
+    });
     const packet = await getPacket(packetId);
     const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
 
     if (scope === "shared") {
+      await establishSignerIdentity({
+        packetId: packet.id,
+        roleName,
+        name: identity.name,
+        email: identity.email,
+        requestHeaders: req.headers,
+      });
       return Response.json({ copyId: null, shared: true });
     }
 
     const copyId = await createPacketCopy({
       packetId,
       roleName,
-      signerName,
-      signerEmail,
+      signerName: identity.name,
+      signerEmail: identity.email,
       teamId: packet.teamId,
     });
 
@@ -48,13 +63,13 @@ export const POST: RequestHandler = async ({ request: req }) => {
       packetId: packet.id,
       packetCopyId: copyId,
       actorType: "signer",
-      actorEmail: signerEmail || null,
+      actorEmail: identity.email,
       eventType: "packet-copy.created",
       chainKey: `packet-copy:${copyId}`,
       payload: {
         roleName,
-        signerName: signerName || null,
-        signerEmail: signerEmail || null,
+        signerName: identity.name,
+        signerEmail: identity.email,
       },
       ...getRequestAuditContext(req.headers),
     });
@@ -63,8 +78,13 @@ export const POST: RequestHandler = async ({ request: req }) => {
   } catch (error) {
     console.error("Public packet copy create error:", error);
     return Response.json(
-      { error: "Failed to create signer copy" },
-      { status: 500 },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to create signer copy",
+      },
+      { status: 400 },
     );
   }
 }

@@ -6,6 +6,7 @@ import { signingPacketCopies } from "@/db/schema";
 import { getR2ObjectStream } from "@/lib/r2-storage";
 import { isOtpVerified } from "@/lib/signer-otp";
 import { getPacket } from "@/lib/signing-workflows";
+import { resolvePacketSignerIdentity } from "@/lib/signer-identity";
 
 export const GET: RequestHandler = async ({ request: req, params }) => {
   try {
@@ -24,7 +25,11 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
         where: eq(signingPacketCopies.id, copyId),
       });
 
-      if (!copy || copy.packetId !== packet.id) {
+      if (
+        !copy ||
+        copy.packetId !== packet.id ||
+        copy.roleName !== roleName
+      ) {
         return Response.json({ error: "Document not found" }, { status: 404 });
       }
     }
@@ -38,6 +43,19 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
       }))
     ) {
       return Response.json({ error: "Verification required" }, { status: 403 });
+    }
+
+    const identity = await resolvePacketSignerIdentity({
+      packetId: packet.id,
+      copyId: copyId || null,
+      roleName,
+      requestHeaders: req.headers,
+    });
+    if (!identity) {
+      return Response.json(
+        { error: "Full name and email address are required" },
+        { status: 428 },
+      );
     }
 
     if (packet.document.uploadStatus !== "ready" || !packet.document.storageKey) {

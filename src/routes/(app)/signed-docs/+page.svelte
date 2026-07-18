@@ -117,8 +117,20 @@
 						createdAt: copy.createdAt,
 					}),
 					documentName: document.name,
-					signerName: copy.signerName || copy.roleName,
-					signerEmail: copy.signerEmail || null,
+					signerName:
+						copy.signerName ||
+						(copySession?.signerName === copy.roleName
+							? null
+							: copySession?.signerName) ||
+						(sharedSession?.signerName === copy.roleName
+							? null
+							: sharedSession?.signerName) ||
+						null,
+					signerEmail:
+						copy.signerEmail ||
+						copySession?.signerEmail ||
+						sharedSession?.signerEmail ||
+						null,
 					signerRole: copy.roleName,
 					status: completedSession ? "completed" : "pending",
 					completedAt: completedSession?.completedAt || null,
@@ -140,7 +152,10 @@
 					status: "pending" as const,
 				}),
 				documentName: document.name,
-				signerName: session?.signerName || role.name,
+				signerName:
+					session?.signerName === role.name
+						? null
+						: session?.signerName || null,
 				signerRole: role.name,
 				finalizedFileUrl: session?.finalizedFileUrl || packet.finalizedFileUrl || null,
 				finalizedStorageKey: session?.finalizedStorageKey || packet.finalizedStorageKey || null,

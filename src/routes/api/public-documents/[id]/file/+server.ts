@@ -30,6 +30,13 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
       return Response.json({ error: "Document not found" }, { status: 404 });
     }
 
+    if (!session.signerName?.trim() || !session.signerEmail?.trim()) {
+      return Response.json(
+        { error: "Full name and email address are required" },
+        { status: 428 },
+      );
+    }
+
     const url = await createReadUrl(session.document.storageKey, {
       inlineName: session.document.name,
     });

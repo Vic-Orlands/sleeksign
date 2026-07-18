@@ -48,6 +48,12 @@ export const POST: RequestHandler = async ({ request: req }) => {
           { status: 400 },
         );
       }
+      if (!signerName?.trim() || !signerEmail?.trim()) {
+        return Response.json(
+          { error: "Full name and email address are required" },
+          { status: 428 },
+        );
+      }
 
       const packet = await getPacket(packetId);
       const visibleFields = getVisibleFieldsForSigner({
@@ -175,6 +181,13 @@ export const POST: RequestHandler = async ({ request: req }) => {
 
     if (!session?.document) {
       return Response.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    if (!session.signerName?.trim() || !session.signerEmail?.trim()) {
+      return Response.json(
+        { error: "Full name and email address are required" },
+        { status: 428 },
+      );
     }
 
     if (session.status === "completed" && session.finalizedFileUrl) {

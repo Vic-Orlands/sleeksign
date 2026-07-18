@@ -4,25 +4,39 @@ import { sessions, signatures } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { parseSignerRoles } from "@/lib/field-utils";
+import { parseSignerIdentity } from "@/lib/signer-identity";
 
 export const POST: RequestHandler = async ({ request: req }) => {
   try {
     const { documentId, signerName, signerEmail, signerRole } = await req.json();
+    if (!documentId || !signerRole) {
+      return Response.json(
+        { error: "Document and signer role are required" },
+        { status: 400 },
+      );
+    }
+    const identity = parseSignerIdentity({
+      name: signerName,
+      email: signerEmail,
+    });
     const sessionId = nanoid();
 
     await db.insert(sessions).values({
       id: sessionId,
       documentId,
-      signerName: signerName || null,
-      signerEmail: signerEmail || null,
-      signerRole: signerRole || null,
+      signerName: identity.name,
+      signerEmail: identity.email,
+      signerRole,
     });
 
     return Response.json({ sessionId });
-  } catch {
+  } catch (error) {
     return Response.json(
-      { error: "Failed to create session" },
-      { status: 500 },
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to create session",
+      },
+      { status: 400 },
     );
   }
 }
@@ -48,6 +62,13 @@ export const GET: RequestHandler = async ({ request: req }) => {
 
   if (!session)
     return Response.json({ error: "Session not found" }, { status: 404 });
+
+  if (!session.signerName?.trim() || !session.signerEmail?.trim()) {
+    return Response.json(
+      { error: "Full name and email address are required" },
+      { status: 428 },
+    );
+  }
 
   // Update session with metadata if not already completed
   if (session.status !== "completed") {

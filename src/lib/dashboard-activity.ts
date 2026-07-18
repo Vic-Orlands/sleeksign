@@ -121,7 +121,7 @@ function buildPacketSessions(
           document.verifications?.find(
             (item) => item.artifactType === "packet" && item.artifactId === packet.id,
           )?.id || null,
-        signerName: firstValue?.signerName || role.name,
+        signerName: firstValue?.signerName || null,
         signerEmail: firstValue?.signerEmail || null,
         signerRole: role.name,
         createdAt: firstValue?.createdAt || packet.createdAt,
@@ -139,7 +139,7 @@ function buildPacketSessions(
     status: copy.status === "completed" ? "completed" : "pending",
     finalizedFileUrl: copy.finalizedFileUrl || null,
     finalizedStorageKey: copy.finalizedStorageKey || null,
-    signerName: copy.signerName || copy.roleName,
+    signerName: copy.signerName || null,
     signerEmail: copy.signerEmail || null,
     signerRole: copy.roleName,
     createdAt: copy.createdAt,

@@ -25,6 +25,11 @@
   };
 
   let context = $state<PacketContext | null>(null);
+  let identityRequired = $state(false);
+  let identityName = $state("");
+  let identityEmail = $state("");
+  let identityError = $state("");
+  let identityBusy = $state(false);
   let otpRequired = $state(false);
   let otpSent = $state(false);
   let otpEmail = $state("");
@@ -56,9 +61,25 @@
       const body = await res.json();
       if (res.status === 403 && body?.verificationRequired) {
         otpRequired = true;
+        identityRequired = false;
         otpSent = false;
         otpCode = "";
+        identityName = body.signerName || identityName;
         otpEmail = body.recipientEmail || "";
+        context = null;
+        if (!documentName) {
+          void fetch(`/api/public-packets/${packetId}`)
+            .then(async (packetRes) => {
+              const packetBody = await packetRes.json();
+              if (packetRes.ok) documentName = packetBody.document?.name || "";
+            })
+            .catch(() => undefined);
+        }
+        return;
+      }
+      if (res.status === 428 && body?.identityRequired) {
+        identityRequired = true;
+        otpRequired = false;
         context = null;
         if (!documentName) {
           void fetch(`/api/public-packets/${packetId}`)
@@ -81,6 +102,7 @@
           : "Your part is complete. Waiting for the remaining parties.";
       }
       documentName = body.document?.name || "";
+      identityRequired = false;
       otpRequired = false;
       otpSent = false;
     } catch (error) {
@@ -114,8 +136,8 @@
   }
 
   async function sendOtp() {
-    if (!otpEmail.trim()) {
-      toast.error("Enter your email address");
+    if (!identityName.trim() || !otpEmail.trim()) {
+      toast.error("Enter your full name and email address");
       return;
     }
     otpBusy = true;
@@ -127,6 +149,7 @@
           action: "send",
           roleName,
           copyId: copyId || null,
+          signerName: identityName.trim(),
           recipientEmail: otpEmail.trim(),
         }),
       });
@@ -137,6 +160,40 @@
       toast.error("Unable to send verification code");
     } finally {
       otpBusy = false;
+    }
+  }
+
+  async function confirmIdentity() {
+    identityError = "";
+    if (!identityName.trim() || !identityEmail.trim()) {
+      identityError = "Enter your full name and email address.";
+      return;
+    }
+
+    identityBusy = true;
+    try {
+      const res = await fetch(`/api/public-packets/${packetId}/context`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roleName,
+          copyId: copyId || null,
+          signerName: identityName.trim(),
+          signerEmail: identityEmail.trim(),
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error || "Unable to confirm your identity");
+      }
+      await loadContext();
+    } catch (error) {
+      identityError =
+        error instanceof Error
+          ? error.message
+          : "Unable to confirm your identity";
+    } finally {
+      identityBusy = false;
     }
   }
 
@@ -309,11 +366,24 @@
         </div>
 
         <label class="flex flex-col gap-1.5 text-sm">
+          <span>Your full name</span>
+          <Input
+            bind:value={identityName}
+            autocomplete="name"
+            placeholder="John Doe"
+            required
+            class="h-11"
+          />
+        </label>
+
+        <label class="flex flex-col gap-1.5 text-sm">
           <span>Email address</span>
           <Input
             bind:value={otpEmail}
             type="email"
+            autocomplete="email"
             placeholder="Recipient email"
+            required
             class="h-11"
           />
         </label>
@@ -345,6 +415,95 @@
             </button>
           {/if}
         </div>
+      </form>
+    </main>
+  </div>
+{:else if identityRequired}
+  <div class="flex min-h-screen items-center justify-center bg-(--paper) p-6">
+    <main
+      class="grid w-full max-w-5xl overflow-hidden border border-border bg-card lg:grid-cols-[0.9fr_1.1fr]"
+    >
+      <section
+        class="sleek-grid border-b border-border bg-background p-8 lg:border-b-0 lg:border-r"
+      >
+        <h1
+          class="mt-6 max-w-72 font-mono text-2xl font-semibold uppercase leading-tight sm:max-w-full sm:text-3xl"
+        >
+          Identify before signing
+        </h1>
+        <p class="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
+          Your legal name and email become part of the document’s signing
+          history and audit trail.
+        </p>
+        {#if documentName}
+          <div class="mt-8">
+            <p
+              class="font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground"
+            >
+              Document
+            </p>
+            <h2 class="truncate font-semibold">{documentName}</h2>
+          </div>
+        {/if}
+      </section>
+
+      <form
+        class="flex flex-col gap-5 p-8"
+        aria-describedby={identityError ? "identity-error" : undefined}
+        onsubmit={(event) => {
+          event.preventDefault();
+          void confirmIdentity();
+        }}
+      >
+        <div>
+          <h2 class="font-mono text-xs font-semibold uppercase tracking-wider">
+            Before you continue
+          </h2>
+          <p class="mt-1 text-sm text-muted-foreground">
+            Enter the identity that should appear for the
+            <strong>{roleName}</strong> signer.
+          </p>
+        </div>
+
+        <label class="flex flex-col gap-1.5 text-sm">
+          <span>Your full name</span>
+          <Input
+            bind:value={identityName}
+            autocomplete="name"
+            placeholder="John Doe"
+            required
+            aria-invalid={Boolean(identityError)}
+            class="h-11"
+          />
+        </label>
+
+        <label class="flex flex-col gap-1.5 text-sm">
+          <span>Email address</span>
+          <Input
+            bind:value={identityEmail}
+            type="email"
+            autocomplete="email"
+            placeholder="john@company.com"
+            required
+            aria-invalid={Boolean(identityError)}
+            class="h-11"
+          />
+        </label>
+
+        {#if identityError}
+          <p id="identity-error" class="text-sm text-destructive" aria-live="polite">
+            {identityError}
+          </p>
+        {/if}
+
+        <Button
+          type="submit"
+          class="w-full"
+          loading={identityBusy}
+          loadingText="Confirming..."
+        >
+          Continue to document
+        </Button>
       </form>
     </main>
   </div>

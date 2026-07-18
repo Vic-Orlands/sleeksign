@@ -6,9 +6,10 @@ import { getPacket } from "@/lib/signing-workflows";
 export const POST: RequestHandler = async ({ request: req, params }) => {
   try {
     const { id } = params;
-    const { roleName, copyId, recipientEmail, code, action } = (await req.json()) as {
+    const { roleName, copyId, signerName, recipientEmail, code, action } = (await req.json()) as {
       roleName?: string;
       copyId?: string | null;
+      signerName?: string;
       recipientEmail?: string;
       code?: string;
       action?: "send" | "verify";
@@ -39,9 +40,9 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       return Response.json(result);
     }
 
-    if (!recipientEmail?.trim()) {
+    if (!signerName?.trim() || !recipientEmail?.trim()) {
       return Response.json(
-        { error: "Recipient email is required" },
+        { error: "Full name and email address are required" },
         { status: 400 },
       );
     }
@@ -50,6 +51,7 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       packetId: packet.id,
       copyId: copyId || null,
       roleName,
+      signerName: signerName.trim(),
       recipientEmail: recipientEmail.trim(),
       requestHeaders: req.headers,
     });
