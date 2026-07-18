@@ -523,7 +523,7 @@
             <li>
               <a
                 class="transition-colors hover:text-orange-500"
-                href="/scan/sleeksign-1esdmd">Codebase scan</a
+                href="/architecture">Architecture</a
               >
             </li>
           </ul>

@@ -74,8 +74,6 @@ export type FoldedGraph = {
 	edges: ScanEdge[];
 };
 
-export const SCAN_PUBLIC_SLUG = "sleeksign-1esdmd";
-
 const topIntegrations: RailItem[] = [
 	{ id: "neon", label: "Neon Postgres", domain: "neon.tech" },
 	{ id: "cloudflare", label: "Cloudflare R2", domain: "cloudflare.com" },

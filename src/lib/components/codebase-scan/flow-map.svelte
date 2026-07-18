@@ -250,32 +250,40 @@
 
 <section class="absolute inset-0 z-10">
 	<div
-		class="absolute right-6 bottom-[88px] z-[25] flex flex-col gap-2 max-[760px]:right-3 max-[760px]:bottom-[76px]"
-		role="group"
-		aria-label="Zoom"
+		class="absolute right-6 bottom-6 z-[25] flex flex-col items-end gap-3 max-[760px]:right-3 max-[760px]:bottom-3"
 	>
-		<button
-			type="button"
-			class="grid size-9 cursor-pointer place-items-center rounded-lg border border-border bg-background text-foreground hover:bg-[color-mix(in_oklab,var(--background)_88%,var(--foreground))]"
-			aria-label="Zoom in"
-			onclick={(event) => {
-				event.stopPropagation();
-				zoomBy(1.25);
-			}}
+		<div class="flex flex-col gap-2" role="group" aria-label="Zoom">
+			<button
+				type="button"
+				class="grid size-9 cursor-pointer place-items-center rounded-lg border border-border bg-background text-foreground hover:bg-[color-mix(in_oklab,var(--background)_88%,var(--foreground))]"
+				aria-label="Zoom in"
+				onclick={(event) => {
+					event.stopPropagation();
+					zoomBy(1.25);
+				}}
+			>
+				<MagnifyingGlassPlus class="size-4" aria-hidden="true" />
+			</button>
+			<button
+				type="button"
+				class="grid size-9 cursor-pointer place-items-center rounded-lg border border-border bg-background text-foreground hover:bg-[color-mix(in_oklab,var(--background)_88%,var(--foreground))]"
+				aria-label="Zoom out"
+				onclick={(event) => {
+					event.stopPropagation();
+					zoomBy(0.8);
+				}}
+			>
+				<MagnifyingGlassMinus class="size-4" aria-hidden="true" />
+			</button>
+		</div>
+		<a
+			href="https://www.foglamp.dev/scan"
+			target="_blank"
+			rel="noreferrer"
+			class="rounded-md border border-border bg-background/92 px-2 py-1 text-[10px] text-muted-foreground no-underline transition-colors hover:text-foreground"
 		>
-			<MagnifyingGlassPlus class="size-4" aria-hidden="true" />
-		</button>
-		<button
-			type="button"
-			class="grid size-9 cursor-pointer place-items-center rounded-lg border border-border bg-background text-foreground hover:bg-[color-mix(in_oklab,var(--background)_88%,var(--foreground))]"
-			aria-label="Zoom out"
-			onclick={(event) => {
-				event.stopPropagation();
-				zoomBy(0.8);
-			}}
-		>
-			<MagnifyingGlassMinus class="size-4" aria-hidden="true" />
-		</button>
+			Reference: FogLamp
+		</a>
 	</div>
 	<div
 		bind:this={viewportEl}
