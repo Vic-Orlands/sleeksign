@@ -27,7 +27,7 @@
 	let pageEl = $state<HTMLDivElement | null>(null);
 	let canvasEl = $state<HTMLCanvasElement | null>(null);
 	let metrics = $state<PageMetrics | null>(null);
-	let shouldRender = $state(pageIndex === 0);
+	let shouldRender = $state(false);
 	let renderedKey = $state("");
 
 	function isCancelledRenderError(error: unknown) {
@@ -38,6 +38,10 @@
 			(error as { name?: string }).name === "RenderingCancelledException"
 		);
 	}
+
+	$effect(() => {
+		if (pageIndex === 0) shouldRender = true;
+	});
 
 	$effect(() => {
 		let cancelled = false;
@@ -159,8 +163,12 @@
 	});
 
 	function handleOverlayClick(event: MouseEvent) {
-		if (!onPageClick || event.target !== event.currentTarget || !metrics) return;
+		if (!onPageClick || !metrics) return;
 		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+		if (event.detail === 0) {
+			onPageClick(pageIndex, { x: 50, y: 50 });
+			return;
+		}
 		onPageClick(pageIndex, {
 			x: ((event.clientX - rect.left) / rect.width) * 100,
 			y: ((event.clientY - rect.top) / rect.height) * 100,
@@ -189,8 +197,15 @@
 		</div>
 	{/if}
 	{#if metrics && shouldRender}
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="absolute inset-0" onclick={handleOverlayClick}>
+		<div class="absolute inset-0">
+			{#if onPageClick}
+				<button
+					type="button"
+					class="absolute inset-0 cursor-crosshair"
+					aria-label={`Add field to page ${pageIndex + 1}`}
+					onclick={handleOverlayClick}
+				></button>
+			{/if}
 			{@render renderOverlay?.(pageIndex, metrics)}
 		</div>
 	{/if}

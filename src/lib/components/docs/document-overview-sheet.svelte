@@ -129,7 +129,7 @@
 			aria-label="Close overview"
 			onclick={close}
 		></button>
-		<aside
+		<div
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="document-overview-title"
@@ -433,6 +433,6 @@
 					</Button>
 				{/if}
 			</div>
-		</aside>
+		</div>
 	</div>
 {/if}

@@ -13,7 +13,6 @@ import {
   Text,
 } from "@react-email/components";
 import { render } from "@react-email/render";
-import React from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 type EmailBranding = {

@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { onMount } from "svelte";
-	import SignaturePad from "signature_pad";
+	import type SignaturePad from "signature_pad";
 	import Dialog from "$lib/components/ui/dialog.svelte";
 	import DialogContent from "$lib/components/ui/dialog-content.svelte";
 	import DialogHeader from "$lib/components/ui/dialog-header.svelte";
@@ -42,10 +41,6 @@
 		return isImageDataUrl(value) ? "" : value;
 	}
 
-	onMount(() => {
-		return () => pad?.off();
-	});
-
 	$effect(() => {
 		const isOpen = open;
 		if (isOpen && !wasOpen) {
@@ -61,20 +56,30 @@
 
 	$effect(() => {
 		if (!open || type !== "signature" || activeTab !== "draw" || !canvasEl) return;
-		const instance = new SignaturePad(canvasEl, {
-			penColor: "black",
-			minWidth: 1.5,
-			maxWidth: 4,
+		const canvas = canvasEl;
+		let disposed = false;
+		let instance: SignaturePad | null = null;
+		let onEnd: (() => void) | null = null;
+
+		void import("signature_pad").then(({ default: SignaturePadConstructor }) => {
+			if (disposed) return;
+			instance = new SignaturePadConstructor(canvas, {
+				penColor: "black",
+				minWidth: 1.5,
+				maxWidth: 4,
+			});
+			pad = instance;
+			onEnd = () => {
+				drawHasContent = !instance?.isEmpty();
+			};
+			instance.addEventListener("endStroke", onEnd);
 		});
-		pad = instance;
-		const onEnd = () => {
-			drawHasContent = !instance.isEmpty();
-		};
-		instance.addEventListener("endStroke", onEnd);
+
 		return () => {
-			instance.removeEventListener("endStroke", onEnd);
-			instance.off();
-			pad = null;
+			disposed = true;
+			if (instance && onEnd) instance.removeEventListener("endStroke", onEnd);
+			instance?.off();
+			if (pad === instance) pad = null;
 		};
 	});
 
