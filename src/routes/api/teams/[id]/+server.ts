@@ -3,20 +3,19 @@ import crypto from "crypto";
 import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { memberRoleAssignments, teamMembers, teams } from "@/db/schema";
+import { teamMembers, teams } from "@/db/schema";
 import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
 import { AccessError, requireWorkspaceAccess } from "@/lib/server-access";
 
 export const PATCH: RequestHandler = async ({ request: req, params }) => {
   try {
     const { id } = params;
-    const { workspaceId, name, description, memberIds, roleAssignmentIds } =
+    const { workspaceId, name, description, memberIds } =
       (await req.json()) as {
         workspaceId?: string;
         name?: string;
         description?: string;
         memberIds?: string[];
-        roleAssignmentIds?: string[];
       };
 
     if (!workspaceId) {
@@ -62,23 +61,6 @@ export const PATCH: RequestHandler = async ({ request: req, params }) => {
             organizationId: workspaceId,
             teamId: id,
             memberId,
-          })),
-        );
-      }
-    }
-
-    if (Array.isArray(roleAssignmentIds)) {
-      await db.delete(memberRoleAssignments).where(eq(memberRoleAssignments.teamId, id));
-      if (roleAssignmentIds.length > 0) {
-        const now = new Date();
-        await db.insert(memberRoleAssignments).values(
-          roleAssignmentIds.map((assignmentId) => ({
-            id: crypto.randomUUID(),
-            organizationId: workspaceId,
-            memberId: assignmentId.split(":")[0] || "",
-            roleId: assignmentId.split(":")[1] || "",
-            teamId: id,
-            createdAt: now,
           })),
         );
       }

@@ -20,6 +20,7 @@
 	let busyWorkspaceId = $state("");
 	let isContinuingWithoutWorkspace = $state(false);
 	let handledAutoSelection = $state(false);
+	let loadingDialogEl = $state<HTMLDivElement | null>(null);
 
 	const session = $derived($sessionStore.data);
 	const authOrganizations = $derived($organizationsStore.data);
@@ -34,6 +35,11 @@
 	const dialogOpen = $derived(
 		Boolean(session && authOrganizations !== null && !preferredWorkspace),
 	);
+
+	$effect(() => {
+		if (dialogOpen || !loadingDialogEl) return;
+		loadingDialogEl.focus({ preventScroll: true });
+	});
 
 	$effect(() => {
 		if (sessionPending) return;
@@ -198,28 +204,42 @@
 			</div>
 		</div>
 	{:else}
-		<div class="flex items-center gap-3 text-sm text-muted-foreground">
-			<svg
-				class="size-4 animate-spin text-foreground"
-				viewBox="0 0 24 24"
-				fill="none"
-				aria-hidden="true"
+		<div
+			bind:this={loadingDialogEl}
+			class="fixed inset-0 z-50 flex items-center justify-center bg-background/65 p-4 backdrop-blur-[1px]"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="workspace-loading-title"
+			aria-busy="true"
+			tabindex="-1"
+		>
+			<div
+				class="flex w-full max-w-sm items-center gap-3 border border-border bg-popover px-5 py-4 shadow-[0_24px_80px_rgba(0,0,0,0.18)]"
 			>
-				<circle
-					class="opacity-25"
-					cx="12"
-					cy="12"
-					r="10"
-					stroke="currentColor"
-					stroke-width="4"
-				/>
-				<path
-					class="opacity-75"
-					fill="currentColor"
-					d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-				/>
-			</svg>
-			Preparing your workspace access...
+				<svg
+					class="size-4 shrink-0 animate-spin text-foreground motion-reduce:animate-none"
+					viewBox="0 0 24 24"
+					fill="none"
+					aria-hidden="true"
+				>
+					<circle
+						class="opacity-25"
+						cx="12"
+						cy="12"
+						r="10"
+						stroke="currentColor"
+						stroke-width="4"
+					/>
+					<path
+						class="opacity-75"
+						fill="currentColor"
+						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+					/>
+				</svg>
+				<p id="workspace-loading-title" class="text-sm font-medium text-foreground">
+					Preparing your workspace access...
+				</p>
+			</div>
 		</div>
 	{/if}
 </main>

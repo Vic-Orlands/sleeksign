@@ -8,6 +8,8 @@ import {
 	verifyCustomDomain,
 } from "@/lib/branding";
 import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
+import { buildDomainRequestEmail } from "@/lib/email/messages";
+import { sendTransactionalEmail } from "@/lib/email/send-email";
 import { AccessError, requireWorkspaceAccess } from "@/lib/server-access";
 
 export type BrandingPayload = {
@@ -93,7 +95,30 @@ export async function requestDomain(
 	const normalized = hostname.trim().toLowerCase();
 	if (!normalized) throw new AccessError("Domain is required", 400);
 
+	const notificationEmail = process.env.RESEND_FROM_EMAIL?.trim();
+	const appUrl = process.env.BETTER_AUTH_URL?.trim();
+	if (!notificationEmail) {
+		throw new Error("RESEND_FROM_EMAIL is required for domain requests");
+	}
+	if (!appUrl) {
+		throw new Error("BETTER_AUTH_URL is required for domain requests");
+	}
+
 	const result = await createOrUpdateCustomDomain(workspaceId, normalized);
+	const txtName = `_sleeksign.${result.hostname}`;
+	const message = await buildDomainRequestEmail({
+		hostname: result.hostname,
+		txtName,
+		txtValue: result.verificationToken,
+		workspaceName: access.workspace?.name || "A SleekSign workspace",
+		settingsUrl: new URL("/settings", appUrl).toString(),
+	});
+	await sendTransactionalEmail({
+		to: notificationEmail,
+		subject: message.subject,
+		html: message.html,
+	});
+
 	await emitAuditEvent({
 		organizationId: workspaceId,
 		workspaceId,
@@ -101,7 +126,7 @@ export async function requestDomain(
 		actorId: access.membership.userId,
 		eventType: "domain.requested",
 		chainKey: `workspace:${workspaceId}`,
-		payload: { hostname: result.hostname },
+		payload: { hostname: result.hostname, txtName },
 		...getRequestAuditContext(headers),
 	});
 	return result;
@@ -111,11 +136,15 @@ export async function verifyDomain(
 	headers: HeadersInit,
 	workspaceId: string,
 	domainId: string,
-	verificationToken: string,
 ) {
 	const access = await requireWorkspaceAccess(headers, workspaceId, "branding:manage");
-	const verified = await verifyCustomDomain(workspaceId, domainId, verificationToken);
-	if (!verified) throw new AccessError("Unable to verify domain", 400);
+	const verified = await verifyCustomDomain(workspaceId, domainId);
+	if (!verified) {
+		throw new AccessError(
+			"TXT record not found yet. Check the record name and value, then try again.",
+			400,
+		);
+	}
 
 	await emitAuditEvent({
 		organizationId: workspaceId,

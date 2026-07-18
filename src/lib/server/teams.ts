@@ -1,18 +1,14 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { db } from "@/db";
 import {
 	authMember,
 	authUser,
-	memberRoleAssignments,
-	permissionRolePermissions,
-	permissionRoles,
 	teamMembers,
 	teams,
 } from "@/db/schema";
 import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
-import { getSystemRoleDefinitions } from "@/lib/enterprise-access";
 import { AccessError, requireWorkspaceAccess } from "@/lib/server-access";
 
 export type TeamSummary = {
@@ -37,12 +33,11 @@ export async function listTeams(
 		return {
 			teams: teamRows as TeamSummary[],
 			members: [],
-			roles: [],
 			permissions: Array.from(access.permissions),
 		};
 	}
 
-	const [teamRows, teamMemberships, members, roles, assignments, rolePermissions] =
+	const [teamRows, teamMemberships, members] =
 		await Promise.all([
 			db.query.teams.findMany({
 				where: eq(teams.organizationId, access.workspaceId),
@@ -53,13 +48,6 @@ export async function listTeams(
 			db.query.authMember.findMany({
 				where: eq(authMember.organizationId, access.workspaceId),
 			}),
-			db.query.permissionRoles.findMany({
-				where: eq(permissionRoles.organizationId, access.workspaceId),
-			}),
-			db.query.memberRoleAssignments.findMany({
-				where: eq(memberRoleAssignments.organizationId, access.workspaceId),
-			}),
-			db.query.permissionRolePermissions.findMany(),
 		]);
 
 	const users = members.length
@@ -82,20 +70,7 @@ export async function listTeams(
 			teamIds: teamMemberships
 				.filter((membership) => membership.memberId === member.id)
 				.map((membership) => membership.teamId),
-			roleAssignments: assignments
-				.filter((assignment) => assignment.memberId === member.id)
-				.map((assignment) => ({
-					...assignment,
-					role: roles.find((role) => role.id === assignment.roleId) || null,
-				})),
 		})),
-		roles: roles.map((role) => ({
-			...role,
-			permissions: rolePermissions
-				.filter((permission) => permission.roleId === role.id)
-				.map((permission) => permission.permission),
-		})),
-		systemRoles: getSystemRoleDefinitions(),
 		permissions: Array.from(access.permissions),
 	};
 }
@@ -107,7 +82,7 @@ export async function createTeam(
 	description?: string,
 ) {
 	const access = await requireWorkspaceAccess(headers, workspaceId, "teams:manage", {
-		ensureEnterpriseSetup: true,
+		ensureWorkspaceSetup: true,
 	});
 	const normalizedName = name.trim();
 	if (!normalizedName) {
@@ -217,6 +192,103 @@ export async function saveTeamMembers(
 		eventType: "team.updated",
 		chainKey: `workspace:${workspaceId}`,
 		payload: { teamId, memberCount: memberIds.length },
+		...getRequestAuditContext(headers),
+	});
+}
+
+export async function addTeamMembers(
+	headers: HeadersInit,
+	workspaceId: string,
+	teamId: string,
+	memberIds: string[],
+) {
+	const access = await requireWorkspaceAccess(headers, workspaceId, "teams:manage");
+	const team = await db.query.teams.findFirst({
+		where: and(eq(teams.id, teamId), eq(teams.organizationId, workspaceId)),
+	});
+
+	if (!team) throw new AccessError("Team not found", 404);
+
+	const uniqueMemberIds = Array.from(new Set(memberIds));
+	if (!uniqueMemberIds.length) {
+		throw new AccessError("Select at least one member", 400);
+	}
+
+	const validMembers = await db.query.authMember.findMany({
+		where: and(
+			eq(authMember.organizationId, workspaceId),
+			inArray(authMember.id, uniqueMemberIds),
+		),
+	});
+	if (validMembers.length !== uniqueMemberIds.length) {
+		throw new AccessError("One or more members do not belong to this workspace", 400);
+	}
+
+	const existing = await db.query.teamMembers.findMany({
+		where: and(
+			eq(teamMembers.teamId, teamId),
+			inArray(teamMembers.memberId, uniqueMemberIds),
+		),
+	});
+	const existingIds = new Set(existing.map((membership) => membership.memberId));
+	const additions = uniqueMemberIds.filter((memberId) => !existingIds.has(memberId));
+
+	if (additions.length) {
+		await db.insert(teamMembers).values(
+			additions.map((memberId) => ({
+				id: nanoid(),
+				organizationId: workspaceId,
+				teamId,
+				memberId,
+			})),
+		);
+	}
+
+	await emitAuditEvent({
+		organizationId: workspaceId,
+		teamId,
+		workspaceId,
+		actorType: "user",
+		actorId: access.membership.userId,
+		eventType: "team.updated",
+		chainKey: `workspace:${workspaceId}`,
+		payload: { teamId, addedMemberIds: additions },
+		...getRequestAuditContext(headers),
+	});
+}
+
+export async function removeTeamMember(
+	headers: HeadersInit,
+	workspaceId: string,
+	teamId: string,
+	memberId: string,
+) {
+	const access = await requireWorkspaceAccess(headers, workspaceId, "teams:manage");
+	const team = await db.query.teams.findFirst({
+		where: and(eq(teams.id, teamId), eq(teams.organizationId, workspaceId)),
+	});
+
+	if (!team) throw new AccessError("Team not found", 404);
+
+	await db
+		.delete(teamMembers)
+		.where(
+			and(
+				eq(teamMembers.organizationId, workspaceId),
+				eq(teamMembers.teamId, teamId),
+				eq(teamMembers.memberId, memberId),
+			),
+		);
+
+	await emitAuditEvent({
+		organizationId: workspaceId,
+		teamId,
+		workspaceId,
+		actorType: "user",
+		actorId: access.membership.userId,
+		eventType: "team.updated",
+		chainKey: `workspace:${workspaceId}`,
+		payload: { teamId, removedMemberId: memberId },
 		...getRequestAuditContext(headers),
 	});
 }

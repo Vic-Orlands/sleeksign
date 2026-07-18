@@ -7,17 +7,14 @@ import {
 	authUser,
 	customDomains,
 	documents,
-	memberRoleAssignments,
 	organizationBranding,
-	permissionRolePermissions,
-	permissionRoles,
 	signerGroups,
 	teamMembers,
 	teams,
 	workspaceSigners,
 } from "@/db/schema";
 import { serializeDocumentActivity } from "@/lib/dashboard-activity";
-import { getSystemRoleDefinitions, hasAppPermission } from "@/lib/enterprise-access";
+import { hasAppPermission } from "@/lib/enterprise-access";
 import { deriveSignerRoles, parseRoleConfigs } from "@/lib/field-utils";
 import type { AppAccess } from "$lib/server/workspace";
 import type { DocumentRecord } from "$lib/components/docs/types";
@@ -196,9 +193,6 @@ export async function loadSettingsData(access: AppAccess) {
 		teamRows,
 		teamMemberships,
 		members,
-		roles,
-		assignments,
-		rolePermissions,
 		invitations,
 		brandingRow,
 		domains,
@@ -212,13 +206,6 @@ export async function loadSettingsData(access: AppAccess) {
 		db.query.authMember.findMany({
 			where: eq(authMember.organizationId, access.workspaceId),
 		}),
-		db.query.permissionRoles.findMany({
-			where: eq(permissionRoles.organizationId, access.workspaceId),
-		}),
-		db.query.memberRoleAssignments.findMany({
-			where: eq(memberRoleAssignments.organizationId, access.workspaceId),
-		}),
-		db.query.permissionRolePermissions.findMany(),
 		db.query.authInvitation.findMany({
 			where: and(
 				eq(authInvitation.organizationId, access.workspaceId),
@@ -273,20 +260,7 @@ export async function loadSettingsData(access: AppAccess) {
 			teamIds: teamMemberships
 				.filter((membership) => membership.memberId === member.id)
 				.map((membership) => membership.teamId),
-			roleAssignments: assignments
-				.filter((assignment) => assignment.memberId === member.id)
-				.map((assignment) => ({
-					...assignment,
-					role: roles.find((role) => role.id === assignment.roleId) || null,
-				})),
 		})),
-		roles: roles.map((role) => ({
-			...role,
-			permissions: rolePermissions
-				.filter((permission) => permission.roleId === role.id)
-				.map((permission) => permission.permission),
-		})),
-		systemRoles: getSystemRoleDefinitions(),
 		permissions: access.permissions,
 		invitations,
 		branding,

@@ -113,6 +113,40 @@ export async function buildSignerOtpEmail({
   };
 }
 
+export async function buildDomainRequestEmail({
+  hostname,
+  txtName,
+  txtValue,
+  workspaceName,
+  settingsUrl,
+}: {
+  hostname: string;
+  txtName: string;
+  txtValue: string;
+  workspaceName: string;
+  settingsUrl: string;
+}) {
+  const subject = `Domain verification requested: ${hostname}`;
+
+  return {
+    subject,
+    html: await renderOtpEmailHtml({
+      preheader: subject,
+      headline: `Verify ${hostname} for ${workspaceName}.`,
+      body: [
+        `${workspaceName} requested this custom domain. Add a DNS TXT record with the name ${txtName}.`,
+        "Use the value shown below. After DNS propagates, return to SleekSign and click Check DNS.",
+      ],
+      ctaLabel: "Review domain request",
+      ctaUrl: settingsUrl,
+      code: txtValue,
+      supportNote:
+        "SleekSign will activate the domain only after the published TXT value matches this request.",
+      branding: { senderName: "SleekSign" },
+    }),
+  };
+}
+
 export async function buildBulkSendInviteEmail({
   branding,
   documentName,

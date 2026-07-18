@@ -65,7 +65,7 @@ export const POST: RequestHandler = async ({ request: req }) => {
       defaultTeamId,
       membership,
     } = await requireWorkspaceAccess(req.headers, body.workspaceId, "manage", {
-      ensureEnterpriseSetup: true,
+      ensureWorkspaceSetup: true,
     });
     const documentId =
       typeof body.documentId === "string" && body.documentId.trim()

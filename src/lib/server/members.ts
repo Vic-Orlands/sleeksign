@@ -1,15 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { nanoid } from "nanoid";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import {
-	authInvitation,
-	authMember,
-	authUser,
-	memberRoleAssignments,
-	permissionRoles,
-} from "@/db/schema";
+import { authInvitation, authMember, authUser } from "@/db/schema";
 import { AccessError, requireWorkspaceAccess } from "@/lib/server-access";
 
 function asHeaders(headers: HeadersInit): Headers {
@@ -64,7 +57,7 @@ export async function inviteMember(
 	email: string,
 	role: string,
 ) {
-	await requireWorkspaceAccess(headers, workspaceId, "owner");
+	await requireWorkspaceAccess(headers, workspaceId, "members:manage");
 	const normalized = email.trim().toLowerCase();
 	if (!normalized) throw new AccessError("Email is required", 400);
 
@@ -83,7 +76,7 @@ export async function removeMember(
 	workspaceId: string,
 	memberId: string,
 ) {
-	await requireWorkspaceAccess(headers, workspaceId, "owner");
+	await requireWorkspaceAccess(headers, workspaceId, "members:manage");
 	await auth.api.removeMember({
 		headers: asHeaders(headers),
 		body: {
@@ -100,52 +93,23 @@ export async function cancelInvite(headers: HeadersInit, invitationId: string) {
 	});
 }
 
-export async function listPermissionRoles(headers: HeadersInit, workspaceId: string) {
-	await requireWorkspaceAccess(headers, workspaceId, "read");
-	return db.query.permissionRoles.findMany({
-		where: eq(permissionRoles.organizationId, workspaceId),
-	});
-}
-
-export async function listRoleAssignments(headers: HeadersInit, workspaceId: string) {
-	await requireWorkspaceAccess(headers, workspaceId, "read");
-	return db.query.memberRoleAssignments.findMany({
-		where: eq(memberRoleAssignments.organizationId, workspaceId),
-	});
-}
-
-export async function assignMemberRole(
+export async function updateMemberRole(
 	headers: HeadersInit,
 	workspaceId: string,
 	memberId: string,
-	roleId: string,
-	teamId?: string | null,
+	role: string,
 ) {
 	await requireWorkspaceAccess(headers, workspaceId, "owner");
-	const existing = await db.query.memberRoleAssignments.findFirst({
-		where: and(
-			eq(memberRoleAssignments.organizationId, workspaceId),
-			eq(memberRoleAssignments.memberId, memberId),
-			eq(memberRoleAssignments.roleId, roleId),
-		),
-	});
-
-	if (existing) {
-		await db
-			.update(memberRoleAssignments)
-			.set({ teamId: teamId || null })
-			.where(eq(memberRoleAssignments.id, existing.id));
-		return existing.id;
+	if (role !== "admin" && role !== "member") {
+		throw new AccessError("Role must be Admin or Member", 400);
 	}
 
-	const assignmentId = nanoid();
-	await db.insert(memberRoleAssignments).values({
-		id: assignmentId,
-		organizationId: workspaceId,
-		memberId,
-		roleId,
-		teamId: teamId || null,
-		createdAt: new Date(),
+	return auth.api.updateMemberRole({
+		headers: asHeaders(headers),
+		body: {
+			memberId,
+			role,
+			organizationId: workspaceId,
+		},
 	});
-	return assignmentId;
 }

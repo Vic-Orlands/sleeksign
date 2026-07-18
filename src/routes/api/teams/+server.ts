@@ -6,15 +6,10 @@ import { db } from "@/db";
 import {
   authMember,
   authUser,
-  memberRoleAssignments,
-  permissionRoles,
   teamMembers,
   teams,
 } from "@/db/schema";
 import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
-import {
-  getSystemRoleDefinitions,
-} from "@/lib/enterprise-access";
 import { AccessError, requireWorkspaceAccess } from "@/lib/server-access";
 
 export const GET: RequestHandler = async ({ request: req }) => {
@@ -35,7 +30,7 @@ export const GET: RequestHandler = async ({ request: req }) => {
       });
     }
 
-    const [teamRows, teamMemberships, members, roles, assignments, rolePermissions] =
+    const [teamRows, teamMemberships, members] =
       await Promise.all([
         db.query.teams.findMany({
           where: eq(teams.organizationId, access.workspaceId),
@@ -46,13 +41,6 @@ export const GET: RequestHandler = async ({ request: req }) => {
         db.query.authMember.findMany({
           where: eq(authMember.organizationId, access.workspaceId),
         }),
-        db.query.permissionRoles.findMany({
-          where: eq(permissionRoles.organizationId, access.workspaceId),
-        }),
-        db.query.memberRoleAssignments.findMany({
-          where: eq(memberRoleAssignments.organizationId, access.workspaceId),
-        }),
-        db.query.permissionRolePermissions.findMany(),
       ]);
 
     const users = members.length
@@ -80,20 +68,7 @@ export const GET: RequestHandler = async ({ request: req }) => {
         teamIds: teamMemberships
           .filter((membership) => membership.memberId === member.id)
           .map((membership) => membership.teamId),
-        roleAssignments: assignments
-          .filter((assignment) => assignment.memberId === member.id)
-          .map((assignment) => ({
-            ...assignment,
-            role: roles.find((role) => role.id === assignment.roleId) || null,
-          })),
       })),
-      roles: roles.map((role) => ({
-        ...role,
-        permissions: rolePermissions
-          .filter((permission) => permission.roleId === role.id)
-          .map((permission) => permission.permission),
-      })),
-      systemRoles: getSystemRoleDefinitions(),
       permissions: Array.from(access.permissions),
     });
   } catch (error) {
@@ -121,7 +96,7 @@ export const POST: RequestHandler = async ({ request: req }) => {
     }
 
     const access = await requireWorkspaceAccess(req.headers, workspaceId, "teams:manage", {
-      ensureEnterpriseSetup: true,
+      ensureWorkspaceSetup: true,
     });
     const normalizedName = name.trim();
     const normalizedSlug = normalizedName

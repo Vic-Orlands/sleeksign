@@ -126,6 +126,10 @@ function buildDocumentSourceKey(workspaceId: string, documentId: string) {
   return `workspaces/${workspaceId}/documents/${documentId}/source.pdf`;
 }
 
+function buildProfileAvatarKey(userId: string) {
+  return `profiles/${userId}/avatar`;
+}
+
 function buildFinalizedKey(
   workspaceId: string,
   documentId: string,
@@ -242,14 +246,14 @@ async function getR2ObjectStream(key: string, range?: string) {
 async function putObjectBytes(
   key: string,
   body: Uint8Array,
-  options?: { contentDisposition?: string },
+  options?: { contentDisposition?: string; contentType?: string },
 ) {
   await getR2Client().send(
     new PutObjectCommand({
       Bucket: getBucketName(),
       Key: key,
       Body: body,
-      ContentType: "application/pdf",
+      ContentType: options?.contentType || "application/pdf",
       ContentDisposition: options?.contentDisposition,
     }),
   );
@@ -299,6 +303,7 @@ async function bodyToBytes(body: unknown): Promise<Uint8Array> {
 export {
   buildDocumentSourceKey,
   buildFinalizedKey,
+  buildProfileAvatarKey,
   createReadUrl,
   createUploadUrl,
   deleteObject,

@@ -1,3 +1,4 @@
+import { resolveTxt } from "node:dns/promises";
 import { and, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -117,7 +118,20 @@ export async function createOrUpdateCustomDomain(
   workspaceId: string,
   hostname: string,
 ) {
-  const normalizedHost = hostname.trim().toLowerCase();
+  const normalizedHost = hostname.trim().toLowerCase().replace(/\.$/, "");
+  const labels = normalizedHost.split(".");
+  const validHostname =
+    normalizedHost.length <= 253 &&
+    labels.length >= 2 &&
+    labels.every(
+      (label) =>
+        label.length <= 63 &&
+        /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+    );
+  if (!validHostname) {
+    throw new Error("Enter a valid hostname such as sign.company.com");
+  }
+
   const existing = await db.query.customDomains.findFirst({
     where: and(
       eq(customDomains.organizationId, workspaceId),
@@ -157,7 +171,6 @@ export async function createOrUpdateCustomDomain(
 export async function verifyCustomDomain(
   workspaceId: string,
   domainId: string,
-  verificationToken: string,
 ) {
   const existing = await db.query.customDomains.findFirst({
     where: and(
@@ -166,9 +179,19 @@ export async function verifyCustomDomain(
     ),
   });
 
-  if (!existing || existing.verificationToken !== verificationToken.trim()) {
+  if (!existing) return null;
+
+  let records: string[][];
+  try {
+    records = await resolveTxt(`_sleeksign.${existing.hostname}`);
+  } catch {
     return null;
   }
+
+  const verified = records.some(
+    (chunks) => chunks.join("").trim() === existing.verificationToken,
+  );
+  if (!verified) return null;
 
   await db
     .update(customDomains)

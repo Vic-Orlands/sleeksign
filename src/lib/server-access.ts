@@ -21,7 +21,7 @@ import {
 
 type AuthSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 type WorkspacePermission = "read" | "manage" | "owner" | AppPermission;
-type WorkspaceAccessOptions = { ensureEnterpriseSetup?: boolean };
+type WorkspaceAccessOptions = { ensureWorkspaceSetup?: boolean };
 const SESSION_RETRY_DELAYS_MS = [150, 350];
 
 class AccessError extends Error {
@@ -119,7 +119,7 @@ async function requireWorkspaceAccess(
   }
 
   const resolved = await resolveWorkspaceAccess(session.user.id, workspaceId, {
-    ensureSetup: options?.ensureEnterpriseSetup,
+    ensureSetup: options?.ensureWorkspaceSetup,
   });
   if (!resolved) {
     throw new AccessError("Forbidden", 403);
