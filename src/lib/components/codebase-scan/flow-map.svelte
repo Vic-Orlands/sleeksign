@@ -16,6 +16,7 @@
 		type ScanLayout,
 		type SizedScanNode,
 	} from "$lib/codebase-scan-layout";
+	import { cn } from "$lib/utils";
 	import { scanKindStyles } from "./scan-kinds";
 
 	type GraphNode = FoldedNode & SizedScanNode;
@@ -247,32 +248,38 @@
 	});
 </script>
 
-<section class="map">
-	<div class="zoom-controls" role="group" aria-label="Zoom">
+<section class="absolute inset-0 z-10">
+	<div
+		class="absolute right-6 bottom-[88px] z-[25] flex flex-col gap-2 max-[760px]:right-3 max-[760px]:bottom-[76px]"
+		role="group"
+		aria-label="Zoom"
+	>
 		<button
 			type="button"
+			class="grid size-9 cursor-pointer place-items-center rounded-lg border border-border bg-background text-foreground hover:bg-[color-mix(in_oklab,var(--background)_88%,var(--foreground))]"
 			aria-label="Zoom in"
 			onclick={(event) => {
 				event.stopPropagation();
 				zoomBy(1.25);
 			}}
 		>
-			<MagnifyingGlassPlus aria-hidden="true" />
+			<MagnifyingGlassPlus class="size-4" aria-hidden="true" />
 		</button>
 		<button
 			type="button"
+			class="grid size-9 cursor-pointer place-items-center rounded-lg border border-border bg-background text-foreground hover:bg-[color-mix(in_oklab,var(--background)_88%,var(--foreground))]"
 			aria-label="Zoom out"
 			onclick={(event) => {
 				event.stopPropagation();
 				zoomBy(0.8);
 			}}
 		>
-			<MagnifyingGlassMinus aria-hidden="true" />
+			<MagnifyingGlassMinus class="size-4" aria-hidden="true" />
 		</button>
 	</div>
 	<div
 		bind:this={viewportEl}
-		class="viewport"
+		class="absolute inset-0 cursor-grab touch-none overflow-hidden bg-[linear-gradient(color-mix(in_oklab,var(--border)_45%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_oklab,var(--border)_45%,transparent)_1px,transparent_1px)] bg-size-[56px_56px] bg-center active:cursor-grabbing"
 		role="application"
 		aria-label="Interactive SleekSign architecture map"
 		onpointerdown={handlePointerDown}
@@ -282,20 +289,23 @@
 	>
 		{#if layout}
 			<div
-				class="graph"
+				class="absolute top-0 left-0 origin-top-left"
 				style={`width:${layout.width}px;height:${layout.height}px;transform:translate(${transform.x}px,${transform.y}px) scale(${transform.k})`}
 			>
 				{#each layout.groups as group (group.id)}
 					<div
-						class="group-box"
+						class="group-box absolute rounded-2xl border border-border/82 bg-card/92"
 						style={`left:${group.x}px;top:${group.y}px;width:${group.width}px;height:${group.height}px`}
 					>
-						<span>{group.label}</span>
+						<span
+							class="absolute top-4 left-4 text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
+							>{group.label}</span
+						>
 					</div>
 				{/each}
 
 				<svg
-					class="edges"
+					class="pointer-events-none absolute inset-0 overflow-visible"
 					width={layout.width}
 					height={layout.height}
 					aria-hidden="true"
@@ -307,7 +317,7 @@
 							<path class="edge-path" d={path} />
 							<path class="edge-path" d={arrowPath(graphEdge.points)} />
 							{#if active}
-								<circle class="edge-beam" r="2.2">
+								<circle class="edge-beam fill-orange-500" r="2.2">
 									<animateMotion
 										dur={`${4 + (index % 4)}s`}
 										begin={`${1 + (index % 8) * 0.7}s`}
@@ -321,16 +331,23 @@
 				</svg>
 
 				{#each layout.edges as graphEdge, index (`label-${index}`)}
-					{@const original = graphEdge.original.map((edgeIndex) => folded.edges[edgeIndex]).filter(Boolean)}
+					{@const original = graphEdge.original
+						.map((edgeIndex) => folded.edges[edgeIndex])
+						.filter(Boolean)}
 					{@const kind = original.find((item) => item?.kind)?.kind}
 					{@const kindOnly = !graphEdge.label}
-					{@const inTrace = trace && graphEdge.original.some((edgeIndex) => trace.edges.has(edgeIndex))}
+					{@const inTrace =
+						trace &&
+						graphEdge.original.some((edgeIndex) => trace.edges.has(edgeIndex))}
 					{@const text = graphEdge.label || kind}
-					{@const midpoint = graphEdge.labelPos || longestSegmentMidpoint(graphEdge.points)}
+					{@const midpoint =
+						graphEdge.labelPos || longestSegmentMidpoint(graphEdge.points)}
 					{#if text && midpoint && (!kindOnly || inTrace)}
 						<span
-							class="edge-label"
-							class:dimmed={!edgeIsActive(graphEdge.original)}
+							class={cn(
+								"absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-background px-2 py-0.5 text-xs whitespace-nowrap text-muted-foreground/80 transition-opacity duration-300",
+								!edgeIsActive(graphEdge.original) && "opacity-15",
+							)}
 							style={`left:${midpoint.x}px;top:${midpoint.y}px`}
 						>
 							{text}
@@ -342,43 +359,67 @@
 					{@const kind = scanKindStyles[item.kind]}
 					{@const Icon = kind.icon}
 					<div
-						class="node-wrap"
-						class:dimmed={!nodeIsActive(item.id)}
+						class={cn(
+							"node-wrap absolute transition-opacity duration-300",
+							!nodeIsActive(item.id) && "opacity-25",
+						)}
 						style={`left:${item.x}px;top:${item.y}px;width:${item.width}px;height:${item.height}px;animation-delay:${0.12 + index * 0.025}s`}
 					>
 						<button
 							type="button"
-							class="node-card"
-							class:agent={item.kind === "agent"}
+							class={cn(
+								"flex h-full w-full cursor-pointer flex-wrap content-start items-center gap-2.5 overflow-hidden rounded-xl border border-border/72 bg-card px-3.5 text-left text-card-foreground",
+								item.kind === "agent" && "border-orange-500/35",
+							)}
 							onclick={(event) => selectNode(event, item.id)}
 						>
-							<span class={`node-icon ${kind.className}`}>
+							<span
+								class={cn(
+									"grid size-7 shrink-0 place-items-center rounded-2xl",
+									kind.className,
+								)}
+							>
 								{#if item.domain}
 									<img
+										class="size-4 rounded-[3px]"
 										src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=32`}
 										alt=""
 									/>
 								{:else}
-									<Icon weight="fill" />
+									<Icon weight="fill" class="size-4" />
 								{/if}
 							</span>
-							<span class="node-copy">
-								<strong>{item.label}</strong>
-								{#if item.sub}<small>{item.sub}</small>{/if}
+							<span class="flex min-w-0 flex-1 flex-col">
+								<strong
+									class="overflow-hidden text-sm leading-snug font-medium text-ellipsis whitespace-nowrap"
+									>{item.label}</strong
+								>
+								{#if item.sub}
+									<small
+										class="overflow-hidden text-xs leading-snug text-ellipsis whitespace-nowrap text-muted-foreground"
+										>{item.sub}</small
+									>
+								{/if}
 							</span>
 							{#if item.embeds.length}
-								<span class="embeds">
+								<span
+									class="flex w-full flex-col gap-2 border-t border-muted px-0.5 py-2.5"
+								>
 									{#each item.embeds as embedded (embedded.id)}
 										{@const embeddedKind = scanKindStyles[embedded.kind]}
 										{@const EmbeddedIcon = embeddedKind.icon}
-										<span>
+										<span class="flex items-center gap-1.5 text-xs font-medium">
 											{#if embedded.domain}
 												<img
+													class="size-3 rounded-sm"
 													src={`https://www.google.com/s2/favicons?domain=${embedded.domain}&sz=32`}
 													alt=""
 												/>
 											{:else}
-												<EmbeddedIcon weight="fill" />
+												<EmbeddedIcon
+													weight="fill"
+													class="size-3 text-muted-foreground"
+												/>
 											{/if}
 											{embedded.label}
 										</span>
@@ -394,19 +435,29 @@
 				{@const tracedKind = scanKindStyles[tracedNode.kind]}
 				{@const TracedIcon = tracedKind.icon}
 				<div
-					class="detail-popover"
+					class="detail-popover absolute z-30 w-60 rounded-xl border border-border/65 bg-card p-4"
 					style={`left:${transform.x + tracedNode.x * transform.k}px;top:${
 						transform.y + (tracedNode.y + tracedNode.height + 10) * transform.k
 					}px`}
 				>
-					<div class="detail-kind" style={`color:${tracedKind.color}`}>
-						<TracedIcon weight="fill" />{tracedKind.label}
+					<div
+						class="flex items-center gap-1 text-[11px] font-medium tracking-wide"
+						style={`color:${tracedKind.color}`}
+					>
+						<TracedIcon weight="fill" class="size-3" />{tracedKind.label}
 					</div>
-					<strong>{tracedNode.label}</strong>
+					<strong class="mt-1 block text-sm font-medium">{tracedNode.label}</strong>
 					{#if tracedNode.detail || tracedNode.sub}
-						<p>{tracedNode.detail || tracedNode.sub}</p>
+						<p class="mt-1 text-xs leading-relaxed text-muted-foreground">
+							{tracedNode.detail || tracedNode.sub}
+						</p>
 					{/if}
-					{#if tracedNode.sourceRef}<code>{tracedNode.sourceRef}</code>{/if}
+					{#if tracedNode.sourceRef}
+						<code
+							class="mt-1.5 block overflow-hidden font-mono text-[10px] text-ellipsis whitespace-nowrap text-muted-foreground/80"
+							>{tracedNode.sourceRef}</code
+						>
+					{/if}
 				</div>
 			{/if}
 		{/if}
@@ -414,71 +465,7 @@
 </section>
 
 <style>
-	.map { position: absolute; z-index: 10; inset: 0; }
-	.zoom-controls {
-		position: absolute;
-		z-index: 25;
-		right: 24px;
-		bottom: 88px;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-	.zoom-controls button {
-		display: grid;
-		width: 36px;
-		height: 36px;
-		place-items: center;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		background: var(--background);
-		color: var(--foreground);
-		cursor: pointer;
-	}
-	.zoom-controls button :global(svg) { width: 16px; height: 16px; }
-	.zoom-controls button:hover {
-		background: color-mix(in oklab, var(--background) 88%, var(--foreground));
-	}
-	@media (max-width: 760px) {
-		.zoom-controls { right: 12px; bottom: 76px; }
-	}
-	.viewport {
-		position: absolute;
-		inset: 0;
-		overflow: hidden;
-		background-image:
-			linear-gradient(color-mix(in oklab, var(--border) 45%, transparent) 1px, transparent 1px),
-			linear-gradient(90deg, color-mix(in oklab, var(--border) 45%, transparent) 1px, transparent 1px);
-		background-position: center;
-		background-size: 56px 56px;
-		cursor: grab;
-		touch-action: none;
-	}
-	.viewport:active { cursor: grabbing; }
-	.graph {
-		position: absolute;
-		top: 0;
-		left: 0;
-		transform-origin: top left;
-	}
-	.group-box {
-		position: absolute;
-		border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
-		border-radius: 16px;
-		background: color-mix(in oklab, var(--card) 92%, transparent);
-		animation: group-in 500ms ease-out both;
-	}
-	.group-box span {
-		position: absolute;
-		top: 16px;
-		left: 16px;
-		color: var(--muted-foreground);
-		font-size: 10px;
-		font-weight: 500;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-	}
-	.edges { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+	/* SVG stroke + entrance keyframes aren't a clean Tailwind fit */
 	.edge-path {
 		fill: none;
 		stroke: color-mix(in oklab, var(--background) 70%, var(--muted-foreground) 30%);
@@ -486,108 +473,61 @@
 		stroke-linecap: round;
 		stroke-linejoin: round;
 	}
-	.edge-beam {
-		fill: #f97316;
+
+	@keyframes node-in {
+		from {
+			transform: scale(0.85);
+			filter: blur(6px);
+			opacity: 0;
+		}
+		to {
+			transform: scale(1);
+			filter: blur(0);
+			opacity: 1;
+		}
 	}
-	.edge-label {
-		position: absolute;
-		transform: translate(-50%, -50%);
-		border-radius: 999px;
-		background: var(--background);
-		padding: 2px 8px;
-		color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
-		font-size: 12px;
-		white-space: nowrap;
-		transition: opacity 300ms ease;
+
+	@keyframes group-in {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
 	}
-	.edge-label.dimmed { opacity: 0.15; }
+
+	@keyframes popover-in {
+		from {
+			transform: translateY(-4px);
+			opacity: 0;
+		}
+		to {
+			transform: translateY(0);
+			opacity: 1;
+		}
+	}
+
 	.node-wrap {
-		position: absolute;
 		animation: node-in 550ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
-		transition: opacity 300ms ease;
 	}
-	.node-wrap.dimmed { opacity: 0.25; }
-	.node-card {
-		display: flex;
-		width: 100%;
-		height: 100%;
-		flex-wrap: wrap;
-		align-content: flex-start;
-		align-items: center;
-		gap: 10px;
-		overflow: hidden;
-		border: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
-		border-radius: 12px;
-		background: var(--card);
-		padding: 0 14px;
-		color: var(--card-foreground);
-		text-align: left;
-		cursor: pointer;
+
+	.group-box {
+		animation: group-in 500ms ease-out both;
 	}
-	.node-card.agent { border-color: rgb(249 115 22 / 0.35); }
-	.node-icon {
-		display: grid;
-		width: 28px;
-		height: 28px;
-		flex: 0 0 auto;
-		place-items: center;
-		border-radius: 16px;
-	}
-	.node-icon :global(svg),
-	.node-icon img { width: 16px; height: 16px; border-radius: 3px; }
-	.node-icon.entry { background: var(--muted); color: var(--foreground); }
-	.node-icon.cron { background: rgb(245 158 11 / 0.1); color: #f59e0b; }
-	.node-icon.agent { background: rgb(249 115 22 / 0.1); color: #f97316; }
-	.node-icon.model { background: rgb(59 130 246 / 0.1); color: #3b82f6; }
-	.node-icon.tool { background: rgb(139 92 246 / 0.1); color: #8b5cf6; }
-	.node-icon.service { background: rgb(236 72 153 / 0.1); color: #ec4899; }
-	.node-icon.store { background: rgb(16 185 129 / 0.1); color: #10b981; }
-	.node-icon.external { background: rgb(14 165 233 / 0.1); color: #0ea5e9; }
-	.node-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-	.node-copy strong { overflow: hidden; font-size: 14px; font-weight: 500; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-	.node-copy small { overflow: hidden; color: var(--muted-foreground); font-size: 12px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-	.embeds {
-		display: flex;
-		width: 100%;
-		flex-direction: column;
-		gap: 8px;
-		border-top: 1px solid var(--muted);
-		padding: 10px 2px;
-	}
-	.embeds > span { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; }
-	.embeds :global(svg),
-	.embeds img { width: 12px; height: 12px; border-radius: 2px; color: var(--muted-foreground); }
+
 	.detail-popover {
-		position: absolute;
-		z-index: 30;
-		width: 240px;
-		border: 1px solid color-mix(in oklab, var(--border) 65%, transparent);
-		border-radius: 12px;
-		background: var(--card);
-		padding: 16px;
 		animation: popover-in 200ms ease-out both;
 	}
-	.detail-kind { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; }
-	.detail-kind :global(svg) { width: 12px; height: 12px; }
-	.detail-popover > strong { display: block; margin-top: 4px; font-size: 14px; font-weight: 500; }
-	.detail-popover p { margin: 4px 0 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.5; }
-	.detail-popover code { display: block; overflow: hidden; margin-top: 6px; color: color-mix(in oklab, var(--muted-foreground) 82%, transparent); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-	@keyframes node-in {
-		from { transform: scale(0.85); filter: blur(6px); opacity: 0; }
-		to { transform: scale(1); filter: blur(0); opacity: 1; }
-	}
-	@keyframes group-in {
-		from { opacity: 0; }
-		to { opacity: 1; }
-	}
-	@keyframes popover-in {
-		from { transform: translateY(-4px); opacity: 0; }
-		to { transform: translateY(0); opacity: 1; }
-	}
+
 	@media (prefers-reduced-motion: reduce) {
 		.node-wrap,
 		.group-box,
-		.detail-popover { animation: none; }
-		.edge-beam { display: none; }
+		.detail-popover {
+			animation: none;
+		}
+
+		.edge-beam {
+			display: none;
+		}
 	}
 </style>

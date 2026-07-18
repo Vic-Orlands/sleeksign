@@ -19,20 +19,36 @@
 	}
 </script>
 
-<aside class="rail" aria-label="Scan details">
-	<div class="rail-scroll">
+<aside
+	class="flex max-h-[46dvh] w-[216px] flex-col overflow-hidden rounded-[18px] border border-border/70 bg-card max-[760px]:hidden"
+	aria-label="Scan details"
+>
+	<div
+		class="rail-scroll min-h-0 overflow-y-auto p-3.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+	>
 		{#if data.topModels.length}
-			<section>
-				<h2><Sparkle weight="fill" />Models</h2>
-				<ol>
+			<section class="mt-0.5 mr-0.5 ml-0.5">
+				<h2
+					class="mb-2.5 ml-px flex items-center gap-1.5 text-[10px] font-normal text-muted-foreground"
+				>
+					<Sparkle weight="fill" class="size-2.5 opacity-55" />Models
+				</h2>
+				<ol class="m-0 flex list-none flex-col gap-2.5 p-0">
 					{#each data.topModels as item (item.id)}
-						<li>
+						<li class="flex min-w-0 items-center gap-1.5">
 							{#if item.domain}
-								<img src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=32`} alt="" />
+								<img
+									class="size-3 shrink-0 rounded-[3px]"
+									src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=32`}
+									alt=""
+								/>
 							{:else}
-								<Sparkle />
+								<Sparkle class="size-3 shrink-0 text-muted-foreground" />
 							{/if}
-							<span>{item.label}</span>
+							<span
+								class="overflow-hidden text-xs font-medium text-ellipsis whitespace-nowrap"
+								>{item.label}</span
+							>
 						</li>
 					{/each}
 				</ol>
@@ -40,18 +56,29 @@
 		{/if}
 
 		{#if data.topTools.length}
-			<section>
-				<h2><Wrench weight="fill" />Tools</h2>
-				<ul>
+			<section class={data.topModels.length ? "mt-[22px] mr-0.5 ml-0.5" : "mt-0.5 mr-0.5 ml-0.5"}>
+				<h2
+					class="mb-2.5 ml-px flex items-center gap-1.5 text-[10px] font-normal text-muted-foreground"
+				>
+					<Wrench weight="fill" class="size-2.5 opacity-55" />Tools
+				</h2>
+				<ul class="m-0 flex list-none flex-col gap-2.5 p-0">
 					{#each data.topTools as item (item.id)}
 						{@const Icon = toolIcon(item.label)}
-						<li>
+						<li class="flex min-w-0 items-center gap-1.5">
 							{#if item.domain}
-								<img src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=32`} alt="" />
+								<img
+									class="size-3 shrink-0 rounded-[3px]"
+									src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=32`}
+									alt=""
+								/>
 							{:else}
-								<Icon />
+								<Icon class="size-3 shrink-0 text-muted-foreground" />
 							{/if}
-							<span>{item.label}</span>
+							<span
+								class="overflow-hidden text-xs font-medium text-ellipsis whitespace-nowrap"
+								>{item.label}</span
+							>
 						</li>
 					{/each}
 				</ul>
@@ -59,17 +86,32 @@
 		{/if}
 
 		{#if data.topIntegrations.length}
-			<section>
-				<h2><SquaresFour weight="fill" />Integrations</h2>
-				<ul>
+			<section
+				class="mr-0.5 mb-0 ml-0.5 pb-[18px] {data.topModels.length || data.topTools.length
+					? 'mt-[22px]'
+					: 'mt-0.5'}"
+			>
+				<h2
+					class="mb-2.5 ml-px flex items-center gap-1.5 text-[10px] font-normal text-muted-foreground"
+				>
+					<SquaresFour weight="fill" class="size-2.5 opacity-55" />Integrations
+				</h2>
+				<ul class="m-0 flex list-none flex-col gap-2.5 p-0">
 					{#each data.topIntegrations as item (item.id)}
-						<li>
+						<li class="flex min-w-0 items-center gap-1.5">
 							{#if item.domain}
-								<img src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=32`} alt="" />
+								<img
+									class="size-3 shrink-0 rounded-[3px]"
+									src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=32`}
+									alt=""
+								/>
 							{:else}
-								<Plug />
+								<Plug class="size-3 shrink-0 text-muted-foreground" />
 							{/if}
-							<span>{item.label}</span>
+							<span
+								class="overflow-hidden text-xs font-medium text-ellipsis whitespace-nowrap"
+								>{item.label}</span
+							>
 						</li>
 					{/each}
 				</ul>
@@ -79,60 +121,14 @@
 </aside>
 
 <style>
-	.rail {
-		display: flex;
-		width: 216px;
-		max-height: 46dvh;
-		flex-direction: column;
-		overflow: hidden;
-		border: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
-		border-radius: 18px;
-		background: var(--card);
-	}
+	/* Fade mask at scroll edges — not expressible cleanly in Tailwind alone */
 	.rail-scroll {
-		min-height: 0;
-		overflow-y: auto;
-		padding: 14px;
-		scrollbar-width: none;
-		mask-image: linear-gradient(to bottom, transparent, black 7px, black calc(100% - 14px), transparent);
-	}
-	.rail-scroll::-webkit-scrollbar { display: none; }
-	section { margin: 2px 2px 0; }
-	section + section { margin-top: 22px; }
-	section:last-child { padding-bottom: 18px; }
-	h2 {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		margin: 0 0 10px 1px;
-		color: var(--muted-foreground);
-		font-size: 10px;
-		font-weight: 400;
-	}
-	h2 :global(svg) { width: 10px; height: 10px; opacity: 0.55; }
-	ul,
-	ol {
-		display: flex;
-		margin: 0;
-		padding: 0;
-		flex-direction: column;
-		gap: 9px;
-		list-style: none;
-	}
-	li { display: flex; min-width: 0; align-items: center; gap: 7px; }
-	li img,
-	li :global(svg) {
-		width: 12px;
-		height: 12px;
-		flex: 0 0 auto;
-		border-radius: 3px;
-		color: var(--muted-foreground);
-	}
-	li span {
-		overflow: hidden;
-		font-size: 12px;
-		font-weight: 500;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		mask-image: linear-gradient(
+			to bottom,
+			transparent,
+			black 7px,
+			black calc(100% - 14px),
+			transparent
+		);
 	}
 </style>

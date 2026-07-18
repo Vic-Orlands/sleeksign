@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ScanNodeKind } from "$lib/codebase-scan";
+	import { cn } from "$lib/utils";
 	import { scanKindStyles, scanLegendGroups } from "./scan-kinds";
 
 	let {
@@ -12,67 +13,36 @@
 </script>
 
 {#if kinds.length}
-	<div class="share-bar" aria-label="Diagram legend">
+	<div
+		class="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full bg-card/70 px-5 py-2.5 shadow-[0_1px_2px_rgb(0_0_0_/0.04),0_4px_16px_rgb(0_0_0_/0.06)] backdrop-blur-md max-[680px]:w-[calc(100%-24px)] max-[680px]:justify-center max-[680px]:gap-2.5 max-[680px]:px-3"
+		aria-label="Diagram legend"
+	>
 		{#each scanLegendGroups.filter((group) => group.kinds.some((kind) => kinds.includes(kind))) as group (group.label)}
 			{@const style = scanKindStyles[group.kind]}
 			{@const Icon = style.icon}
 			{@const active = focusKinds?.some((kind) => group.kinds.includes(kind))}
 			<button
 				type="button"
-				class:active
-				class:dimmed={focusKinds !== null && !active}
+				class={cn(
+					"flex cursor-default items-center gap-1.5 border-0 bg-transparent p-0 text-[10px] font-medium tracking-wider text-muted-foreground/70 uppercase transition-all duration-300 hover:text-foreground max-[680px]:text-[8px]",
+					active && "text-foreground",
+					focusKinds !== null && !active && "opacity-40",
+				)}
 				onmouseenter={() => (focusKinds = group.kinds)}
 				onmouseleave={() => (focusKinds = null)}
 				onfocus={() => (focusKinds = group.kinds)}
 				onblur={() => (focusKinds = null)}
 			>
-				<Icon weight="fill" style={`color:${style.color}`} />
+				<Icon
+					weight="fill"
+					class={cn(
+						"size-3 opacity-80 transition-transform duration-300",
+						active && "scale-110",
+					)}
+					style={`color:${style.color}`}
+				/>
 				{group.label}
 			</button>
 		{/each}
 	</div>
 {/if}
-
-<style>
-	.share-bar {
-		position: fixed;
-		z-index: 50;
-		bottom: 24px;
-		left: 50%;
-		display: flex;
-		align-items: center;
-		gap: 16px;
-		transform: translateX(-50%);
-		border-radius: 999px;
-		background: color-mix(in oklab, var(--card) 70%, transparent);
-		padding: 10px 20px;
-		box-shadow:
-			0 1px 2px rgb(0 0 0 / 0.04),
-			0 4px 16px rgb(0 0 0 / 0.06);
-		backdrop-filter: blur(12px);
-	}
-	button {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		border: 0;
-		background: transparent;
-		padding: 0;
-		color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
-		font-size: 10px;
-		font-weight: 500;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		transition: all 300ms ease;
-		cursor: default;
-	}
-	button:hover { color: var(--foreground); }
-	button :global(svg) { width: 12px; height: 12px; opacity: 0.8; transition: transform 300ms ease; }
-	button.active { color: var(--foreground); }
-	button.active :global(svg) { transform: scale(1.1); }
-	button.dimmed { opacity: 0.4; }
-	@media (max-width: 680px) {
-		.share-bar { width: calc(100% - 24px); justify-content: center; gap: 10px; padding-inline: 12px; }
-		button { font-size: 8px; }
-	}
-</style>
