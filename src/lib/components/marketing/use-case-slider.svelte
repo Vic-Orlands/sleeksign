@@ -151,7 +151,7 @@
 </script>
 
 <section
-  class="relative left-1/2 isolate flex min-h-[540px] w-screen -translate-x-1/2 select-none flex-col justify-center overflow-hidden text-foreground md:min-h-[590px] dark:bg-[#1c1914]"
+  class="relative left-1/2 isolate flex w-screen -translate-x-1/2 select-none flex-col justify-center overflow-hidden text-foreground"
   aria-roledescription="carousel"
   aria-label="SleekSign use cases"
 >
@@ -237,9 +237,7 @@
                 <div
                   class="flex size-full scale-[1.16] items-center justify-center"
                 >
-                  <div
-                    class="relative h-[140px] w-[110px]"
-                  >
+                  <div class="relative h-[140px] w-[110px]">
                     <div
                       class="absolute inset-0 -translate-x-3 translate-y-1 rotate-[-8deg] rounded-lg border border-border bg-card/65"
                     ></div>
@@ -331,7 +329,8 @@
                     <span
                       class="flex items-center gap-0.5 rounded-full border border-orange-500/25 bg-orange-500/7 px-1.5 py-0.5 font-mono text-[6px] uppercase text-orange-500"
                     >
-                      <i class="size-[3px] rounded-full bg-orange-500"></i>Secure
+                      <i class="size-[3px] rounded-full bg-orange-500"
+                      ></i>Secure
                     </span>
                   </div>
                 </div>

@@ -5,13 +5,17 @@
   import ArrowRight from "phosphor-svelte/lib/ArrowRight";
   import Kanban from "phosphor-svelte/lib/Kanban";
   import MagnifyingGlass from "phosphor-svelte/lib/MagnifyingGlass";
+  import Moon from "phosphor-svelte/lib/Moon";
   import ShareNetwork from "phosphor-svelte/lib/ShareNetwork";
+  import Sun from "phosphor-svelte/lib/Sun";
   import type { Component } from "svelte";
+  import { mode, toggleMode } from "mode-watcher";
 
   import { inview } from "$lib/actions/inview";
   import UseCaseSlider from "$lib/components/marketing/use-case-slider.svelte";
 
   let PacketModelShowcase = $state<Component | null>(null);
+  const isDark = $derived(mode.current === "dark");
 
   type GalleryItem = {
     src: string;
@@ -149,6 +153,19 @@
       class:opacity-100={heroReady}
       class:translate-y-0={heroReady}
     >
+      <button
+        type="button"
+        class="mb-4 grid size-7 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+        aria-label={isDark ? "Use light theme" : "Use dark theme"}
+        title={isDark ? "Use light theme" : "Use dark theme"}
+        onclick={toggleMode}
+      >
+        {#if isDark}
+          <Sun class="size-3.5" aria-hidden="true" />
+        {:else}
+          <Moon class="size-3.5" aria-hidden="true" />
+        {/if}
+      </button>
       <h3
         class="mb-16 font-cursive text-xl leading-none text-foreground lg:text-4xl font-semibold transition-opacity duration-800 delay-200"
         class:opacity-0={!heroReady}
@@ -546,12 +563,12 @@
                 >Create workspace</a
               >
             </li>
-            <li class="text-muted-foreground">
-              © {new Date().getFullYear()} SleekSign
-            </li>
           </ul>
         </nav>
       </div>
+      <p class="mt-10 text-center text-[11px] font-light text-muted-foreground">
+        © {new Date().getFullYear()} SleekSign
+      </p>
     </div>
   </footer>
 </main>
