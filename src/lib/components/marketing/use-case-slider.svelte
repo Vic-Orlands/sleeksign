@@ -308,12 +308,12 @@
                   </div>
                 </div>
               {:else if slide.id === "03"}
-                <div class="relative h-[100px] w-[110px] scale-[1.16]">
+                <div class="relative h-[100px] w-[80px] scale-[1.16]">
                   <div
                     class="absolute inset-0 translate-x-3 translate-y-1 rotate-[8deg] rounded-lg border border-border bg-card/65"
                   ></div>
                   <div
-                    class="relative flex size-full flex-col items-center gap-2 rounded-lg border border-border bg-card/90 p-2.5"
+                    class="relative flex size-full flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card/90 p-2.5"
                   >
                     <div
                       class="grid size-8 place-items-center rounded-full border border-orange-500/20 bg-orange-500/8 text-orange-500 {active
@@ -373,7 +373,7 @@
                   class="flex size-full scale-[1.16] items-center justify-center gap-3"
                 >
                   <div
-                    class="flex h-[55px] w-[45px] flex-col justify-between rounded border border-border bg-card/90 p-1"
+                    class="flex h-[70px] w-[55px] flex-col justify-between rounded border border-border bg-card/90 p-1"
                   >
                     <Buildings
                       class="size-3 text-orange-500"
@@ -390,7 +390,7 @@
                     ></i>
                   </div>
                   <div
-                    class="flex h-[55px] w-[45px] flex-col justify-between rounded border border-border bg-card/90 p-1"
+                    class="flex h-[70px] w-[55px] flex-col justify-between rounded border border-border bg-card/90 p-1"
                   >
                     <UserCheck
                       class="size-3 text-orange-500"

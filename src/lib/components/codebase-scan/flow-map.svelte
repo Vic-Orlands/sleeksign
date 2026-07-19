@@ -200,7 +200,11 @@
       width: 208 + Math.min(degree.get(item.id) || 0, 6) * 7,
       height: nodeHeight(item),
     }));
-    layoutScanGraph(sized, folded.edges).then(async (result) => {
+    layoutScanGraph(sized, folded.edges, {
+      rootYOffset: { Identity: -520, Workspace: -520 },
+      centerRootNodes: ["postgres"],
+      alignIncomingTrunks: ["postgres"],
+    }).then(async (result) => {
       if (cancelled) return;
       layout = result;
       await tick();
@@ -376,42 +380,44 @@
             <button
               type="button"
               class={cn(
-                "flex h-full w-full cursor-pointer flex-wrap content-start items-center gap-2.5 overflow-hidden rounded-xl border border-border/72 bg-card px-3.5 text-left text-card-foreground",
+                "flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2.5 overflow-hidden rounded-xl border border-border/72 bg-card px-3.5 py-2.5 text-left text-card-foreground",
                 item.kind === "agent" && "border-orange-500/35",
               )}
               onclick={(event) => selectNode(event, item.id)}
             >
-              <span
-                class={cn(
-                  "grid size-7 shrink-0 place-items-center rounded-2xl",
-                  kind.className,
-                )}
-              >
-                {#if item.domain}
-                  <img
-                    class="size-4 rounded-[3px]"
-                    src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=32`}
-                    alt=""
-                  />
-                {:else}
-                  <Icon weight="fill" class="size-4" />
-                {/if}
-              </span>
-              <span class="flex min-w-0 flex-1 flex-col">
-                <strong
-                  class="overflow-hidden text-sm leading-snug font-medium text-ellipsis whitespace-nowrap"
-                  >{item.label}</strong
+              <span class="flex w-full min-w-0 items-center gap-2.5">
+                <span
+                  class={cn(
+                    "grid size-7 shrink-0 place-items-center rounded-2xl",
+                    kind.className,
+                  )}
                 >
-                {#if item.sub}
-                  <small
-                    class="overflow-hidden text-xs leading-snug text-ellipsis whitespace-nowrap text-muted-foreground"
-                    >{item.sub}</small
+                  {#if item.domain}
+                    <img
+                      class="size-4 rounded-[3px]"
+                      src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=32`}
+                      alt=""
+                    />
+                  {:else}
+                    <Icon weight="fill" class="size-4" />
+                  {/if}
+                </span>
+                <span class="flex min-w-0 flex-1 flex-col justify-center">
+                  <strong
+                    class="overflow-hidden text-sm leading-snug font-medium text-ellipsis whitespace-nowrap"
+                    >{item.label}</strong
                   >
-                {/if}
+                  {#if item.sub}
+                    <small
+                      class="overflow-hidden text-xs leading-snug text-ellipsis whitespace-nowrap text-muted-foreground"
+                      >{item.sub}</small
+                    >
+                  {/if}
+                </span>
               </span>
               {#if item.embeds.length}
                 <span
-                  class="flex w-full flex-col gap-2 border-t border-muted px-0.5 py-2.5"
+                  class="flex w-full flex-col justify-center gap-2 border-t border-muted px-0.5 py-2.5"
                 >
                   {#each item.embeds as embedded (embedded.id)}
                     {@const embeddedKind = scanKindStyles[embedded.kind]}

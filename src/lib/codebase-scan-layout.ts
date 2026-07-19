@@ -40,6 +40,12 @@ export type ScanLayout<T extends SizedScanNode> = {
 	height: number;
 };
 
+type ScanLayoutOptions = {
+	rootYOffset?: Record<string, number>;
+	centerRootNodes?: string[];
+	alignIncomingTrunks?: string[];
+};
+
 const elk = new ELK();
 const groupPadding = { top: 46, right: 16, bottom: 16, left: 16 };
 
@@ -50,6 +56,7 @@ function labelSize(label: string) {
 export async function layoutScanGraph<T extends SizedScanNode>(
 	nodes: T[],
 	edges: ScanEdge[],
+	options: ScanLayoutOptions = {},
 ): Promise<ScanLayout<T>> {
 	const byId = new Map(nodes.map((item) => [item.id, item]));
 	const groupNames: string[] = [];
@@ -244,6 +251,20 @@ export async function layoutScanGraph<T extends SizedScanNode>(
 	}
 
 	const rowDelta = new Map<string, number>();
+	const resolveRootId = (id: string) =>
+		groupMembers.has(id) ? groupId(id) : id;
+	const applyRootOffset = (id: string, delta: number) => {
+		const rootId = resolveRootId(id);
+		const position = rootPosition.get(rootId);
+		if (!position || delta === 0) return;
+		rootPosition.set(rootId, { x: position.x, y: position.y + delta });
+		rowDelta.set(rootId, (rowDelta.get(rootId) || 0) + delta);
+	};
+
+	for (const [id, delta] of Object.entries(options.rootYOffset || {})) {
+		applyRootOffset(id, delta);
+	}
+
 	{
 		const items = rootChildren
 			.map((child) => {
@@ -267,7 +288,7 @@ export async function layoutScanGraph<T extends SizedScanNode>(
 			for (const item of cluster) {
 				const delta = mean - item.centerY;
 				if (delta === 0) continue;
-				rowDelta.set(item.id, delta);
+				rowDelta.set(item.id, (rowDelta.get(item.id) || 0) + delta);
 				const position = rootPosition.get(item.id)!;
 				rootPosition.set(item.id, {
 					x: position.x,
@@ -415,6 +436,49 @@ export async function layoutScanGraph<T extends SizedScanNode>(
 		});
 	});
 
+	for (const targetId of options.alignIncomingTrunks || []) {
+		const incoming = renderedEdges.filter(
+			(graphEdge) => graphEdge.to === targetId && graphEdge.points.length >= 3,
+		);
+		const trunks = incoming
+			.map((graphEdge) => {
+				for (let index = graphEdge.points.length - 1; index > 0; index -= 1) {
+					const current = graphEdge.points[index]!;
+					const previous = graphEdge.points[index - 1]!;
+					if (
+						Math.abs(current.x - previous.x) < 0.5 &&
+						Math.abs(current.y - previous.y) >= 0.5
+					) {
+						return { graphEdge, index, x: current.x };
+					}
+				}
+				return null;
+			})
+			.filter((item): item is NonNullable<typeof item> => item !== null);
+		const targetX = Math.max(...trunks.map((item) => item.x));
+		if (!Number.isFinite(targetX)) continue;
+
+		for (const trunk of trunks) {
+			let start = trunk.index - 1;
+			let end = trunk.index;
+			while (
+				start > 0 &&
+				Math.abs(trunk.graphEdge.points[start - 1]!.x - trunk.x) < 0.5
+			) {
+				start -= 1;
+			}
+			while (
+				end < trunk.graphEdge.points.length - 1 &&
+				Math.abs(trunk.graphEdge.points[end + 1]!.x - trunk.x) < 0.5
+			) {
+				end += 1;
+			}
+			for (let index = start; index <= end; index += 1) {
+				trunk.graphEdge.points[index]!.x = targetX;
+			}
+		}
+	}
+
 	{
 		const xOccupied: Interval[] = [];
 		const yOccupied: Interval[] = [];
@@ -468,6 +532,60 @@ export async function layoutScanGraph<T extends SizedScanNode>(
 				graphEdge.labelPos.x = remapX(graphEdge.labelPos.x);
 				graphEdge.labelPos.y = remapY(graphEdge.labelPos.y);
 			}
+		}
+	}
+
+	const layoutTop = Math.min(
+		...placed.map((item) => item.y),
+		...groups.map((group) => group.y),
+	);
+	const layoutBottom = Math.max(
+		...placed.map((item) => item.y + item.height),
+		...groups.map((group) => group.y + group.height),
+	);
+	const layoutCenterY = (layoutTop + layoutBottom) / 2;
+	for (const id of options.centerRootNodes || []) {
+		const item = placed.find((candidate) => candidate.id === id);
+		if (!item) continue;
+		const previousCenterY = item.y + item.height / 2;
+		const delta = layoutCenterY - previousCenterY;
+		item.y += delta;
+		for (const graphEdge of renderedEdges) {
+			const incoming = graphEdge.to === id;
+			const outgoing = graphEdge.from === id;
+			if (!incoming && !outgoing) continue;
+			const endpointIndex = incoming ? graphEdge.points.length - 1 : 0;
+			const endpoint = graphEdge.points[endpointIndex];
+			if (!endpoint) continue;
+			const previousY = endpoint.y;
+			const step = incoming ? -1 : 1;
+			for (
+				let index = endpointIndex;
+				index >= 0 && index < graphEdge.points.length;
+				index += step
+			) {
+				const point = graphEdge.points[index]!;
+				if (Math.abs(point.y - previousY) >= 0.5) break;
+				point.y += delta;
+			}
+		}
+	}
+
+	const minimumY = Math.min(
+		...placed.map((item) => item.y),
+		...groups.map((group) => group.y),
+		...renderedEdges.flatMap((graphEdge) => [
+			...graphEdge.points.map((point) => point.y),
+			...(graphEdge.labelPos ? [graphEdge.labelPos.y - 11] : []),
+		]),
+	);
+	const yShift = Number.isFinite(minimumY) && minimumY < 16 ? 16 - minimumY : 0;
+	if (yShift) {
+		for (const item of placed) item.y += yShift;
+		for (const group of groups) group.y += yShift;
+		for (const graphEdge of renderedEdges) {
+			for (const point of graphEdge.points) point.y += yShift;
+			if (graphEdge.labelPos) graphEdge.labelPos.y += yShift;
 		}
 	}
 

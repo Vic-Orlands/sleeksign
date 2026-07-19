@@ -515,8 +515,8 @@
           <p
             class="mt-6 max-w-md text-[14px] font-light leading-[1.8] text-muted-foreground"
           >
-            One calm workspace for preparing, routing, signing, and verifying
-            the documents your team depends on.
+            One workspace for preparing, routing, signing, and verifying the
+            documents your team depends on.
           </p>
         </div>
 

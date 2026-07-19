@@ -504,20 +504,26 @@
                           name="memberId"
                           value={member.id}
                         />
-                        <select
-                          name="role"
-                          class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 text-xs capitalize"
-                          aria-label={`Role for ${member.user?.name || member.user?.email || "member"}`}
-                        >
-                          <option
-                            value="member"
-                            selected={member.role === "member"}>Member</option
+                        <div class="relative min-w-0 flex-1">
+                          <select
+                            name="role"
+                            class="h-8 w-full appearance-none rounded-md border border-border bg-background px-2.5 pr-8 text-xs capitalize outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                            aria-label={`Role for ${member.user?.name || member.user?.email || "member"}`}
                           >
-                          <option
-                            value="admin"
-                            selected={member.role === "admin"}>Admin</option
-                          >
-                        </select>
+                            <option
+                              value="member"
+                              selected={member.role === "member"}>Member</option
+                            >
+                            <option
+                              value="admin"
+                              selected={member.role === "admin"}>Admin</option
+                            >
+                          </select>
+                          <CaretDown
+                            class="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                        </div>
                         <Button
                           type="submit"
                           size="sm"
@@ -715,26 +721,32 @@
                                       name="memberId"
                                       value={member.id}
                                     />
-                                    <select
-                                      name="role"
-                                      class="h-8 w-full rounded-md border border-border bg-background px-2.5 text-xs capitalize"
-                                      aria-label={`Role for ${member.user?.name || member.user?.email || "member"}`}
-                                      onchange={(event) =>
-                                        event.currentTarget.form?.requestSubmit()}
-                                      disabled={busyAction ===
-                                        `team-role-${team.id}-${member.id}`}
-                                    >
-                                      <option
-                                        value="member"
-                                        selected={member.role === "member"}
-                                        >Member</option
+                                    <div class="relative">
+                                      <select
+                                        name="role"
+                                        class="h-8 w-full appearance-none rounded-md border border-border bg-background px-2.5 pr-8 text-xs capitalize outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                        aria-label={`Role for ${member.user?.name || member.user?.email || "member"}`}
+                                        onchange={(event) =>
+                                          event.currentTarget.form?.requestSubmit()}
+                                        disabled={busyAction ===
+                                          `team-role-${team.id}-${member.id}`}
                                       >
-                                      <option
-                                        value="admin"
-                                        selected={member.role === "admin"}
-                                        >Admin</option
-                                      >
-                                    </select>
+                                        <option
+                                          value="member"
+                                          selected={member.role === "member"}
+                                          >Member</option
+                                        >
+                                        <option
+                                          value="admin"
+                                          selected={member.role === "admin"}
+                                          >Admin</option
+                                        >
+                                      </select>
+                                      <CaretDown
+                                        class="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                                        aria-hidden="true"
+                                      />
+                                    </div>
                                   </form>
                                 {:else}
                                   <span class="text-xs capitalize"
@@ -868,20 +880,26 @@
                     </td>
                     <td class="px-3 py-3">
                       {#if canChangeRoles && member.role !== "owner" && !alreadyInTeam}
-                        <select
-                          name={`role:${member.id}`}
-                          class="h-8 w-full rounded-md border border-border bg-background px-2.5 text-xs capitalize"
-                          aria-label={`Role for ${member.user?.name || member.user?.email || "member"}`}
-                        >
-                          <option
-                            value="member"
-                            selected={member.role === "member"}>Member</option
+                        <div class="relative">
+                          <select
+                            name={`role:${member.id}`}
+                            class="h-8 w-full appearance-none rounded-md border border-border bg-background px-2.5 pr-8 text-xs capitalize outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                            aria-label={`Role for ${member.user?.name || member.user?.email || "member"}`}
                           >
-                          <option
-                            value="admin"
-                            selected={member.role === "admin"}>Admin</option
-                          >
-                        </select>
+                            <option
+                              value="member"
+                              selected={member.role === "member"}>Member</option
+                            >
+                            <option
+                              value="admin"
+                              selected={member.role === "admin"}>Admin</option
+                            >
+                          </select>
+                          <CaretDown
+                            class="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                        </div>
                       {:else}
                         <span class="text-xs capitalize">{member.role}</span>
                       {/if}
@@ -929,15 +947,21 @@
                 aria-label="Email address"
                 required
               />
-              <select
-                name="role"
-                class="h-8 w-full rounded-md border border-border px-2.5 text-xs sm:w-24"
-                bind:value={inviteRole}
-                aria-label="Role"
-              >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-              </select>
+              <div class="relative w-full sm:w-28">
+                <select
+                  name="role"
+                  class="h-8 w-full appearance-none rounded-md border border-border bg-background px-2.5 pr-8 text-xs outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  bind:value={inviteRole}
+                  aria-label="Role"
+                >
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <CaretDown
+                  class="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              </div>
               <Button
                 type="submit"
                 class="w-full sm:w-40"

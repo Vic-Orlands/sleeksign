@@ -119,8 +119,18 @@ export const sleeksignScan: ScanData = {
 		nodes: [
 			node("auth-pages", "Auth pages", "entry", {
 				sub: "/signin · /signup",
-				group: "Workspace",
+				group: "Identity",
 				sourceRef: "src/routes/signin",
+			}),
+			node("better-auth", "Better Auth", "external", {
+				sub: "credentials · sessions",
+				group: "Identity",
+				domain: "better-auth.com",
+			}),
+			node("google-oauth", "Google OAuth", "external", {
+				sub: "OAuth provider",
+				group: "Identity",
+				domain: "accounts.google.com",
 			}),
 			node("workspace-app", "Workspace app", "entry", {
 				sub: "/docs · /shared",
@@ -145,31 +155,32 @@ export const sleeksignScan: ScanData = {
 			}),
 			node("document-setup", "Document setup", "entry", {
 				sub: "/docs/[id]/setup",
-				group: "Domain",
+				group: "Signing",
 				sourceRef: "src/routes/(app)/docs/[id]/setup",
 			}),
 			node("upload-api", "PDF upload API", "entry", {
 				sub: "/api/uploads/*",
-				group: "Domain",
+				group: "Signing",
 				sourceRef: "src/routes/api/uploads",
 			}),
 			node("send-api", "Send document API", "entry", {
 				sub: "/api/send-document",
-				group: "Domain",
+				group: "Signing",
 				sourceRef: "src/routes/api/send-document",
 			}),
 			node("signing-page", "Signing session", "entry", {
 				sub: "/sign/packet/[id]",
-				group: "Domain",
+				group: "Signing",
 				sourceRef: "src/routes/sign/packet/[id]",
 			}),
 			node("finalize-api", "Finalize API", "entry", {
 				sub: "/api/finalize",
-				group: "Domain",
+				group: "Signing",
 				sourceRef: "src/routes/api/finalize",
 			}),
 			node("signing-workflow", "Signing workflow", "service", {
 				sub: "packets · copies · values",
+				group: "Signing",
 				detail: "Creates signing packets, recipient copies, and participant field values.",
 				sourceRef: "src/lib/signing-workflows.ts",
 			}),
@@ -231,14 +242,9 @@ export const sleeksignScan: ScanData = {
 				sourceRef: "src/lib/pdf-engine.ts",
 			}),
 			node("branding", "Branding and domains", "service", {
-				sub: "workspace identity",
+				sub: "custom domains · sender identity",
+				group: "Workspace",
 				sourceRef: "src/lib/server/branding.ts",
-			}),
-			node("better-auth", "Better Auth", "external", {
-				domain: "better-auth.com",
-			}),
-			node("google-oauth", "Google OAuth", "external", {
-				domain: "accounts.google.com",
 			}),
 			node("r2", "Cloudflare R2", "store", { domain: "cloudflare.com" }),
 			node("google-kms", "Google Cloud KMS", "external", {
@@ -249,15 +255,17 @@ export const sleeksignScan: ScanData = {
 			node("postgres", "Neon Postgres", "store", { domain: "neon.tech" }),
 		],
 		edges: [
-			edge("auth-pages", "auth-access", "triggers"),
-			edge("workspace-app", "auth-access"),
+			edge("auth-pages", "better-auth", "triggers", "sign in or sign up"),
+			edge("better-auth", "google-oauth", "calls", "OAuth provider"),
+			edge("better-auth", "auth-access", "triggers", "session"),
+			edge("auth-access", "workspace-app", "triggers", "workspace access"),
+			edge("workspace-app", "settings", "triggers", "administration"),
 			edge("settings", "access-control"),
 			edge("settings", "branding"),
-			edge("auth-access", "better-auth"),
-			edge("better-auth", "google-oauth"),
 			edge("auth-access", "postgres", "reads", "workspace scope"),
 			edge("access-control", "postgres", "writes", "roles and teams"),
 			edge("workspace-app", "documents"),
+			edge("workspace-app", "document-setup", "triggers", "prepare document"),
 			edge("upload-api", "documents", "triggers"),
 			edge("upload-api", "r2", "writes", "browser uploads PDF"),
 			edge("upload-api", "audit-chain", "writes", "upload custody"),
