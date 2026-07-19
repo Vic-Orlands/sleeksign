@@ -6,6 +6,11 @@
   import SignatureMaker from "$lib/components/signature/SignatureMaker.svelte";
   import SignatureValue from "$lib/components/signature/SignatureValue.svelte";
   import Button from "$lib/components/ui/button.svelte";
+  import Dialog from "$lib/components/ui/dialog.svelte";
+  import DialogContent from "$lib/components/ui/dialog-content.svelte";
+  import DialogDescription from "$lib/components/ui/dialog-description.svelte";
+  import DialogHeader from "$lib/components/ui/dialog-header.svelte";
+  import DialogTitle from "$lib/components/ui/dialog-title.svelte";
   import Input from "$lib/components/ui/input.svelte";
   import { valueIsComplete, type Field } from "$lib/field-utils";
 
@@ -294,6 +299,11 @@
       isFinalizing = false;
     }
   }
+
+  async function retryFinalize() {
+    signingComplete = false;
+    await finalize();
+  }
 </script>
 
 {#if isLoading}
@@ -511,24 +521,6 @@
   <div class="flex h-screen items-center justify-center bg-background">
     {loadError || "Document not found"}
   </div>
-{:else if signingComplete || finalPdfUrl}
-  <div class="flex min-h-screen items-center justify-center bg-(--paper) p-6">
-    <div
-      class="w-full max-w-md border border-border bg-background p-8 text-center"
-    >
-      <h1 class="font-mono text-xs font-semibold uppercase tracking-widest">
-        Document completed
-      </h1>
-      <p class="mt-2 text-sm text-muted-foreground">{completionMessage}</p>
-      {#if finalPdfUrl}
-        <Button
-          class="mt-6 w-full"
-          onclick={() => window.open(finalPdfUrl!, "_blank")}
-          >Download signed PDF</Button
-        >
-      {/if}
-    </div>
-  </div>
 {:else}
   <div class="flex h-screen flex-col bg-(--paper)">
     <header
@@ -621,6 +613,52 @@
     </section>
   </div>
 {/if}
+
+<Dialog open={signingComplete || isFinalizing} dismissible={false}>
+  <DialogContent class="max-w-md text-center">
+    <DialogHeader class="items-center text-center">
+      <DialogTitle>
+        {isFinalizing ? "Completing your document" : "Document completed"}
+      </DialogTitle>
+      <DialogDescription>{completionMessage}</DialogDescription>
+    </DialogHeader>
+    {#if isFinalizing}
+      <div class="flex items-center justify-center py-3" aria-live="polite">
+        <svg
+          class="size-5 animate-spin text-foreground motion-reduce:animate-none"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle
+            class="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            stroke-width="4"
+          />
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+          />
+        </svg>
+      </div>
+    {:else if finalPdfUrl}
+      <a
+        href={finalPdfUrl}
+        class="inline-flex h-9 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        Download signed PDF
+      </a>
+    {:else if signingComplete}
+      <Button class="w-full" onclick={retryFinalize}>
+        Check document completion
+      </Button>
+    {/if}
+  </DialogContent>
+</Dialog>
 
 <SignatureMaker
   open={isMakerOpen}

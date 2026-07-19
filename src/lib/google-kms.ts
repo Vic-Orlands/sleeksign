@@ -43,12 +43,18 @@ function getClient() {
   const hasWorkloadIdentityConfig = Boolean(
     projectNumber && poolId && providerId && serviceAccountEmail,
   );
+  const isVercelRuntime =
+    process.env.VERCEL === "1" || Boolean(process.env.VERCEL_OIDC_TOKEN);
 
-  if (hasAnyWorkloadIdentityConfig && !hasWorkloadIdentityConfig) {
+  if (
+    isVercelRuntime &&
+    hasAnyWorkloadIdentityConfig &&
+    !hasWorkloadIdentityConfig
+  ) {
     throw new Error("Google Cloud workload identity configuration is incomplete");
   }
 
-  if (hasWorkloadIdentityConfig) {
+  if (isVercelRuntime && hasWorkloadIdentityConfig) {
     const providerResource = `projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
     const oidcAudience = `https://iam.googleapis.com/${providerResource}`;
     const authClient = ExternalAccountClient.fromJSON({

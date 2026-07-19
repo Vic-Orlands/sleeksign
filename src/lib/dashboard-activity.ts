@@ -49,6 +49,9 @@ function buildPacketSummaries(document: DocumentWithActivity): PacketActivitySum
       signerEmail: copy.signerEmail,
       recipientType: copy.recipientType,
       status: copy.status === "completed" ? "completed" : "pending",
+      completedAt: copy.completedAt || null,
+      finalizedFileUrl: copy.finalizedFileUrl || null,
+      finalizedStorageKey: copy.finalizedStorageKey || null,
       createdAt: copy.createdAt,
       verificationId:
         document.verifications?.find(

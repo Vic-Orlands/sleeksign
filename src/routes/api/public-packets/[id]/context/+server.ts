@@ -22,6 +22,16 @@ import {
   resolvePacketSignerIdentity,
 } from "@/lib/signer-identity";
 
+function getPublicDownloadUrl(
+  packetId: string,
+  roleName: string,
+  copyId?: string | null,
+) {
+  const params = new URLSearchParams({ role: roleName, download: "1" });
+  if (copyId) params.set("copyId", copyId);
+  return `/api/public-packets/${packetId}/download?${params.toString()}`;
+}
+
 export const GET: RequestHandler = async ({ request: req, params }) => {
   try {
     const { id } = params;
@@ -69,8 +79,9 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
     );
     const roleCompleted =
       packet.status === "completed" ||
-      copy?.status === "completed" ||
-      roleValues.some((value) => Boolean(value.completedAt));
+      (scope === "private"
+        ? copy?.status === "completed"
+        : roleValues.some((value) => Boolean(value.completedAt)));
     const branding = await getOrganizationBranding(packet.workspaceId);
 
     if (packet.requireOtp) {
@@ -159,7 +170,10 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
         mode: packet.mode,
         status: packet.status,
         roleCompleted,
-        completedUrl: copy?.finalizedFileUrl || packet.finalizedFileUrl || null,
+        completedUrl:
+          copy?.status === "completed" || packet.status === "completed"
+            ? getPublicDownloadUrl(packet.id, roleName, copyId || null)
+            : null,
         requireOtp: packet.requireOtp,
         roleName,
         copyId: copyId || null,
@@ -387,26 +401,16 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       : null;
 
     if (packet.status === "completed") {
-      return Response.json({ status: "completed", url: packet.finalizedFileUrl });
+      return Response.json({
+        status: "completed",
+        url: getPublicDownloadUrl(packet.id, roleName, copyId || null),
+      });
     }
 
     if (copy?.status === "completed") {
-      return Response.json({ status: "completed", url: copy.finalizedFileUrl });
-    }
-
-    const existingRoleValues = scope === "shared"
-      ? packet.values.filter((value) => value.roleName === roleName && !value.copyId)
-      : await db.query.signingPacketValues.findMany({
-          where: and(
-            eq(signingPacketValues.packetId, packet.id),
-            eq(signingPacketValues.copyId, copyId || ""),
-            eq(signingPacketValues.roleName, roleName),
-          ),
-        });
-    if (existingRoleValues.some((value) => Boolean(value.completedAt))) {
       return Response.json({
-        status: "waiting",
-        message: "Your part is complete. Waiting for the remaining parties.",
+        status: "completed",
+        url: getPublicDownloadUrl(packet.id, roleName, copyId || null),
       });
     }
 
@@ -494,7 +498,10 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
           payload: { roleName, storageProvider: "r2" },
           ...getRequestAuditContext(req.headers),
         });
-        return Response.json({ status: "completed", url: finalizedPacket.url });
+        return Response.json({
+          status: "completed",
+          url: getPublicDownloadUrl(packet.id, roleName),
+        });
       }
 
       return Response.json({
@@ -558,9 +565,25 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       ...getRequestAuditContext(req.headers),
     });
 
-    return Response.json({ status: "completed", url: finalizedCopy.url });
+    return Response.json({
+      status: "completed",
+      url: getPublicDownloadUrl(packet.id, roleName, copyId),
+    });
   } catch (error) {
     console.error("Public packet completion error:", error);
+    const message = error instanceof Error ? error.message : "";
+    if (
+      message.includes("x-vercel-oidc-token") ||
+      message.includes("Could not load the default credentials")
+    ) {
+      return Response.json(
+        {
+          error:
+            "Document security service is unavailable in this local environment. Use a linked Vercel runtime or configure Google Application Default Credentials.",
+        },
+        { status: 503 },
+      );
+    }
     return Response.json(
       { error: "Failed to complete signing" },
       { status: 500 },

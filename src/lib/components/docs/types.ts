@@ -26,6 +26,9 @@ export type PacketCopySummary = {
 	signerEmail?: string | null;
 	recipientType?: "email" | "signer" | "group" | "bulk" | null;
 	status: SessionStatus;
+	completedAt?: string | number | Date | null;
+	finalizedFileUrl?: string | null;
+	finalizedStorageKey?: string | null;
 	createdAt: string | number | Date;
 	verificationId?: string | null;
 };

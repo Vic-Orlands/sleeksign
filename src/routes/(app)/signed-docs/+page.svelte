@@ -132,12 +132,26 @@
 						sharedSession?.signerEmail ||
 						null,
 					signerRole: copy.roleName,
-					status: completedSession ? "completed" : "pending",
-					completedAt: completedSession?.completedAt || null,
+					status:
+						copy.status === "completed" || completedSession
+							? "completed"
+							: "pending",
+					completedAt: copy.completedAt || completedSession?.completedAt || null,
 					finalizedFileUrl:
-						completedSession?.finalizedFileUrl || packet.finalizedFileUrl || null,
+						copy.finalizedFileUrl ||
+						completedSession?.finalizedFileUrl ||
+						packet.finalizedFileUrl ||
+						null,
 					finalizedStorageKey:
-						completedSession?.finalizedStorageKey || packet.finalizedStorageKey || null,
+						copy.finalizedStorageKey ||
+						completedSession?.finalizedStorageKey ||
+						packet.finalizedStorageKey ||
+						null,
+					verificationId:
+						copy.verificationId ||
+						completedSession?.verificationId ||
+						packet.verificationId ||
+						null,
 				};
 			});
 		}
@@ -414,7 +428,9 @@
 									<td class="py-2.5">
 										<span class="inline-flex rounded-full border border-border px-2 py-0.5 text-[11px] font-medium {group.allPartiesSigned ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">
 											{group.allPartiesSigned
-												? "All parties signed"
+												? group.totalParties === 1
+													? "Signed"
+													: "All parties signed"
 												: `${group.completedParties} of ${group.totalParties} parties signed`}
 										</span>
 									</td>
@@ -514,7 +530,9 @@
 						<h2 class="mt-1 truncate text-base font-semibold">{selectedGroup.documentName}</h2>
 						<p class="mt-1 text-[12px] text-muted-foreground">
 							{selectedGroup.allPartiesSigned
-								? "All parties have completed their parts"
+								? selectedGroup.totalParties === 1
+									? "The signer has completed this document"
+									: "All parties have completed their parts"
 								: `${selectedGroup.completedParties} of ${selectedGroup.totalParties} parties signed`}
 						</p>
 					</div>
