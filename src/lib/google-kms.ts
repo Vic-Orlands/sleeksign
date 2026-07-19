@@ -112,6 +112,40 @@ function assertTrustedKeyVersion(keyVersion: string) {
   }
 }
 
+function getKeyVersionNumber(name: string) {
+  const value = Number(name.split("/").pop());
+  return Number.isSafeInteger(value) ? value : -1;
+}
+
+async function getSigningKeyVersion(kms: KeyManagementServiceClient) {
+  const keyName = getCryptoKeyName();
+  const [versions] = await kms.listCryptoKeyVersions({
+    parent: keyName,
+    view: "FULL",
+  });
+  const enabledVersions = versions
+    .filter(
+      (version) =>
+        typeof version.name === "string" &&
+        (version.state === 1 || version.state === "ENABLED") &&
+        (version.algorithm === 12 ||
+          version.algorithm === "EC_SIGN_P256_SHA256"),
+    )
+    .sort(
+      (left, right) =>
+        getKeyVersionNumber(right.name || "") -
+        getKeyVersionNumber(left.name || ""),
+    );
+  const keyVersion = enabledVersions[0]?.name;
+  if (!keyVersion) {
+    throw new Error(
+      "Google Cloud KMS key has no enabled EC_SIGN_P256_SHA256 version",
+    );
+  }
+  assertTrustedKeyVersion(keyVersion);
+  return keyVersion;
+}
+
 async function getPublicKey(keyVersion: string) {
   assertTrustedKeyVersion(keyVersion);
   const [response] = await getClient().getPublicKey({ name: keyVersion });
@@ -134,9 +168,7 @@ export async function signCanonicalManifest(manifest: unknown) {
   const canonicalManifest = canonicalStringify(manifest);
   const digest = sha256Bytes(canonicalManifest);
   const kms = getClient();
-  const [key] = await kms.getCryptoKey({ name: getCryptoKeyName() });
-  const keyVersion = key.primary?.name;
-  if (!keyVersion) throw new Error("Google Cloud KMS key has no primary version");
+  const keyVersion = await getSigningKeyVersion(kms);
 
   const [response] = await kms.asymmetricSign({
     name: keyVersion,
