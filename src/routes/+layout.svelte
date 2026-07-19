@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { dev } from "$app/environment";
 	import { onNavigate } from "$app/navigation";
-	import { inject } from "@vercel/analytics";
+	import { injectAnalytics } from "@vercel/analytics/sveltekit";
 	import { ModeWatcher } from "mode-watcher";
 	import { Toaster } from "svelte-sonner";
 	import "../app.css";
 
 	let { children } = $props();
 
-	inject({ mode: dev ? "development" : "production" });
+	injectAnalytics({ mode: dev ? "development" : "production" });
 
 	onNavigate((navigation) => {
 		if (!document.startViewTransition) return;
