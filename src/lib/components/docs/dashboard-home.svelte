@@ -11,8 +11,14 @@
     getDocumentType,
   } from "$lib/components/docs/types";
   import Button from "$lib/components/ui/button.svelte";
+  import Dialog from "$lib/components/ui/dialog.svelte";
+  import DialogContent from "$lib/components/ui/dialog-content.svelte";
+  import DialogDescription from "$lib/components/ui/dialog-description.svelte";
+  import DialogHeader from "$lib/components/ui/dialog-header.svelte";
+  import DialogTitle from "$lib/components/ui/dialog-title.svelte";
   import Input from "$lib/components/ui/input.svelte";
   import Skeleton from "$lib/components/ui/skeleton.svelte";
+  import UploadingDocumentRow from "$lib/components/docs/uploading-document-row.svelte";
   import { cn } from "$lib/utils";
   import {
     FunnelSimpleIcon,
@@ -29,6 +35,15 @@
     | "archived"
     | "shared"
     | DocumentSetupStatus;
+
+  export type WorkspaceAccessState = {
+    state: "loading" | "choose";
+    workspaces: Array<{ id: string; name: string; slug: string }>;
+    busyWorkspaceId: string;
+    isContinuingWithoutWorkspace: boolean;
+    onSelectWorkspace: (workspaceId: string) => void | Promise<void>;
+    onContinueWithoutWorkspace: () => void | Promise<void>;
+  };
 
   const FILTER_OPTIONS: Array<{ value: DashboardFilter; label: string }> = [
     { value: "all", label: "All documents" },
@@ -52,6 +67,7 @@
     onArchiveDocument,
     onRestoreDocument,
     pageTitle = "Documents",
+    workspaceAccess = null,
   }: {
     filteredDocuments: DocumentRecord[];
     tableFilter: DashboardFilter;
@@ -67,6 +83,7 @@
     onArchiveDocument?: (document: DocumentRecord) => void;
     onRestoreDocument?: (document: DocumentRecord) => void;
     pageTitle?: string;
+    workspaceAccess?: WorkspaceAccessState | null;
   } = $props();
 
   let fileInputEl = $state<HTMLInputElement | null>(null);
@@ -289,6 +306,9 @@
           {:else}
             {#each filteredDocuments as document (document.id)}
               {@const counts = getDocumentCounts(document)}
+              {@const isUploading =
+                document.uploadStatus === "pending_upload" &&
+                typeof document.uploadProgress === "number"}
               {@const status =
                 variant === "shared"
                   ? counts.completed === counts.total && counts.total > 0
@@ -297,10 +317,13 @@
                       ? "In Progress"
                       : "Pending"
                   : getDocumentSetupStatus(document)}
-              <tr
-                class="group cursor-pointer border-b border-border/50 transition-colors hover:bg-accent/50"
-                onclick={() => onSelectDocument(document)}
-              >
+              {#if isUploading}
+                <UploadingDocumentRow {document} {variant} />
+              {:else}
+                <tr
+                  class="group cursor-pointer border-b border-border/50 transition-colors hover:bg-accent/50"
+                  onclick={() => onSelectDocument(document)}
+                >
                 <td class="py-2.5">
                   <p class="truncate text-[13px] font-medium text-foreground">
                     {document.name}
@@ -397,7 +420,8 @@
                     </div>
                   {/if}
                 </td>
-              </tr>
+                </tr>
+              {/if}
             {/each}
           {/if}
         </tbody>
@@ -405,3 +429,150 @@
     </div>
   </section>
 </main>
+
+{#if workspaceAccess}
+  <Dialog open dismissible={false} class="w-[min(92vw,32rem)]">
+    <DialogContent class="gap-0 p-0">
+      {#if workspaceAccess.state === "loading"}
+        <div
+          class="flex items-center gap-3 px-5 py-4"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <svg
+            class="size-4 shrink-0 animate-spin text-foreground motion-reduce:animate-none"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            />
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
+          </svg>
+          <p class="text-sm font-medium text-foreground">
+            Preparing your workspace access...
+          </p>
+        </div>
+      {:else}
+        <div class="border-b border-border px-5 py-4">
+          <p
+            class="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"
+          >
+            Workspace Access
+          </p>
+          <DialogHeader class="mt-2">
+            <DialogTitle>Choose the workspace you want to open</DialogTitle>
+            <DialogDescription>
+              We'll remember this workspace and log you into it automatically
+              the next time you sign in.
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+
+        <div class="space-y-3 px-5 py-4">
+          {#if workspaceAccess.workspaces.length === 0}
+            <div class="border border-dashed border-border bg-background p-4">
+              <div class="mb-2 flex items-center gap-1">
+                <svg
+                  class="size-4"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3 21V9l9-6 9 6v12H3zm2-2h14V10.2l-7-4.67-7 4.67V19zm4-2h6v-6H9v6z"
+                  />
+                </svg>
+                <p class="text-sm font-medium text-foreground">
+                  No workspaces yet
+                </p>
+              </div>
+              <p class="text-xs text-muted-foreground">
+                Your account signed in successfully. Continue to your dashboard
+                and create a workspace from the account menu.
+              </p>
+
+              <Button
+                class="mt-3 w-full gap-2"
+                onclick={workspaceAccess.onContinueWithoutWorkspace}
+                loading={workspaceAccess.isContinuingWithoutWorkspace}
+              >
+                Continue
+                <svg
+                  class="size-4"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M13 5l7 7-7 7v-4H4v-6h9V5z" />
+                </svg>
+              </Button>
+            </div>
+          {:else}
+            {#each workspaceAccess.workspaces as workspace (workspace.id)}
+              <button
+                type="button"
+                onclick={() => workspaceAccess?.onSelectWorkspace(workspace.id)}
+                disabled={workspaceAccess.busyWorkspaceId === workspace.id}
+                class="flex w-full items-center justify-between gap-3 border border-border bg-background px-4 py-3 text-left transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+              >
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-medium text-foreground">
+                    {workspace.name}
+                  </p>
+                  <p
+                    class="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+                  >
+                    {workspace.slug}
+                  </p>
+                </div>
+
+                {#if workspaceAccess.busyWorkspaceId === workspace.id}
+                  <svg
+                    class="size-4 animate-spin text-foreground"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    />
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                {:else}
+                  <svg
+                    class="size-4 text-muted-foreground"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M13 5l7 7-7 7v-4H4v-6h9V5z" />
+                  </svg>
+                {/if}
+              </button>
+            {/each}
+          {/if}
+        </div>
+      {/if}
+    </DialogContent>
+  </Dialog>
+{/if}

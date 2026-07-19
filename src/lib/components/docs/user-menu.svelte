@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { toggleMode, mode } from "mode-watcher";
+  import { CircleNotchIcon } from "phosphor-svelte";
   import { getInitials } from "$lib/components/docs/types";
   import { authClient } from "$lib/auth-client";
   import Button from "$lib/components/ui/button.svelte";
@@ -79,9 +80,7 @@
         {userInitials}
       {/if}
     </span>
-    <span
-      class="hidden max-w-[120px] truncate text-xs font-medium sm:inline"
-    >
+    <span class="hidden max-w-[120px] truncate text-xs font-medium sm:inline">
       {userName}
     </span>
   </button>
@@ -155,7 +154,12 @@
         >Cancel</Button
       >
       <Button disabled={signOutBusy} onclick={handleSignOut}>
-        {signOutBusy ? "Logging out..." : "Log out"}
+        {#if signOutBusy}
+          <CircleNotchIcon class="size-3.5 animate-spin" aria-hidden="true" />
+          Logging out...
+        {:else}
+          Log out
+        {/if}
       </Button>
     </DialogFooter>
   </DialogContent>

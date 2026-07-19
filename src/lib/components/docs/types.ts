@@ -58,6 +58,7 @@ export type DocumentRecord = {
 	storageKey?: string | null;
 	storageProvider?: string | null;
 	uploadStatus?: "pending_upload" | "ready" | "failed";
+	uploadProgress?: number;
 	fileSize?: number | null;
 	contentType?: string | null;
 	teamId?: string | null;

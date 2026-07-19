@@ -3,6 +3,7 @@ export interface BackgroundUpload {
   name: string;
   status: "uploading" | "success" | "error";
   progress: number;
+  createdAt: string;
   error?: string;
   fileUrl: string;
   result?: {
@@ -81,6 +82,7 @@ class BackgroundUploadStore {
       name: file.name,
       status: "uploading",
       progress: 0,
+      createdAt: new Date().toISOString(),
       fileUrl: localUrl,
     };
 

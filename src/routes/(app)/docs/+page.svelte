@@ -35,7 +35,6 @@
   let documentToRestore = $state<DocumentRecord | null>(null);
   let overviewDocument = $state<DocumentRecord | null>(null);
   let overviewOpen = $state(false);
-  let activeUploadId = $state("");
   let uploads = $state<Record<string, BackgroundUpload>>({});
 
   const workspaceId = $derived(data.workspaceId || "");
@@ -52,14 +51,44 @@
     }),
   );
 
+  const documentsWithUploads = $derived.by(() => {
+    const optimisticUploads =
+      tableFilter === "all" || tableFilter === "Needs Setup"
+        ? Object.values(uploads)
+            .filter((upload) => upload.status !== "error")
+            .map(
+              (upload): DocumentRecord => ({
+                id: upload.id,
+                name: upload.name,
+                fileUrl: upload.fileUrl,
+                uploadStatus:
+                  upload.status === "success" ? "ready" : "pending_upload",
+                uploadProgress: upload.progress,
+                createdAt: upload.createdAt,
+                fields: [],
+                sessions: [],
+                packets: [],
+                roleConfigs: [],
+                signerRoles: [],
+              }),
+            )
+        : [];
+    const optimisticIds = new Set(optimisticUploads.map((upload) => upload.id));
+
+    return [
+      ...optimisticUploads,
+      ...scopedDocuments.filter(
+        (document) =>
+          !optimisticIds.has(document.id) &&
+          document.uploadStatus !== "pending_upload",
+      ),
+    ];
+  });
+
   const filteredDocuments = $derived(
-    scopedDocuments.filter((document) =>
+    documentsWithUploads.filter((document) =>
       document.name.toLowerCase().includes(query.trim().toLowerCase()),
     ),
-  );
-
-  const activeUpload = $derived(
-    activeUploadId ? uploads[activeUploadId] : undefined,
   );
 
   $effect(() => {
@@ -108,16 +137,15 @@
     }
 
     const docId = nanoid();
-    activeUploadId = docId;
     backgroundUploadStore.startUpload(file, workspaceId, docId, {
       onSuccess: async () => {
         await invalidateAll();
+        backgroundUploadStore.clearUpload(docId);
         void goto(`/docs/${docId}`);
       },
       onError: (error) => {
         toast.error(error.message || "Upload failed");
         backgroundUploadStore.clearUpload(docId);
-        activeUploadId = "";
       },
     });
   }
@@ -167,32 +195,6 @@
     void goto(`/docs/${document.id}`);
   }}
 />
-
-{#if activeUpload && activeUpload.status === "uploading"}
-  <div
-    class="pointer-events-auto fixed inset-0 z-40 flex items-center justify-center bg-background/55 backdrop-blur-[2px]"
-  >
-    <div
-      class="w-[min(92vw,24rem)] rounded-lg border border-border bg-background px-5 py-4"
-    >
-      <p class="text-[11px] text-muted-foreground">Document upload</p>
-      <p class="mt-2 text-sm font-medium">Uploading document</p>
-      <div
-        class="mt-3 flex min-w-0 items-center gap-3 rounded-md border border-border bg-card px-3 py-2"
-      >
-        <span class="min-w-0 truncate text-sm font-medium"
-          >{activeUpload.name}</span
-        >
-      </div>
-      <div class="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-        <div
-          class="h-full bg-foreground/80 transition-all duration-200"
-          style={`width: ${Math.max(2, Math.min(100, activeUpload.progress ?? 8))}%`}
-        ></div>
-      </div>
-    </div>
-  </div>
-{/if}
 
 <Dialog
   open={Boolean(documentToDelete)}

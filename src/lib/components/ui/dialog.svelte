@@ -7,11 +7,13 @@
 		class: className = "",
 		children,
 		onOpenChange,
+		dismissible = true,
 	}: {
 		open?: boolean;
 		class?: string;
 		children?: Snippet;
 		onOpenChange?: (open: boolean) => void;
+		dismissible?: boolean;
 	} = $props();
 
 	let dialogEl = $state<HTMLDialogElement | null>(null);
@@ -26,6 +28,7 @@
 	});
 
 	function handleClose() {
+		if (!dismissible) return;
 		open = false;
 		onOpenChange?.(false);
 	}
@@ -39,7 +42,10 @@
 	)}
 	onclose={handleClose}
 	onclick={(event) => {
-		if (event.target === dialogEl) handleClose();
+		if (dismissible && event.target === dialogEl) handleClose();
+	}}
+	oncancel={(event) => {
+		if (!dismissible) event.preventDefault();
 	}}
 >
 	{@render children?.()}
