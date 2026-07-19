@@ -23,10 +23,12 @@
 	let {
 		document: doc,
 		onFieldsChange,
+		onRoleConfigsChange,
 		fullHeight = false,
 	}: {
 		document: DocumentRecord;
 		onFieldsChange?: (documentId: string, fields: Field[]) => void;
+		onRoleConfigsChange?: (documentId: string, roleConfigs: RoleConfig[]) => void;
 		fullHeight?: boolean;
 	} = $props();
 
@@ -216,6 +218,7 @@
 
 		roleConfigs = normalized;
 		updateLocalFields(nextFields);
+		onRoleConfigsChange?.(doc.id, normalized);
 
 		isSaving = true;
 		try {

@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 
 import { db } from "@/db";
 import { sessions, signingPackets } from "@/db/schema";
-import { DEFAULT_ROLE_CONFIGS, type RoleConfig, type WorkflowMode } from "@/lib/field-utils";
+import { normalizeRoleConfigs, type WorkflowMode } from "@/lib/field-utils";
 import { getDocumentForAccess } from "$lib/server/page-data";
 import type { AppAccess } from "$lib/server/workspace";
 
@@ -12,8 +12,7 @@ export async function shareDocumentForAccess(
 	mode: WorkflowMode = "shared-base",
 ) {
 	const document = await getDocumentForAccess(access, documentId);
-	const roleConfigs: RoleConfig[] =
-		document.roleConfigs?.length ? document.roleConfigs : DEFAULT_ROLE_CONFIGS;
+	const roleConfigs = normalizeRoleConfigs(document.roleConfigs);
 
 	if (!(document.fields || []).length) {
 		throw new Error("Add at least one field before sharing");

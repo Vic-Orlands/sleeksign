@@ -14,8 +14,10 @@ import {
 	workspaceActions,
 } from "$lib/server/workspace";
 import {
+	deriveSignerRoles,
 	parseRoleConfigs,
 	serializeRoleConfigs,
+	serializeSignerRoles,
 	type WorkflowMode,
 } from "@/lib/field-utils";
 
@@ -124,7 +126,10 @@ export const actions: Actions = {
 			const parsed = parseRoleConfigs(raw);
 			await db
 				.update(documents)
-				.set({ roleConfigs: serializeRoleConfigs(parsed) })
+				.set({
+					roleConfigs: serializeRoleConfigs(parsed),
+					signerRoles: serializeSignerRoles(deriveSignerRoles(parsed)),
+				})
 				.where(eq(documents.id, params.id));
 			return { success: true };
 		} catch (error) {

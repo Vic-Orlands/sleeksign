@@ -7,13 +7,14 @@
   import type { DocumentRecord } from "$lib/components/docs/types";
   import Button from "$lib/components/ui/button.svelte";
   import Sheet from "$lib/components/ui/sheet.svelte";
-  import type { Field } from "$lib/field-utils";
+  import type { Field, RoleConfig } from "$lib/field-utils";
   import { fetchSigningPackets } from "$lib/packet-cache";
   import { EyeIcon, PaperPlaneTiltIcon } from "phosphor-svelte";
 
   let { data } = $props();
 
   let fieldsByDocId = $state<Record<string, Field[]>>({});
+  let roleConfigsByDocId = $state<Record<string, RoleConfig[]>>({});
   let reviewOpen = $state(false);
   let shareOpen = $state(false);
 
@@ -22,8 +23,18 @@
   );
   const document = $derived.by((): DocumentRecord | null => {
     if (!serverDocument) return null;
-    const override = fieldsByDocId[serverDocument.id];
-    return override ? { ...serverDocument, fields: override } : serverDocument;
+    const fields = fieldsByDocId[serverDocument.id];
+    const roleConfigs = roleConfigsByDocId[serverDocument.id];
+    return fields || roleConfigs
+      ? {
+          ...serverDocument,
+          fields: fields || serverDocument.fields,
+          roleConfigs: roleConfigs || serverDocument.roleConfigs,
+          signerRoles:
+            roleConfigs?.map((role) => role.name) ||
+            serverDocument.signerRoles,
+        }
+      : serverDocument;
   });
 
   const loadError = $derived(data.error || null);
@@ -51,6 +62,16 @@
 
   function updateFields(documentId: string, fields: Field[]) {
     fieldsByDocId = { ...fieldsByDocId, [documentId]: fields };
+  }
+
+  function updateRoleConfigs(
+    documentId: string,
+    roleConfigs: RoleConfig[],
+  ) {
+    roleConfigsByDocId = {
+      ...roleConfigsByDocId,
+      [documentId]: roleConfigs,
+    };
   }
 
   function openReview() {
@@ -151,6 +172,7 @@
         <DocumentSetupDock
           {document}
           onFieldsChange={updateFields}
+          onRoleConfigsChange={updateRoleConfigs}
           fullHeight
         />
       {/key}

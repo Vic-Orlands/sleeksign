@@ -420,17 +420,18 @@
         body: JSON.stringify({
           documentId: doc.id,
           mode,
-          roleConfigs,
         }),
       });
       const data = await res.json();
-      if (!data.packetId) throw new Error("Failed to create packet");
+      if (!data.packetId || !Array.isArray(data.roleConfigs)) {
+        throw new Error("Failed to create packet");
+      }
 
       const packet: PacketSummary = {
         id: data.packetId,
         mode,
         status: "active",
-        roleConfigs,
+        roleConfigs: data.roleConfigs,
       };
       packets = upsertCachedPacket(doc.id, packet);
       packetsReady = true;

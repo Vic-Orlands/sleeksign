@@ -6,7 +6,6 @@ import { signingPackets } from "@/db/schema";
 import { createSigningPacket } from "@/lib/signing-workflows";
 import {
   parseRoleConfigs,
-  type RoleConfig,
   type WorkflowMode,
 } from "@/lib/field-utils";
 import { desc, eq } from "drizzle-orm";
@@ -62,11 +61,9 @@ export const POST: RequestHandler = async ({ request: req }) => {
     const {
       documentId,
       mode,
-      roleConfigs,
     }: {
       documentId?: string;
       mode?: WorkflowMode;
-      roleConfigs?: RoleConfig[];
     } = await req.json();
 
     if (!documentId || !mode) {
@@ -78,17 +75,12 @@ export const POST: RequestHandler = async ({ request: req }) => {
 
     const access = await requireDocumentAccess(req.headers, documentId, "manage");
 
-    if (!roleConfigs) {
-      return Response.json(
-        { error: "Role configs are required" },
-        { status: 400 },
-      );
-    }
+    const roleConfigs = parseRoleConfigs(access.document.roleConfigs);
 
     const packetId = await createSigningPacket(
       documentId,
       mode,
-      parseRoleConfigs(JSON.stringify(roleConfigs)),
+      roleConfigs,
       {
         workspaceId: access.workspaceId,
         teamId: access.document.teamId,
@@ -114,7 +106,7 @@ export const POST: RequestHandler = async ({ request: req }) => {
       ...getRequestAuditContext(req.headers),
     });
 
-    return Response.json({ packetId });
+    return Response.json({ packetId, roleConfigs });
   } catch (error) {
     if (error instanceof AccessError) {
       return Response.json(
