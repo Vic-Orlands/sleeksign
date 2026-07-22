@@ -33,7 +33,7 @@
       (document) =>
         !document.archivedAt &&
         !document.deletedAt &&
-        (Boolean(document.sessions?.length) ||
+        (Boolean(document.signingEntries?.length) ||
           Boolean(document.packets?.length)),
     ),
   );

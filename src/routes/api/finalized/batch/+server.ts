@@ -1,5 +1,5 @@
 import type { RequestHandler } from "./$types";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import JSZip from "jszip";
 
 import { db } from "@/db";
@@ -9,7 +9,7 @@ import { findArtifactVerification } from "@/lib/document-verification";
 import {
   AccessError,
   requireDocumentAccess,
-  requireSigningSessionAccess,
+  requirePacketCopyAccess,
 } from "@/lib/server-access";
 
 type DownloadItem = {
@@ -41,18 +41,18 @@ export const POST: RequestHandler = async ({ request }) => {
       let storageKey: string | null = null;
 
       if (item.kind === "session") {
-        const { signingSession } = await requireSigningSessionAccess(
+        const { packetCopy } = await requirePacketCopyAccess(
           request.headers,
           item.id,
           "read",
         );
-        if (signingSession.status === "completed") {
+        if (packetCopy.status === "completed") {
           const receipt = await findArtifactVerification("session", item.id);
           if (receipt?.status === "active") storageKey = receipt.finalizedStorageKey;
         }
       } else if (item.kind === "packet") {
         const packet = await db.query.signingPackets.findFirst({
-          where: eq(signingPackets.id, item.id),
+          where: and(eq(signingPackets.id, item.id), isNull(signingPackets.deletedAt)),
         });
         if (packet) {
           await requireDocumentAccess(request.headers, packet.documentId, "read");
@@ -63,7 +63,10 @@ export const POST: RequestHandler = async ({ request }) => {
         }
       } else if (item.kind === "copy") {
         const copy = await db.query.signingPacketCopies.findFirst({
-          where: eq(signingPacketCopies.id, item.id),
+          where: and(
+            eq(signingPacketCopies.id, item.id),
+            isNull(signingPacketCopies.deletedAt),
+          ),
           with: { packet: true },
         });
         if (copy?.packet) {

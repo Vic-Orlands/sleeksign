@@ -2,9 +2,21 @@ import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { db } from "@/db";
-import { signerGroups, signerGroupMembers, teams, workspaceSigners } from "@/db/schema";
+import {
+	signerGroups,
+	signerGroupMembers,
+	signingPacketCopies,
+	signingPackets,
+	teams,
+	workspaceSigners,
+} from "@/db/schema";
 import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
-import { AccessError, requireWorkspaceAccess } from "@/lib/server-access";
+import {
+	AccessError,
+	requirePacketAccess,
+	requirePacketCopyAccess,
+	requireWorkspaceAccess,
+} from "@/lib/server-access";
 
 export async function listDirectorySigners(headers: HeadersInit, workspaceId: string) {
 	const access = await requireWorkspaceAccess(headers, workspaceId, "signers:view");
@@ -246,17 +258,25 @@ export async function deleteSignerGroup(
 	await db.delete(signerGroups).where(eq(signerGroups.id, groupId));
 }
 
-export async function deleteSigningSession(headers: HeadersInit, sessionId: string) {
-	const { sessions } = await import("@/db/schema");
-	const row = await db.query.sessions.findFirst({
-		where: eq(sessions.id, sessionId),
-		with: { document: true },
-	});
-	if (!row?.document) throw new AccessError("Session not found", 404);
+export async function deleteSigningEntry(
+	headers: HeadersInit,
+	input: { artifactKind: "packet" | "copy"; packetId: string; id: string },
+) {
+	if (input.artifactKind === "packet") {
+		await requirePacketAccess(headers, input.packetId, "manage");
+		await db
+			.update(signingPackets)
+			.set({ deletedAt: new Date(), updatedAt: new Date() })
+			.where(eq(signingPackets.id, input.packetId));
+		return;
+	}
 
-	await requireWorkspaceAccess(headers, row.document.workspaceId, "manage");
+	const { packetCopy } = await requirePacketCopyAccess(headers, input.id, "manage");
+	if (packetCopy.packetId !== input.packetId) {
+		throw new AccessError("Signing copy not found", 404);
+	}
 	await db
-		.update(sessions)
-		.set({ deletedAt: new Date() })
-		.where(eq(sessions.id, sessionId));
+		.update(signingPacketCopies)
+		.set({ deletedAt: new Date(), updatedAt: new Date() })
+		.where(eq(signingPacketCopies.id, input.id));
 }

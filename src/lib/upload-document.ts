@@ -86,7 +86,7 @@ async function uploadDocument(file: File, workspaceId?: string) {
         uploadStatus: "ready",
         createdAt: uploadedDocument.createdAt,
         fields: [],
-        sessions: [],
+        signingEntries: [],
         roleConfigs: [],
         signerRoles: [],
       }),

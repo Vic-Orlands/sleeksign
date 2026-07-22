@@ -6,11 +6,14 @@
 
 	let { data } = $props();
 
-	const session = $derived(data.session);
+	const packet = $derived(data.packet);
 	const origin = $derived(page.url.origin);
-
-	const uniqueUrl = $derived(`${origin}/sign/${session.id}`);
-	const publicUrl = $derived(`${origin}/sign/p/${session.documentId}`);
+	const signingLinks = $derived(
+		packet.roleConfigs.map((role) => ({
+			role: role.name,
+			url: `${origin}/sign/p/${packet.document.id}?packet=${encodeURIComponent(packet.id)}&role=${encodeURIComponent(role.name)}`,
+		})),
+	);
 
 	function copyToClipboard(text: string) {
 		void navigator.clipboard.writeText(text);
@@ -26,32 +29,18 @@
 		</div>
 
 		<div class="mt-10 space-y-6">
-			<div class="space-y-3">
-				<div class="flex items-center justify-between">
-					<p class="font-mono text-[10px] font-bold text-primary">
-						Option 1: Unique Link (Specific to {session.signerName || "signer"})
-					</p>
-					<span class="border border-border px-2 py-0.5 font-mono text-[8px]">ONE-TIME USE</span>
+			{#each signingLinks as link (link.role)}
+				<div class="space-y-3">
+					<div class="flex items-center justify-between">
+						<p class="font-mono text-[10px] font-bold text-primary">{link.role} signing link</p>
+						<span class="bg-primary px-2 py-0.5 font-mono text-[8px] text-primary-foreground">PACKET</span>
+					</div>
+					<div class="flex items-center justify-between border border-primary/20 bg-primary/5 p-4">
+						<code class="mr-4 truncate text-xs font-bold text-primary">{link.url}</code>
+						<Button size="icon" onclick={() => copyToClipboard(link.url)}>Copy</Button>
+					</div>
 				</div>
-				<div class="flex items-center justify-between border border-border bg-background p-4">
-					<code class="mr-4 truncate text-xs font-bold text-muted-foreground">{uniqueUrl}</code>
-					<Button size="icon" variant="ghost" onclick={() => copyToClipboard(uniqueUrl)}>Copy</Button>
-				</div>
-			</div>
-
-			<div class="space-y-3">
-				<div class="flex items-center justify-between">
-					<p class="font-mono text-[10px] font-bold text-primary">Option 2: Public Link (Send to entire staff)</p>
-					<span class="bg-primary px-2 py-0.5 font-mono text-[8px] text-primary-foreground">MULTI-USER</span>
-				</div>
-				<div class="flex items-center justify-between border border-primary/20 bg-primary/5 p-4">
-					<code class="mr-4 truncate text-xs font-bold text-primary">{publicUrl}</code>
-					<Button size="icon" onclick={() => copyToClipboard(publicUrl)}>Copy</Button>
-				</div>
-				<p class="font-mono text-[9px] font-medium text-muted-foreground">
-					* Recommended for high-volume signing (NDAs, Employee Handbooks, etc.)
-				</p>
-			</div>
+			{/each}
 		</div>
 
 		<Button class="mt-10 h-12 w-full" onclick={() => goto("/docs")}>Back to Dashboard</Button>

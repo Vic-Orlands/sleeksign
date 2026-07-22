@@ -66,7 +66,7 @@
                 uploadProgress: upload.progress,
                 createdAt: upload.createdAt,
                 fields: [],
-                sessions: [],
+                signingEntries: [],
                 packets: [],
                 roleConfigs: [],
                 signerRoles: [],

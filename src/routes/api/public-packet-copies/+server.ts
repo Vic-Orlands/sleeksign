@@ -34,6 +34,15 @@ export const POST: RequestHandler = async ({ request: req }) => {
       email: signerEmail,
     });
     const packet = await getPacket(packetId);
+    if (packet.status !== "active") {
+      return Response.json(
+        { error: "Signing link is no longer active" },
+        { status: 409 },
+      );
+    }
+    if (!packet.roleConfigs.some((role) => role.name === roleName)) {
+      return Response.json({ error: "Signer role not found" }, { status: 404 });
+    }
     const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
 
     if (scope === "shared") {

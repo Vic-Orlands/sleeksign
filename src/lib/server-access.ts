@@ -1,4 +1,4 @@
-import { eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { redirect } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
 
@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import {
   documents,
-  sessions,
+  signingPacketCopies,
   signingPackets,
   type authMember,
 } from "@/db/schema";
@@ -170,37 +170,40 @@ async function requireDocumentAccess(
   return { ...access, document };
 }
 
-async function requireSigningSessionAccess(
+async function requirePacketCopyAccess(
   input: HeadersInit,
-  signingSessionId: string,
+  copyId: string,
   permission: WorkspacePermission = "read",
 ) {
-  const signingSession = await db.query.sessions.findFirst({
-    where: eq(sessions.id, signingSessionId),
+  const packetCopy = await db.query.signingPacketCopies.findFirst({
+    where: and(
+      eq(signingPacketCopies.id, copyId),
+      isNull(signingPacketCopies.deletedAt),
+    ),
     with: {
-      document: true,
+      packet: { with: { document: true } },
     },
   });
 
-  if (!signingSession?.document) {
-    throw new AccessError("Document not found", 404);
+  if (!packetCopy?.packet?.document || packetCopy.packet.deletedAt) {
+    throw new AccessError("Signing copy not found", 404);
   }
 
   const access = await requireWorkspaceAccess(
     input,
-    signingSession.document.workspaceId,
+    packetCopy.packet.workspaceId,
     permission,
   );
 
   if (
-    signingSession.document.teamId &&
+    packetCopy.packet.teamId &&
     !hasAppPermission(access, "signers:view_all") &&
-    !access.teamIds.includes(signingSession.document.teamId)
+    !access.teamIds.includes(packetCopy.packet.teamId)
   ) {
     throw new AccessError("Forbidden", 403);
   }
 
-  return { ...access, signingSession };
+  return { ...access, packetCopy };
 }
 
 async function requirePacketAccess(
@@ -209,7 +212,7 @@ async function requirePacketAccess(
   permission: WorkspacePermission = "read",
 ) {
   const packet = await db.query.signingPackets.findFirst({
-    where: eq(signingPackets.id, packetId),
+    where: and(eq(signingPackets.id, packetId), isNull(signingPackets.deletedAt)),
     with: {
       document: true,
     },
@@ -326,7 +329,7 @@ export {
   requireDocumentAccess,
   requireDocsSession,
   requirePacketAccess,
+  requirePacketCopyAccess,
   requireSessionFromHeaders,
-  requireSigningSessionAccess,
   requireWorkspaceAccess,
 };

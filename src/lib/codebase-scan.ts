@@ -168,15 +168,15 @@ export const sleeksignScan: ScanData = {
 				group: "Signing",
 				sourceRef: "src/routes/api/send-document",
 			}),
-			node("signing-page", "Signing session", "entry", {
+			node("signing-page", "Packet signing", "entry", {
 				sub: "/sign/packet/[id]",
 				group: "Signing",
 				sourceRef: "src/routes/sign/packet/[id]",
 			}),
-			node("finalize-api", "Finalize API", "entry", {
-				sub: "/api/finalize",
+			node("finalize-api", "Packet signing API", "entry", {
+				sub: "/api/public-packets/[id]/context",
 				group: "Signing",
-				sourceRef: "src/routes/api/finalize",
+				sourceRef: "src/routes/api/public-packets/[id]/context",
 			}),
 			node("signing-workflow", "Signing workflow", "service", {
 				sub: "packets · copies · values",

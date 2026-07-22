@@ -1,11 +1,10 @@
 import type {
   PacketActivitySummary,
-  SessionRecord,
+  SigningEntryRecord,
 } from "$lib/components/docs/types";
 import {
   fields,
   documentVerifications,
-  sessions,
   signingPacketCopies,
   signingPackets,
   signingPacketValues,
@@ -13,7 +12,6 @@ import {
 import { areRoleFieldsComplete } from "@/lib/signing-workflows";
 import { parseRoleConfigs, type WorkflowMode } from "@/lib/field-utils";
 
-type DirectSession = typeof sessions.$inferSelect;
 type Verification = typeof documentVerifications.$inferSelect;
 type Packet = typeof signingPackets.$inferSelect & {
   copies?: Array<typeof signingPacketCopies.$inferSelect>;
@@ -22,14 +20,13 @@ type Packet = typeof signingPackets.$inferSelect & {
 type DocumentWithActivity = {
   id?: string;
   fields?: Array<typeof fields.$inferSelect>;
-  sessions?: DirectSession[];
   packets?: Packet[];
   verifications?: Verification[];
   [key: string]: unknown;
 };
 
 function buildPacketSummaries(document: DocumentWithActivity): PacketActivitySummary[] {
-  return (document.packets || []).map((packet) => ({
+  return (document.packets || []).filter((packet) => !packet.deletedAt).map((packet) => ({
     id: packet.id,
     mode: packet.mode as WorkflowMode,
     status: packet.status,
@@ -41,8 +38,9 @@ function buildPacketSummaries(document: DocumentWithActivity): PacketActivitySum
       document.verifications?.find(
         (item) => item.artifactType === "packet" && item.artifactId === packet.id,
       )?.id || null,
+    deletedAt: packet.deletedAt || null,
     roleConfigs: parseRoleConfigs(packet.roleConfigs),
-    copies: (packet.copies || []).map((copy) => ({
+    copies: (packet.copies || []).filter((copy) => !copy.deletedAt).map((copy) => ({
       id: copy.id,
       roleName: copy.roleName,
       signerName: copy.signerName,
@@ -55,49 +53,36 @@ function buildPacketSummaries(document: DocumentWithActivity): PacketActivitySum
       createdAt: copy.createdAt,
       verificationId:
         document.verifications?.find(
-          (item) => item.artifactType === "copy" && item.artifactId === copy.id,
+          (item) =>
+            (item.artifactType === "copy" || item.artifactType === "session") &&
+            item.artifactId === copy.id,
         )?.id || null,
+      deletedAt: copy.deletedAt || null,
     })),
   }));
 }
 
-function buildDocumentSessions(document: DocumentWithActivity): SessionRecord[] {
-  const directSessions = (document.sessions || [])
-    .filter((session) => !session.deletedAt)
-    .map((session) => ({
-      ...session,
-      finalizedFileUrl: session.finalizedFileUrl || null,
-      finalizedStorageKey: session.finalizedStorageKey || null,
-      completedAt: session.completedAt || null,
-      deletedAt: session.deletedAt || null,
-      verificationId:
-        document.verifications?.find(
-          (item) => item.artifactType === "session" && item.artifactId === session.id,
-        )?.id || null,
-    }));
-
-  const packetSessions = (document.packets || []).flatMap((packet) =>
-    buildPacketSessions(document, packet),
-  );
-
-  return [...directSessions, ...packetSessions].sort(
-    (left, right) => getSessionTimestamp(right) - getSessionTimestamp(left),
+function buildSigningEntries(document: DocumentWithActivity): SigningEntryRecord[] {
+  return (document.packets || []).filter((packet) => !packet.deletedAt).flatMap((packet) =>
+    buildPacketSigningEntries(document, packet),
+  ).sort(
+    (left, right) => getSigningEntryTimestamp(right) - getSigningEntryTimestamp(left),
   );
 }
 
-function buildPacketSessions(
+function buildPacketSigningEntries(
   document: DocumentWithActivity,
   packet: Packet,
-): SessionRecord[] {
+): SigningEntryRecord[] {
   const roleConfigs = parseRoleConfigs(packet.roleConfigs);
   const documentFields = (document.fields || []).map((field) => ({
     ...field,
     assigneeRole: field.assigneeRole || "",
   }));
   const packetValues = packet.values || [];
-  const sharedRoleSessions = roleConfigs
+  const sharedRoleEntries = roleConfigs
     .filter((role) => role.scope === "shared" || packet.mode === "collaborative")
-    .map<SessionRecord | null>((role) => {
+    .map<SigningEntryRecord | null>((role) => {
       const roleValues = packetValues.filter(
         (value) => value.roleName === role.name && !value.copyId,
       );
@@ -114,6 +99,8 @@ function buildPacketSessions(
 
       return {
         id: `packet-${packet.id}-${role.name}`,
+        artifactKind: "packet",
+        packetId: packet.id,
         documentId: String(document.id || ""),
         status: areRoleFieldsComplete(documentFields, role.name, valuesMap)
           ? "completed"
@@ -132,12 +119,14 @@ function buildPacketSessions(
           areRoleFieldsComplete(documentFields, role.name, valuesMap)
             ? new Date(lastUpdated)
             : null,
-      } satisfies SessionRecord;
+      } satisfies SigningEntryRecord;
     })
-    .filter(Boolean) as SessionRecord[];
+    .filter(Boolean) as SigningEntryRecord[];
 
-  const copySessions = (packet.copies || []).map((copy) => ({
+  const copyEntries = (packet.copies || []).filter((copy) => !copy.deletedAt).map((copy) => ({
     id: copy.id,
+    artifactKind: "copy" as const,
+    packetId: packet.id,
     documentId: String(document.id || ""),
     status: copy.status === "completed" ? "completed" : "pending",
     finalizedFileUrl: copy.finalizedFileUrl || null,
@@ -149,29 +138,31 @@ function buildPacketSessions(
     completedAt: copy.completedAt || null,
     verificationId:
       document.verifications?.find(
-        (item) => item.artifactType === "copy" && item.artifactId === copy.id,
+        (item) =>
+          (item.artifactType === "copy" || item.artifactType === "session") &&
+          item.artifactId === copy.id,
       )?.id || null,
-  }) satisfies SessionRecord);
+  }) satisfies SigningEntryRecord);
 
-  return [...sharedRoleSessions, ...copySessions];
+  return [...sharedRoleEntries, ...copyEntries];
 }
 
-function getSessionTimestamp(session: SessionRecord) {
-  return new Date(session.completedAt || session.createdAt).getTime();
+function getSigningEntryTimestamp(entry: SigningEntryRecord) {
+	return new Date(entry.completedAt || entry.createdAt).getTime();
 }
 
 function serializeDocumentActivity<T extends DocumentWithActivity>(
   document: T,
 ): Omit<T, "packets"> & {
-  sessions: SessionRecord[];
+  signingEntries: SigningEntryRecord[];
   packets: PacketActivitySummary[];
 } {
   const { packets: _rawPackets, ...rest } = document;
   return {
     ...(rest as Omit<T, "packets">),
-    sessions: buildDocumentSessions(document),
+    signingEntries: buildSigningEntries(document),
     packets: buildPacketSummaries(document),
   };
 }
 
-export { buildDocumentSessions, serializeDocumentActivity };
+export { buildSigningEntries, serializeDocumentActivity };

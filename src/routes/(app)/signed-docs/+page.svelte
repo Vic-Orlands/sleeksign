@@ -6,7 +6,7 @@
 	import type {
 		DocumentRecord,
 		PacketActivitySummary,
-		SessionRecord,
+		SigningEntryRecord,
 	} from "$lib/components/docs/types";
 	import Button from "$lib/components/ui/button.svelte";
 	import Dialog from "$lib/components/ui/dialog.svelte";
@@ -19,7 +19,7 @@
 	import { setCurrentWorkspaceId } from "$lib/workspace-store.svelte";
 	import type { ActionResult, SubmitFunction } from "@sveltejs/kit";
 
-	type SignedSession = SessionRecord & { documentName: string };
+	type SignedSession = SigningEntryRecord & { documentName: string };
 	type SignedSessionGroup = {
 		groupId: string;
 		documentId: string;
@@ -95,7 +95,7 @@
 	}
 
 	function getPacketParties(document: DocumentRecord, packet: PacketActivitySummary) {
-		const sessions = (document.sessions || []).filter(
+		const sessions = (document.signingEntries || []).filter(
 			(session) =>
 				packet.copies.some((copy) => copy.id === session.id) ||
 				session.id.startsWith(`packet-${packet.id}-`),
@@ -113,6 +113,8 @@
 				return {
 					...(copySession || {
 						id: copy.id,
+						artifactKind: "copy" as const,
+						packetId: packet.id,
 						documentId: document.id,
 						createdAt: copy.createdAt,
 					}),
@@ -161,6 +163,8 @@
 			return {
 				...(session || {
 					id: `packet-${packet.id}-${role.name}`,
+					artifactKind: "packet" as const,
+					packetId: packet.id,
 					documentId: document.id,
 					createdAt: packet.createdAt,
 					status: "pending" as const,
@@ -198,28 +202,11 @@
 	}
 
 	function getDocumentGroups(document: DocumentRecord) {
-		const copyIds = new Set((document.packets || []).flatMap((packet) => packet.copies.map((copy) => copy.id)));
-		const packetGroups = (document.packets || []).flatMap((packet) => {
+		return (document.packets || []).flatMap((packet) => {
 			const parties = getPacketParties(document, packet);
 			if (!parties.some((party) => party.status === "completed")) return [];
 			return [makeGroup({ groupId: `packet:${packet.id}`, document, sessions: parties, createdAt: packet.createdAt })];
 		});
-		const directGroups = (document.sessions || [])
-			.filter(
-				(session) =>
-					session.status === "completed" &&
-					!session.id.startsWith("packet-") &&
-					!copyIds.has(session.id),
-			)
-			.map((session) =>
-				makeGroup({
-					groupId: `session:${session.id}`,
-					document,
-					sessions: [{ ...session, documentName: document.name }],
-					createdAt: session.createdAt,
-				}),
-			);
-		return [...packetGroups, ...directGroups];
 	}
 
 	function getDownloadItems(sessions: SignedSession[], documentName: string) {
@@ -483,7 +470,7 @@
 													<svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 4.5 6v5.2c0 4.6 3.2 8.2 7.5 9.8 4.3-1.6 7.5-5.2 7.5-9.8V6L12 3Z" /><path d="m8.7 12 2.1 2.1 4.6-4.7" /></svg>
 												</a>
 											{/if}
-											{#if group.groupId.startsWith("session:") && session}
+											{#if session}
 												<button
 													type="button"
 													class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-red-600"
@@ -620,7 +607,9 @@
 				Cancel
 			</Button>
 			<form method="POST" action="?/deleteSignedSession" use:enhance={deleteEnhance}>
-				<input type="hidden" name="sessionId" value={sessionToDelete?.id || ""} />
+				<input type="hidden" name="entryId" value={sessionToDelete?.id || ""} />
+				<input type="hidden" name="packetId" value={sessionToDelete?.packetId || ""} />
+				<input type="hidden" name="artifactKind" value={sessionToDelete?.artifactKind || ""} />
 				<Button type="submit" variant="destructive" class="h-7" loading={isDeletingSession}>
 					Delete
 				</Button>

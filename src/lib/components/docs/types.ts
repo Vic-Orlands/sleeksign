@@ -1,11 +1,13 @@
 import type { Field, RoleConfig, WorkflowMode } from "$lib/field-utils";
 
-export type SessionStatus = "pending" | "completed";
+export type SigningEntryStatus = "pending" | "completed";
 
-export type SessionRecord = {
+export type SigningEntryRecord = {
 	id: string;
+	artifactKind: "packet" | "copy";
+	packetId: string;
 	documentId: string;
-	status: SessionStatus;
+	status: SigningEntryStatus;
 	finalizedFileUrl?: string | null;
 	finalizedStorageKey?: string | null;
 	verificationId?: string | null;
@@ -25,12 +27,13 @@ export type PacketCopySummary = {
 	signerName?: string | null;
 	signerEmail?: string | null;
 	recipientType?: "email" | "signer" | "group" | "bulk" | null;
-	status: SessionStatus;
+	status: SigningEntryStatus;
 	completedAt?: string | number | Date | null;
 	finalizedFileUrl?: string | null;
 	finalizedStorageKey?: string | null;
 	createdAt: string | number | Date;
 	verificationId?: string | null;
+	deletedAt?: string | number | Date | null;
 };
 
 export type PacketActivitySummary = {
@@ -42,6 +45,7 @@ export type PacketActivitySummary = {
 	finalizedFileUrl?: string | null;
 	finalizedStorageKey?: string | null;
 	verificationId?: string | null;
+	deletedAt?: string | number | Date | null;
 	roleConfigs: RoleConfig[];
 	copies: PacketCopySummary[];
 };
@@ -73,7 +77,7 @@ export type DocumentRecord = {
 	signerRoles?: string[];
 	roleConfigs?: RoleConfig[];
 	fields?: Field[];
-	sessions?: SessionRecord[];
+	signingEntries?: SigningEntryRecord[];
 	packets?: PacketActivitySummary[];
 	verifications?: DocumentVerificationSummary[];
 };
@@ -92,9 +96,9 @@ export function getDocumentType(name: string) {
 }
 
 export function getDocumentStatus(document: DocumentRecord): DocumentStatus {
-	const sessions = document.sessions || [];
-	if (sessions.length === 0) return "Pending";
-	if (sessions.every((session) => session.status === "completed")) return "Completed";
+	const signingEntries = document.signingEntries || [];
+	if (signingEntries.length === 0) return "Pending";
+	if (signingEntries.every((entry) => entry.status === "completed")) return "Completed";
 	return "In Progress";
 }
 
@@ -103,9 +107,9 @@ export function getDocumentSetupStatus(document: DocumentRecord): DocumentSetupS
 }
 
 export function getDocumentCounts(document: DocumentRecord) {
-	const sessions = document.sessions || [];
-	const completed = sessions.filter((session) => session.status === "completed").length;
-	const pending = sessions.length - completed;
+	const signingEntries = document.signingEntries || [];
+	const completed = signingEntries.filter((entry) => entry.status === "completed").length;
+	const pending = signingEntries.length - completed;
 	const fields = document.fields || [];
 	const signatureFields = fields.filter((field) => field.type === "signature");
 	const requiredSignatures = signatureFields.filter((field) => field.required).length;
@@ -117,7 +121,7 @@ export function getDocumentCounts(document: DocumentRecord) {
 		fields: fields.length,
 		pending,
 		completed,
-		total: sessions.length,
+		total: signingEntries.length,
 		requiredFields,
 		optionalFields,
 		signatureFields: signatureFields.length,
@@ -157,8 +161,6 @@ export type SharedRecipient = PacketCopySummary & {
 
 export function getDocumentShareActivity(document: DocumentRecord) {
 	const packets = document.packets || [];
-	const copyIds = new Set(packets.flatMap((packet) => packet.copies.map((copy) => copy.id)));
-
 	const emailedRecipients: SharedRecipient[] = packets.flatMap((packet) =>
 		packet.copies
 			.filter((copy) => Boolean(copy.signerEmail?.trim()))
@@ -173,13 +175,6 @@ export function getDocumentShareActivity(document: DocumentRecord) {
 		(packet) => !packet.copies.some((copy) => Boolean(copy.signerEmail?.trim())),
 	);
 
-	const linkSessions = (document.sessions || []).filter((session) => {
-		if (session.signerEmail?.trim()) return false;
-		if (session.id.startsWith("packet-")) return false;
-		if (copyIds.has(session.id)) return false;
-		return true;
-	});
-
 	const modes = [...new Set(packets.map((packet) => packet.mode))];
 	const signatureFields = (document.fields || []).filter((field) => field.type === "signature");
 
@@ -188,8 +183,7 @@ export function getDocumentShareActivity(document: DocumentRecord) {
 		modes,
 		emailedRecipients,
 		linkPackets,
-		linkSessions,
-		hasLinkShare: linkPackets.length > 0 || linkSessions.length > 0,
+		hasLinkShare: linkPackets.length > 0,
 		hasEmailShare: emailedRecipients.length > 0,
 		signatureFields,
 	};

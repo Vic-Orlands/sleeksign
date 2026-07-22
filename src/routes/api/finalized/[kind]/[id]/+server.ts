@@ -1,5 +1,5 @@
 import type { RequestHandler } from "./$types";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import { signingPacketCopies, signingPackets } from "@/db/schema";
@@ -8,7 +8,7 @@ import { findArtifactVerification } from "@/lib/document-verification";
 import {
   AccessError,
   requireDocumentAccess,
-  requireSigningSessionAccess,
+  requirePacketCopyAccess,
 } from "@/lib/server-access";
 
 export const GET: RequestHandler = async ({ request: req, params }) => {
@@ -17,28 +17,28 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
     const download = new URL(req.url).searchParams.get("download") === "1";
 
     if (kind === "session") {
-      const { signingSession } = await requireSigningSessionAccess(
+      const { packetCopy } = await requirePacketCopyAccess(
         req.headers,
         id,
         "read",
       );
 
       const receipt = await findArtifactVerification("session", id);
-      if (signingSession.status !== "completed" || receipt?.status !== "active") {
+      if (packetCopy.status !== "completed" || receipt?.status !== "active") {
         return Response.json({ error: "Document not found" }, { status: 404 });
       }
 
       const url = await createReadUrl(receipt.finalizedStorageKey, {
         ...(download
-          ? { downloadName: `finalized_${signingSession.id}.pdf` }
-          : { inlineName: `finalized_${signingSession.id}.pdf` }),
+          ? { downloadName: `finalized_${packetCopy.id}.pdf` }
+          : { inlineName: `finalized_${packetCopy.id}.pdf` }),
       });
       return Response.redirect(url);
     }
 
     if (kind === "packet") {
       const packet = await db.query.signingPackets.findFirst({
-        where: eq(signingPackets.id, id),
+        where: and(eq(signingPackets.id, id), isNull(signingPackets.deletedAt)),
       });
 
       if (!packet) {
@@ -62,19 +62,24 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
 
     if (kind === "copy") {
       const copy = await db.query.signingPacketCopies.findFirst({
-        where: eq(signingPacketCopies.id, id),
+        where: and(
+          eq(signingPacketCopies.id, id),
+          isNull(signingPacketCopies.deletedAt),
+        ),
         with: {
           packet: true,
         },
       });
 
-      if (!copy?.packet) {
+      if (!copy?.packet || copy.packet.deletedAt) {
         return Response.json({ error: "Document not found" }, { status: 404 });
       }
 
       await requireDocumentAccess(req.headers, copy.packet.documentId, "read");
 
-      const receipt = await findArtifactVerification("copy", id);
+      const receipt =
+        (await findArtifactVerification("copy", id)) ||
+        (await findArtifactVerification("session", id));
       if (copy.status !== "completed" || receipt?.status !== "active") {
         return Response.json({ error: "Document not found" }, { status: 404 });
       }

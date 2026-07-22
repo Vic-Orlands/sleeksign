@@ -9,6 +9,7 @@ import {
   signingPacketCopies,
   signingPackets,
 } from "@/db/schema";
+import { parseRoleConfigs } from "@/lib/field-utils";
 import { getOrganizationBranding, getWorkspaceBaseUrl } from "@/lib/branding";
 import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
 import { buildSignerOtpEmail } from "@/lib/email/messages";
@@ -38,11 +39,49 @@ export async function createOtpChallenge(input: {
   requestHeaders: Headers;
 }) {
   const packet = await db.query.signingPackets.findFirst({
-    where: eq(signingPackets.id, input.packetId),
+    where: and(
+      eq(signingPackets.id, input.packetId),
+      isNull(signingPackets.deletedAt),
+    ),
   });
 
   if (!packet) {
     throw new Error("Packet not found");
+  }
+  if (packet.status !== "active") {
+    throw new Error("Signing link is no longer active");
+  }
+
+  const role = parseRoleConfigs(packet.roleConfigs).find(
+    (item) => item.name === input.roleName,
+  );
+  if (!role) {
+    throw new Error("Signer role not found");
+  }
+
+  const privateRole =
+    packet.mode === "individual" ||
+    (packet.mode !== "collaborative" && role.scope === "private");
+  if (privateRole && !input.copyId) {
+    throw new Error("Signing invitation not found");
+  }
+
+  if (input.copyId) {
+    const copy = await db.query.signingPacketCopies.findFirst({
+      where: and(
+        eq(signingPacketCopies.id, input.copyId),
+        isNull(signingPacketCopies.deletedAt),
+      ),
+    });
+    if (
+      !copy ||
+      copy.packetId !== packet.id ||
+      copy.roleName !== input.roleName ||
+      (copy.signerEmail &&
+        copy.signerEmail.toLowerCase() !== input.recipientEmail.toLowerCase())
+    ) {
+      throw new Error("Signing invitation not found");
+    }
   }
 
   const code = generateOtpCode();
@@ -116,7 +155,10 @@ export async function verifyOtpChallenge(input: {
   requestHeaders: Headers;
 }) {
   const packet = await db.query.signingPackets.findFirst({
-    where: eq(signingPackets.id, input.packetId),
+    where: and(
+      eq(signingPackets.id, input.packetId),
+      isNull(signingPackets.deletedAt),
+    ),
   });
 
   if (!packet) {
@@ -282,7 +324,10 @@ export async function getOtpRecipientEmail(input: {
 }) {
   if (input.copyId) {
     const copy = await db.query.signingPacketCopies.findFirst({
-      where: eq(signingPacketCopies.id, input.copyId),
+      where: and(
+        eq(signingPacketCopies.id, input.copyId),
+        isNull(signingPacketCopies.deletedAt),
+      ),
     });
     return copy?.signerEmail || null;
   }

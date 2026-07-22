@@ -1,14 +1,11 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
-  documents,
   fields,
-  signatures,
   signingPacketCopies,
   signingPacketValues,
-  sessions,
 } from "@/db/schema";
 import { emitAuditEvent, getAuditChainSnapshot } from "@/lib/audit";
 import {
@@ -152,7 +149,6 @@ async function renderAndSeal(input: {
     documentId: input.documentId,
     packetId: input.artifactType === "packet" ? input.artifactId : null,
     packetCopyId: input.artifactType === "copy" ? input.artifactId : null,
-    sessionId: input.artifactType === "session" ? input.artifactId : null,
     actorType: "signer",
     actorEmail: input.actorEmail || null,
     eventType: "document.sealing",
@@ -187,65 +183,6 @@ async function renderAndSeal(input: {
     auditRootHash: audit.rootHash,
     finalizedAt,
   });
-}
-
-export async function finalizeDocument(sessionId: string) {
-  const session = await db.query.sessions.findFirst({
-    where: eq(sessions.id, sessionId),
-    with: { document: true },
-  });
-  if (!session?.documentId) throw new Error("Session not found");
-  if (session.status === "completed" && session.finalizedFileUrl) {
-    return session.finalizedFileUrl;
-  }
-
-  const docData = await db.query.documents.findFirst({
-    where: eq(documents.id, session.documentId),
-  });
-  if (!docData?.workspaceId || !docData.storageKey) {
-    throw new Error("Document storage not configured");
-  }
-
-  const [docFields, sessionSignatures] = await Promise.all([
-    db.query.fields.findMany({ where: eq(fields.documentId, session.documentId) }),
-    db.query.signatures.findMany({ where: eq(signatures.sessionId, sessionId) }),
-  ]);
-  const finalizedStorageKey = buildFinalizedKey(
-    docData.workspaceId,
-    docData.id,
-    "session",
-    session.id,
-  );
-  const receipt = await renderAndSeal({
-    organizationId: docData.workspaceId,
-    teamId: session.teamId,
-    documentId: docData.id,
-    artifactType: "session",
-    artifactId: session.id,
-    sourceStorageKey: docData.storageKey,
-    finalizedStorageKey,
-    finalizedFileName: `finalized_${session.id}.pdf`,
-    fields: docFields,
-    values: Object.fromEntries(
-      sessionSignatures.map((signature) => [signature.fieldId, signature.value]),
-    ),
-    auditChainKey: `session:${session.id}`,
-    actorName: session.signerName,
-    actorEmail: session.signerEmail,
-    roleName: session.signerRole,
-  });
-
-  const finalizedFileUrl = `/api/finalized/session/${session.id}`;
-  await db
-    .update(sessions)
-    .set({
-      status: "completed",
-      completedAt: new Date(),
-      finalizedFileUrl,
-      finalizedStorageKey: receipt.finalizedStorageKey,
-    })
-    .where(eq(sessions.id, sessionId));
-  return finalizedFileUrl;
 }
 
 export async function finalizeSigningPacket(input: {
@@ -306,7 +243,11 @@ export async function finalizeSigningPacketCopy(input: {
 }) {
   const packet = await getPacket(input.packetId);
   const copy = await db.query.signingPacketCopies.findFirst({
-    where: eq(signingPacketCopies.id, input.copyId),
+    where: and(
+      eq(signingPacketCopies.id, input.copyId),
+      eq(signingPacketCopies.packetId, input.packetId),
+      isNull(signingPacketCopies.deletedAt),
+    ),
   });
   if (!copy) throw new Error("Copy not found");
 

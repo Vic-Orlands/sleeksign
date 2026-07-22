@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { db } from "@/db";
@@ -44,8 +44,8 @@ async function createSigningPacket(
   documentId: string,
   mode: WorkflowMode,
   roleConfigs: RoleConfig[],
-  options?: {
-    workspaceId?: string;
+  options: {
+    workspaceId: string;
     teamId?: string | null;
     requireOtp?: boolean;
   },
@@ -55,12 +55,11 @@ async function createSigningPacket(
   await db.insert(signingPackets).values({
     id: packetId,
     documentId,
-    workspaceId: options?.workspaceId || "",
-    teamId: options?.teamId || null,
+    workspaceId: options.workspaceId,
+    teamId: options.teamId || null,
     mode,
     roleConfigs: JSON.stringify(roleConfigs),
-    requireOtp: options?.requireOtp ?? false,
-    verificationMode: options?.requireOtp ? "email-otp" : "none",
+    requireOtp: options.requireOtp ?? false,
   });
 
   return packetId;
@@ -97,7 +96,7 @@ async function createPacketCopy(input: {
 
 async function getPacket(packetId: string) {
   const packet = await db.query.signingPackets.findFirst({
-    where: eq(signingPackets.id, packetId),
+    where: and(eq(signingPackets.id, packetId), isNull(signingPackets.deletedAt)),
     with: {
       document: {
         with: {
@@ -118,6 +117,7 @@ async function getPacket(packetId: string) {
 
   return {
     ...packet,
+    copies: packet.copies.filter((copy) => !copy.deletedAt),
     mode: packet.mode as WorkflowMode,
     document: serializedDocument,
     roleConfigs,
@@ -210,44 +210,37 @@ async function upsertPacketValue(input: {
   signerName?: string | null;
   signerEmail?: string | null;
 }) {
-  const existing = await db.query.signingPacketValues.findFirst({
-    where: and(
-      eq(signingPacketValues.packetId, input.packetId),
-      eq(signingPacketValues.fieldId, input.fieldId),
-      input.copyId
-        ? eq(signingPacketValues.copyId, input.copyId)
-        : isNull(signingPacketValues.copyId),
-    ),
-  });
-
-  if (existing) {
-    await db
-      .update(signingPacketValues)
-      .set({
+  const valueId = nanoid();
+  const [saved] = await db
+    .insert(signingPacketValues)
+    .values({
+      id: valueId,
+      packetId: input.packetId,
+      copyId: input.copyId || null,
+      fieldId: input.fieldId,
+      roleName: input.roleName,
+      value: input.value,
+      signerName: input.signerName || null,
+      signerEmail: input.signerEmail || null,
+    })
+    .onConflictDoUpdate({
+      target: input.copyId
+        ? [signingPacketValues.copyId, signingPacketValues.fieldId]
+        : [signingPacketValues.packetId, signingPacketValues.fieldId],
+      targetWhere: input.copyId
+        ? sql`${signingPacketValues.copyId} is not null`
+        : sql`${signingPacketValues.copyId} is null`,
+      set: {
+        roleName: input.roleName,
         value: input.value,
         signerName: input.signerName || null,
         signerEmail: input.signerEmail || null,
         updatedAt: new Date(),
-      })
-      .where(eq(signingPacketValues.id, existing.id));
+      },
+    })
+    .returning({ id: signingPacketValues.id });
 
-    return existing.id;
-  }
-
-  const valueId = nanoid();
-
-  await db.insert(signingPacketValues).values({
-    id: valueId,
-    packetId: input.packetId,
-    copyId: input.copyId || null,
-    fieldId: input.fieldId,
-    roleName: input.roleName,
-    value: input.value,
-    signerName: input.signerName || null,
-    signerEmail: input.signerEmail || null,
-  });
-
-  return valueId;
+  return saved.id;
 }
 
 async function completePacketCopy(

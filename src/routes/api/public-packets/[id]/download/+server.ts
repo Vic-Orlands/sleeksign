@@ -1,5 +1,5 @@
 import type { RequestHandler } from "./$types";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import { signingPacketCopies } from "@/db/schema";
@@ -22,6 +22,9 @@ export const GET: RequestHandler = async ({ request, params }) => {
 
     if (!roleName) {
       return Response.json({ error: "Role required" }, { status: 400 });
+    }
+    if (!packet.roleConfigs.some((role) => role.name === roleName)) {
+      return Response.json({ error: "Document not found" }, { status: 404 });
     }
 
     if (
@@ -61,7 +64,10 @@ export const GET: RequestHandler = async ({ request, params }) => {
         return Response.json({ error: "Copy ID required" }, { status: 400 });
       }
       const copy = await db.query.signingPacketCopies.findFirst({
-        where: eq(signingPacketCopies.id, copyId),
+        where: and(
+          eq(signingPacketCopies.id, copyId),
+          isNull(signingPacketCopies.deletedAt),
+        ),
       });
       if (
         !copy ||
@@ -81,7 +87,10 @@ export const GET: RequestHandler = async ({ request, params }) => {
       artifactId = packet.id;
     }
 
-    const receipt = await findArtifactVerification(artifactType, artifactId);
+    let receipt = await findArtifactVerification(artifactType, artifactId);
+    if (!receipt && artifactType === "copy") {
+      receipt = await findArtifactVerification("session", artifactId);
+    }
     if (!receipt || receipt.status !== "active") {
       return Response.json({ error: "Document not found" }, { status: 404 });
     }

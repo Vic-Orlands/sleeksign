@@ -8,7 +8,7 @@ import {
   parseRoleConfigs,
   type WorkflowMode,
 } from "@/lib/field-utils";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { emitAuditEvent, getRequestAuditContext } from "@/lib/audit";
 
 export const GET: RequestHandler = async ({ request: req }) => {
@@ -25,7 +25,10 @@ export const GET: RequestHandler = async ({ request: req }) => {
     await requireDocumentAccess(req.headers, documentId, "read");
 
     const packets = await db.query.signingPackets.findMany({
-      where: eq(signingPackets.documentId, documentId),
+      where: and(
+        eq(signingPackets.documentId, documentId),
+        isNull(signingPackets.deletedAt),
+      ),
       orderBy: [desc(signingPackets.createdAt)],
     });
 

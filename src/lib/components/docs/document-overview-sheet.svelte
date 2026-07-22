@@ -62,12 +62,12 @@
 		activityTab = "email";
 	});
 
-	async function createSessionAndShare(mode: WorkflowMode = "shared-base") {
+	async function createPacketAndShare(mode: WorkflowMode = "shared-base") {
 		if (!detail) return;
 
 		isCreatingPacket = true;
 		try {
-			const result = await postFormAction<{ sessionId?: string }>(
+			const result = await postFormAction<{ packetId?: string }>(
 				"shareDocument",
 				{
 					documentId: detail.id,
@@ -75,8 +75,8 @@
 				},
 				{ apply: false },
 			);
-			if (!result.sessionId) throw new Error("Failed to prepare share links");
-			window.location.href = `/share/${result.sessionId}`;
+			if (!result.packetId) throw new Error("Failed to prepare share links");
+			window.location.href = `/share/${result.packetId}`;
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Unable to prepare share links");
 		} finally {
@@ -101,10 +101,6 @@
 			role,
 			url: `${origin}/sign/p/${detail.id}?packet=${encodeURIComponent(packet.id)}&role=${encodeURIComponent(role.name)}`,
 		}));
-	}
-
-	function directSessionUrl(sessionId: string) {
-		return `${origin}/sign/${sessionId}`;
 	}
 
 	async function copyLink(url: string, label = "Link") {
@@ -309,34 +305,6 @@
 												{/each}
 											</div>
 										{/each}
-										{#each activity.linkSessions as session (session.id)}
-											{@const url = directSessionUrl(session.id)}
-											<div class="rounded-md border border-border/70 px-3 py-3">
-												<div class="flex items-start justify-between gap-3">
-													<div class="min-w-0">
-														<p class="text-[13px] font-medium text-foreground">
-															Signing link session
-														</p>
-														<p class="mt-1 text-[11px] text-muted-foreground">
-															{session.status} ·
-															{format(new Date(session.createdAt), "MMM d, yyyy")} · Not emailed
-														</p>
-														<p class="mt-2 truncate font-mono text-[11px] text-muted-foreground">
-															{url}
-														</p>
-													</div>
-													<Button
-														variant="outline"
-														size="sm"
-														class="h-7 shrink-0 gap-1.5"
-														onclick={() => copyLink(url, "Signing link")}
-													>
-														<CopyIcon class="size-3.5" />
-														Copy
-													</Button>
-												</div>
-											</div>
-										{/each}
 									{:else}
 										<p class="text-[13px] text-muted-foreground">
 											No standalone signing link recorded.
@@ -425,7 +393,7 @@
 				</Button>
 				{#if !isActivity}
 					<Button
-						onclick={() => createSessionAndShare("shared-base")}
+					onclick={() => createPacketAndShare("shared-base")}
 						disabled={isCreatingPacket || !allFieldsAssigned || !(detail.fields || []).length}
 						class="w-full justify-center"
 					>

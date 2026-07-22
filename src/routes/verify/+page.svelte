@@ -5,10 +5,19 @@
   import Button from "$lib/components/ui/button.svelte";
   import SiteShell from "$lib/components/marketing/site-shell.svelte";
   import { Moon, Sun, ShieldCheck, CircleNotchIcon } from "phosphor-svelte";
+  import type { SubmitFunction } from "@sveltejs/kit";
 
   let { form } = $props();
   let verificationId = $state("");
+  let submitting = $state(false);
   const isDark = $derived(mode.current === "dark");
+  const handleSubmit: SubmitFunction = () => {
+    submitting = true;
+    return async ({ update }) => {
+      await update();
+      submitting = false;
+    };
+  };
 </script>
 
 <svelte:head>
@@ -85,7 +94,7 @@
           >
           and appears along the bottom edge of every page.
         </p>
-        <form method="POST" use:enhance class="mt-6 space-y-2">
+        <form method="POST" use:enhance={handleSubmit} class="mt-6 space-y-2">
           <label
             for="verificationId"
             class="block text-left text-[9px] font-medium tracking-[0.16em] text-muted-foreground uppercase"
@@ -106,10 +115,10 @@
           {/if}
           <Button
             type="submit"
-            disabled={!verificationId.trim() || form?.state === "submitting"}
+            disabled={!verificationId.trim() || submitting}
             class="w-full disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {#if form?.state === "submitting"}
+            {#if submitting}
               <CircleNotchIcon class="size-4 animate-spin" aria-hidden="true" />
               Checking...
             {:else}

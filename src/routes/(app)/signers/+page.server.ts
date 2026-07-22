@@ -5,7 +5,7 @@ import {
 	createSignerGroup,
 	deleteDirectorySigner,
 	deleteSignerGroup,
-	deleteSigningSession,
+	deleteSigningEntry,
 	updateSignerGroup,
 } from "$lib/server/signers";
 import { loadSignersData } from "$lib/server/page-data";
@@ -149,12 +149,20 @@ export const actions: Actions = {
 
 	deleteActivity: async ({ request }) => {
 		const data = await request.formData();
-		const sessionId = formString(data, "sessionId");
-		if (!sessionId) return fail(400, { error: "Session ID required" });
+		const entryId = formString(data, "entryId");
+		const packetId = formString(data, "packetId");
+		const artifactKind = formString(data, "artifactKind");
+		if (!entryId || !packetId || !["packet", "copy"].includes(artifactKind)) {
+			return fail(400, { error: "Signing record details are required" });
+		}
 
 		try {
 			await requireAppAccess("manage");
-			await deleteSigningSession(request.headers, sessionId);
+			await deleteSigningEntry(request.headers, {
+				id: entryId,
+				packetId,
+				artifactKind: artifactKind as "packet" | "copy",
+			});
 			return { success: true, message: "Record deleted" };
 		} catch (error) {
 			return actionError(error, "Failed to delete record");

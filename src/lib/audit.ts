@@ -15,7 +15,6 @@ type AuditEventInput = {
   documentId?: string | null;
   packetId?: string | null;
   packetCopyId?: string | null;
-  sessionId?: string | null;
   bulkSendJobId?: string | null;
   actorType: AuditActorType;
   actorId?: string | null;
@@ -88,11 +87,9 @@ export async function emitAuditEvent(input: AuditEventInput) {
     id,
     organizationId: input.organizationId,
     teamId: input.teamId || null,
-    workspaceId: input.workspaceId || input.organizationId,
     documentId: input.documentId || null,
     packetId: input.packetId || null,
     packetCopyId: input.packetCopyId || null,
-    sessionId: input.sessionId || null,
     bulkSendJobId: input.bulkSendJobId || null,
     actorType: input.actorType,
     actorId: input.actorId || null,

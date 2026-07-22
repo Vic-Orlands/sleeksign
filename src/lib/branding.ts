@@ -145,7 +145,6 @@ export async function createOrUpdateCustomDomain(
     await db
       .update(customDomains)
       .set({
-        domain: normalizedHost.split(".").slice(-2).join("."),
         hostname: normalizedHost,
         status: "pending",
         verificationToken,
@@ -160,7 +159,6 @@ export async function createOrUpdateCustomDomain(
   await db.insert(customDomains).values({
     id,
     organizationId: workspaceId,
-    domain: normalizedHost.split(".").slice(-2).join("."),
     hostname: normalizedHost,
     verificationToken,
   });

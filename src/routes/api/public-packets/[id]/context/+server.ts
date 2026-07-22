@@ -39,6 +39,13 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
     const copyId = new URL(req.url).searchParams.get("copyId") || "";
 
     const packet = await getPacket(id);
+    if (!packet.roleConfigs.some((role) => role.name === roleName)) {
+      return Response.json({ error: "Signer role not found" }, { status: 404 });
+    }
+    const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
+    if (scope === "private" && !copyId) {
+      return Response.json({ error: "Signing invitation not found" }, { status: 404 });
+    }
     const visibleFields = getVisibleFieldsForSigner({
       fields: packet.document.fields,
       roleConfigs: packet.roleConfigs,
@@ -62,7 +69,10 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
 
     const copy = copyId
       ? await db.query.signingPacketCopies.findFirst({
-          where: eq(signingPacketCopies.id, copyId),
+          where: and(
+            eq(signingPacketCopies.id, copyId),
+            isNull(signingPacketCopies.deletedAt),
+          ),
         })
       : null;
     if (
@@ -71,9 +81,6 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
     ) {
       return Response.json({ error: "Signing invitation not found" }, { status: 404 });
     }
-    const scope = roleName
-      ? getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode)
-      : "shared";
     const roleValues = (scope === "private" ? copyValues : packet.values).filter(
       (value) => value.roleName === roleName,
     );
@@ -267,6 +274,13 @@ export const PATCH: RequestHandler = async ({ request: req, params }) => {
     }
 
     const packet = await getPacket(id);
+    if (!packet.roleConfigs.some((role) => role.name === roleName)) {
+      return Response.json({ error: "Signer role not found" }, { status: 404 });
+    }
+    const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
+    if (scope === "private" && !copyId) {
+      return Response.json({ error: "Copy ID required" }, { status: 400 });
+    }
     if (
       packet.requireOtp &&
       !(await isOtpVerified({
@@ -300,8 +314,6 @@ export const PATCH: RequestHandler = async ({ request: req, params }) => {
         { status: 403 },
       );
     }
-
-    const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
 
     await upsertPacketValue({
       packetId: packet.id,
@@ -362,6 +374,13 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
     }
 
     const packet = await getPacket(id);
+    if (!packet.roleConfigs.some((role) => role.name === roleName)) {
+      return Response.json({ error: "Signer role not found" }, { status: 404 });
+    }
+    const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
+    if (scope === "private" && !copyId) {
+      return Response.json({ error: "Copy ID required" }, { status: 400 });
+    }
     if (
       packet.requireOtp &&
       !(await isOtpVerified({
@@ -393,12 +412,21 @@ export const POST: RequestHandler = async ({ request: req, params }) => {
       mode: packet.mode,
       currentRole: roleName,
     });
-    const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
     const copy = copyId
       ? await db.query.signingPacketCopies.findFirst({
-          where: eq(signingPacketCopies.id, copyId),
+          where: and(
+            eq(signingPacketCopies.id, copyId),
+            isNull(signingPacketCopies.deletedAt),
+          ),
         })
       : null;
+
+    if (
+      copyId &&
+      (!copy || copy.packetId !== packet.id || copy.roleName !== roleName)
+    ) {
+      return Response.json({ error: "Signing invitation not found" }, { status: 404 });
+    }
 
     if (packet.status === "completed") {
       return Response.json({

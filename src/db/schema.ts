@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   index,
   integer,
@@ -8,24 +9,34 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
-export const teams = pgTable("teams", {
-  id: text("id").primaryKey(),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => authOrganization.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  slug: text("slug").notNull(),
-  description: text("description"),
-  isDefault: boolean("is_default").notNull().default(false),
-  createdAt: timestamp("created_at", { withTimezone: false })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: false })
-    .notNull()
-    .defaultNow(),
-});
+export const teams = pgTable(
+  "teams",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => authOrganization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description"),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: false })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: false })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("teams_organization_slug_unique").on(
+      table.organizationId,
+      table.slug,
+    ),
+    index("teams_organization_idx").on(table.organizationId),
+  ],
+);
 
 export const documents = pgTable("documents", {
   id: text("id").primaryKey(),
@@ -39,7 +50,9 @@ export const documents = pgTable("documents", {
     .default("ready"),
   fileSize: integer("file_size"),
   contentType: text("content_type"),
-  workspaceId: text("workspace_id"),
+  workspaceId: text("workspace_id").references(() => authOrganization.id, {
+    onDelete: "cascade",
+  }),
   teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
   signerRoles: text("signer_roles")
     .notNull()
@@ -59,7 +72,10 @@ export const documents = pgTable("documents", {
   updatedAt: timestamp("updated_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  index("documents_workspace_idx").on(table.workspaceId),
+  index("documents_team_idx").on(table.teamId),
+]);
 
 export const fields = pgTable("fields", {
   id: text("id").primaryKey(),
@@ -76,79 +92,44 @@ export const fields = pgTable("fields", {
   height: real("height").notNull().default(5),
   required: boolean("required").notNull().default(true),
   assigneeRole: text("assignee_role").notNull().default(""),
-});
+}, (table) => [index("fields_document_idx").on(table.documentId)]);
 
-export const sessions = pgTable("sessions", {
-  id: text("id").primaryKey(),
-  documentId: text("document_id")
-    .notNull()
-    .references(() => documents.id, { onDelete: "cascade" }),
-  teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
-  status: text("status")
-    .$type<"pending" | "completed">()
-    .notNull()
-    .default("pending"),
-  signerName: text("signer_name"),
-  signerEmail: text("signer_email"),
-  signerRole: text("signer_role"),
-  signerIp: text("signer_ip"),
-  signerUserAgent: text("signer_user_agent"),
-  verificationRequired: boolean("verification_required")
-    .notNull()
-    .default(false),
-  verificationMode: text("verification_mode").notNull().default("none"),
-  finalizedFileUrl: text("finalized_file_url"),
-  finalizedStorageKey: text("finalized_storage_key"),
-  completedAt: timestamp("completed_at", { withTimezone: false }),
-  deletedAt: timestamp("deleted_at", { withTimezone: false }),
-  createdAt: timestamp("created_at", { withTimezone: false })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: false })
-    .notNull()
-    .defaultNow(),
-});
-
-export const signatures = pgTable("signatures", {
-  id: text("id").primaryKey(),
-  sessionId: text("session_id")
-    .notNull()
-    .references(() => sessions.id, { onDelete: "cascade" }),
-  fieldId: text("field_id")
-    .notNull()
-    .references(() => fields.id, { onDelete: "cascade" }),
-  value: text("value").notNull(),
-});
-
-export const signingPackets = pgTable("signing_packets", {
-  id: text("id").primaryKey(),
-  documentId: text("document_id")
-    .notNull()
-    .references(() => documents.id, { onDelete: "cascade" }),
-  workspaceId: text("workspace_id")
-    .notNull()
-    .references(() => authOrganization.id, { onDelete: "cascade" }),
-  teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
-  mode: text("mode")
-    .$type<"collaborative" | "individual" | "shared-base">()
-    .notNull(),
-  roleConfigs: text("role_configs").notNull(),
-  requireOtp: boolean("require_otp").notNull().default(false),
-  verificationMode: text("verification_mode").notNull().default("none"),
-  status: text("status")
-    .$type<"active" | "completed">()
-    .notNull()
-    .default("active"),
-  finalizedFileUrl: text("finalized_file_url"),
-  finalizedStorageKey: text("finalized_storage_key"),
-  completedAt: timestamp("completed_at", { withTimezone: false }),
-  createdAt: timestamp("created_at", { withTimezone: false })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: false })
-    .notNull()
-    .defaultNow(),
-});
+export const signingPackets = pgTable(
+  "signing_packets",
+  {
+    id: text("id").primaryKey(),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => documents.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => authOrganization.id, { onDelete: "cascade" }),
+    teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
+    mode: text("mode")
+      .$type<"collaborative" | "individual" | "shared-base">()
+      .notNull(),
+    roleConfigs: text("role_configs").notNull(),
+    requireOtp: boolean("require_otp").notNull().default(false),
+    status: text("status")
+      .$type<"active" | "completed">()
+      .notNull()
+      .default("active"),
+    finalizedFileUrl: text("finalized_file_url"),
+    finalizedStorageKey: text("finalized_storage_key"),
+    completedAt: timestamp("completed_at", { withTimezone: false }),
+    deletedAt: timestamp("deleted_at", { withTimezone: false }),
+    createdAt: timestamp("created_at", { withTimezone: false })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: false })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("signing_packets_document_idx").on(table.documentId),
+    index("signing_packets_workspace_idx").on(table.workspaceId),
+  ],
+);
 
 export const signingPacketCopies = pgTable("signing_packet_copies", {
   id: text("id").primaryKey(),
@@ -169,18 +150,31 @@ export const signingPacketCopies = pgTable("signing_packet_copies", {
     .default("pending"),
   finalizedFileUrl: text("finalized_file_url"),
   finalizedStorageKey: text("finalized_storage_key"),
-  bulkSendJobId: text("bulk_send_job_id"),
-  bulkSendRowId: text("bulk_send_row_id"),
+  bulkSendJobId: text("bulk_send_job_id").references(
+    (): AnyPgColumn => bulkSendJobs.id,
+    { onDelete: "set null" },
+  ),
+  bulkSendRowId: text("bulk_send_row_id").references(
+    (): AnyPgColumn => bulkSendRows.id,
+    { onDelete: "set null" },
+  ),
   completedAt: timestamp("completed_at", { withTimezone: false }),
+  deletedAt: timestamp("deleted_at", { withTimezone: false }),
   createdAt: timestamp("created_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  index("signing_packet_copies_packet_idx").on(table.packetId),
+  index("signing_packet_copies_team_idx").on(table.teamId),
+  index("signing_packet_copies_bulk_job_idx").on(table.bulkSendJobId),
+]);
 
-export const signingPacketValues = pgTable("signing_packet_values", {
+export const signingPacketValues = pgTable(
+  "signing_packet_values",
+  {
   id: text("id").primaryKey(),
   packetId: text("packet_id")
     .notNull()
@@ -202,7 +196,18 @@ export const signingPacketValues = pgTable("signing_packet_values", {
   updatedAt: timestamp("updated_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+  },
+  (table) => [
+    uniqueIndex("signing_packet_values_shared_field_unique")
+      .on(table.packetId, table.fieldId)
+      .where(sql`${table.copyId} is null`),
+    uniqueIndex("signing_packet_values_copy_field_unique")
+      .on(table.copyId, table.fieldId)
+      .where(sql`${table.copyId} is not null`),
+    index("signing_packet_values_packet_idx").on(table.packetId),
+    index("signing_packet_values_copy_idx").on(table.copyId),
+  ],
+);
 
 export const teamMembers = pgTable("team_members", {
   id: text("id").primaryKey(),
@@ -218,7 +223,10 @@ export const teamMembers = pgTable("team_members", {
   createdAt: timestamp("created_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("team_members_team_member_unique").on(table.teamId, table.memberId),
+  index("team_members_organization_idx").on(table.organizationId),
+]);
 
 export const workspaceSigners = pgTable("workspace_signers", {
   id: text("id").primaryKey(),
@@ -243,7 +251,13 @@ export const workspaceSigners = pgTable("workspace_signers", {
   updatedAt: timestamp("updated_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("workspace_signers_organization_email_unique").on(
+    table.organizationId,
+    table.email,
+  ),
+  index("workspace_signers_team_idx").on(table.teamId),
+]);
 
 export const signerGroups = pgTable("signer_groups", {
   id: text("id").primaryKey(),
@@ -259,7 +273,10 @@ export const signerGroups = pgTable("signer_groups", {
   updatedAt: timestamp("updated_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  index("signer_groups_organization_idx").on(table.organizationId),
+  index("signer_groups_team_idx").on(table.teamId),
+]);
 
 export const signerGroupMembers = pgTable("signer_group_members", {
   id: text("id").primaryKey(),
@@ -272,7 +289,12 @@ export const signerGroupMembers = pgTable("signer_group_members", {
   createdAt: timestamp("created_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("signer_group_members_group_signer_unique").on(
+    table.groupId,
+    table.signerId,
+  ),
+]);
 
 export const organizationBranding = pgTable("organization_branding", {
   id: text("id").primaryKey(),
@@ -295,14 +317,17 @@ export const organizationBranding = pgTable("organization_branding", {
   updatedAt: timestamp("updated_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("organization_branding_organization_unique").on(
+    table.organizationId,
+  ),
+]);
 
 export const customDomains = pgTable("custom_domains", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id")
     .notNull()
     .references(() => authOrganization.id, { onDelete: "cascade" }),
-  domain: text("domain").notNull(),
   hostname: text("hostname").notNull(),
   status: text("status")
     .$type<"pending" | "verified" | "failed">()
@@ -316,7 +341,10 @@ export const customDomains = pgTable("custom_domains", {
   updatedAt: timestamp("updated_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("custom_domains_hostname_unique").on(table.hostname),
+  index("custom_domains_organization_idx").on(table.organizationId),
+]);
 
 export const auditLogs = pgTable("audit_logs", {
   id: text("id").primaryKey(),
@@ -324,7 +352,6 @@ export const auditLogs = pgTable("audit_logs", {
     .notNull()
     .references(() => authOrganization.id, { onDelete: "cascade" }),
   teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
-  workspaceId: text("workspace_id"),
   documentId: text("document_id").references(() => documents.id, {
     onDelete: "set null",
   }),
@@ -334,10 +361,10 @@ export const auditLogs = pgTable("audit_logs", {
   packetCopyId: text("packet_copy_id").references(() => signingPacketCopies.id, {
     onDelete: "set null",
   }),
-  sessionId: text("session_id").references(() => sessions.id, {
-    onDelete: "set null",
-  }),
-  bulkSendJobId: text("bulk_send_job_id"),
+  bulkSendJobId: text("bulk_send_job_id").references(
+    (): AnyPgColumn => bulkSendJobs.id,
+    { onDelete: "set null" },
+  ),
   actorType: text("actor_type").$type<"user" | "signer" | "system">().notNull(),
   actorId: text("actor_id"),
   actorEmail: text("actor_email"),
@@ -352,7 +379,13 @@ export const auditLogs = pgTable("audit_logs", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  index("audit_logs_organization_created_idx").on(
+    table.organizationId,
+    table.createdAt,
+  ),
+  index("audit_logs_chain_created_idx").on(table.chainKey, table.createdAt),
+]);
 
 export const documentVerifications = pgTable(
   "document_verifications",
@@ -418,9 +451,6 @@ export const signerVerificationChallenges = pgTable(
     copyId: text("copy_id").references(() => signingPacketCopies.id, {
       onDelete: "cascade",
     }),
-    sessionId: text("session_id").references(() => sessions.id, {
-      onDelete: "cascade",
-    }),
     roleName: text("role_name"),
     signerName: text("signer_name"),
     recipientEmail: text("recipient_email").notNull(),
@@ -443,6 +473,14 @@ export const signerVerificationChallenges = pgTable(
       .notNull()
       .defaultNow(),
   },
+  (table) => [
+    index("signer_challenges_packet_role_idx").on(
+      table.packetId,
+      table.roleName,
+    ),
+    index("signer_challenges_copy_idx").on(table.copyId),
+    index("signer_challenges_expires_idx").on(table.expiresAt),
+  ],
 );
 
 export const bulkSendJobs = pgTable("bulk_send_jobs", {
@@ -483,7 +521,10 @@ export const bulkSendJobs = pgTable("bulk_send_jobs", {
   updatedAt: timestamp("updated_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  index("bulk_send_jobs_organization_idx").on(table.organizationId),
+  index("bulk_send_jobs_document_idx").on(table.documentId),
+]);
 
 export const bulkSendRows = pgTable("bulk_send_rows", {
   id: text("id").primaryKey(),
@@ -509,7 +550,10 @@ export const bulkSendRows = pgTable("bulk_send_rows", {
   updatedAt: timestamp("updated_at", { withTimezone: false })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("bulk_send_rows_job_row_unique").on(table.jobId, table.rowIndex),
+  index("bulk_send_rows_packet_copy_idx").on(table.packetCopyId),
+]);
 
 export const recipientImportErrors = pgTable("recipient_import_errors", {
   id: text("id").primaryKey(),
@@ -531,7 +575,10 @@ export const authUser = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
-  lastWorkspaceId: text("last_workspace_id"),
+  lastWorkspaceId: text("last_workspace_id").references(
+    () => authOrganization.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: false }).notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: false }).notNull(),
 });
@@ -547,7 +594,10 @@ export const authSession = pgTable("session", {
   userId: text("user_id")
     .notNull()
     .references(() => authUser.id, { onDelete: "cascade" }),
-  activeOrganizationId: text("active_organization_id"),
+  activeOrganizationId: text("active_organization_id").references(
+    () => authOrganization.id,
+    { onDelete: "set null" },
+  ),
 });
 
 export const authAccount = pgTable("account", {
@@ -600,7 +650,12 @@ export const authMember = pgTable("member", {
     .references(() => authUser.id, { onDelete: "cascade" }),
   role: text("role").notNull(),
   createdAt: timestamp("created_at", { withTimezone: false }).notNull(),
-});
+}, (table) => [
+  uniqueIndex("member_organization_user_unique").on(
+    table.organizationId,
+    table.userId,
+  ),
+]);
 
 export const authInvitation = pgTable("invitation", {
   id: text("id").primaryKey(),
@@ -623,7 +678,6 @@ export const documentsRelations = relations(documents, ({ one, many }) => ({
     references: [teams.id],
   }),
   fields: many(fields),
-  sessions: many(sessions),
   packets: many(signingPackets),
   verifications: many(documentVerifications),
 }));
@@ -646,34 +700,10 @@ export const documentVerificationsRelations = relations(
   }),
 );
 
-export const fieldsRelations = relations(fields, ({ one, many }) => ({
+export const fieldsRelations = relations(fields, ({ one }) => ({
   document: one(documents, {
     fields: [fields.documentId],
     references: [documents.id],
-  }),
-  signatures: many(signatures),
-}));
-
-export const sessionsRelations = relations(sessions, ({ one, many }) => ({
-  document: one(documents, {
-    fields: [sessions.documentId],
-    references: [documents.id],
-  }),
-  team: one(teams, {
-    fields: [sessions.teamId],
-    references: [teams.id],
-  }),
-  signatures: many(signatures),
-}));
-
-export const signaturesRelations = relations(signatures, ({ one }) => ({
-  session: one(sessions, {
-    fields: [signatures.sessionId],
-    references: [sessions.id],
-  }),
-  field: one(fields, {
-    fields: [signatures.fieldId],
-    references: [fields.id],
   }),
 }));
 
@@ -732,7 +762,6 @@ export const teamsRelations = relations(teams, ({ one, many }) => ({
     references: [authOrganization.id],
   }),
   documents: many(documents),
-  sessions: many(sessions),
   packets: many(signingPackets),
   copies: many(signingPacketCopies),
   memberships: many(teamMembers),

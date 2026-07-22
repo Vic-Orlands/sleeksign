@@ -3,13 +3,13 @@
 	import type {
 		DocumentSetupStatus,
 		DocumentStatus,
-		SessionStatus,
+		SigningEntryStatus,
 	} from "$lib/components/docs/types";
 
 	type Status =
 		| DocumentStatus
 		| DocumentSetupStatus
-		| SessionStatus
+		| SigningEntryStatus
 		| "Opened"
 		| "Signed"
 		| "Not Opened";

@@ -1,24 +1,30 @@
 import { error } from "@sveltejs/kit";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { PageServerLoad } from "./$types";
 
 import { db } from "@/db";
-import { sessions } from "@/db/schema";
+import { signingPackets } from "@/db/schema";
+import { parseRoleConfigs } from "@/lib/field-utils";
 
 export const load: PageServerLoad = async ({ params }) => {
-	const session = await db.query.sessions.findFirst({
-		where: eq(sessions.id, params.id),
-		columns: {
-			id: true,
-			documentId: true,
-			signerName: true,
-			status: true,
+	const packet = await db.query.signingPackets.findFirst({
+		where: and(eq(signingPackets.id, params.id), isNull(signingPackets.deletedAt)),
+		with: {
+			document: {
+				columns: { id: true, name: true },
+			},
 		},
 	});
 
-	if (!session) {
-		error(404, "Session not found");
+	if (!packet?.document) {
+		error(404, "Signing packet not found");
 	}
 
-	return { session };
+	return {
+		packet: {
+			id: packet.id,
+			document: packet.document,
+			roleConfigs: parseRoleConfigs(packet.roleConfigs),
+		},
+	};
 };

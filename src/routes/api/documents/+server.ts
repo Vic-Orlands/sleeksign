@@ -37,7 +37,6 @@ export const GET: RequestHandler = async ({ request: req }) => {
       ),
       orderBy: [desc(documents.createdAt)],
       with: {
-        sessions: true,
         fields: true,
         packets: {
           with: {

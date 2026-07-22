@@ -1,11 +1,11 @@
 import type { RequestHandler } from "./$types";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import { signingPacketCopies } from "@/db/schema";
 import { getR2ObjectStream } from "@/lib/r2-storage";
 import { isOtpVerified } from "@/lib/signer-otp";
-import { getPacket } from "@/lib/signing-workflows";
+import { getPacket, getStorageScopeForRole } from "@/lib/signing-workflows";
 import { resolvePacketSignerIdentity } from "@/lib/signer-identity";
 
 export const GET: RequestHandler = async ({ request: req, params }) => {
@@ -19,10 +19,20 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
     if (!roleName) {
       return Response.json({ error: "Role required" }, { status: 400 });
     }
+    if (!packet.roleConfigs.some((role) => role.name === roleName)) {
+      return Response.json({ error: "Document not found" }, { status: 404 });
+    }
+    const scope = getStorageScopeForRole(packet.roleConfigs, roleName, packet.mode);
+    if (scope === "private" && !copyId) {
+      return Response.json({ error: "Document not found" }, { status: 404 });
+    }
 
     if (copyId) {
       const copy = await db.query.signingPacketCopies.findFirst({
-        where: eq(signingPacketCopies.id, copyId),
+        where: and(
+          eq(signingPacketCopies.id, copyId),
+          isNull(signingPacketCopies.deletedAt),
+        ),
       });
 
       if (

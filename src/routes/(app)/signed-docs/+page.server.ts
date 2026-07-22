@@ -1,7 +1,7 @@
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { listDocumentsForAccess } from "$lib/server/page-data";
-import { deleteSigningSession } from "$lib/server/signers";
+import { deleteSigningEntry } from "$lib/server/signers";
 import {
 	actionError,
 	formString,
@@ -35,12 +35,20 @@ export const actions: Actions = {
 
 	deleteSignedSession: async ({ request }) => {
 		const data = await request.formData();
-		const sessionId = formString(data, "sessionId");
-		if (!sessionId) return fail(400, { error: "Session ID required" });
+		const entryId = formString(data, "entryId");
+		const packetId = formString(data, "packetId");
+		const artifactKind = formString(data, "artifactKind");
+		if (!entryId || !packetId || !["packet", "copy"].includes(artifactKind)) {
+			return fail(400, { error: "Signing record details are required" });
+		}
 
 		try {
 			await requireAppAccess("manage");
-			await deleteSigningSession(request.headers, sessionId);
+			await deleteSigningEntry(request.headers, {
+				id: entryId,
+				packetId,
+				artifactKind: artifactKind as "packet" | "copy",
+			});
 			return { success: true, message: "Session deleted" };
 		} catch (error) {
 			return actionError(error, "Failed to delete session");

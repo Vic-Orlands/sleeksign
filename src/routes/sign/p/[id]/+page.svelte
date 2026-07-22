@@ -5,7 +5,13 @@
 	import Button from "$lib/components/ui/button.svelte";
 	import Input from "$lib/components/ui/input.svelte";
 
-	type PublicDocument = { id: string; name: string; signerRoles: string[] };
+	type PublicDocument = {
+		id: string;
+		name: string;
+		signerRoles: string[];
+		packetId: string;
+		requireOtp: boolean;
+	};
 	type PublicPacket = {
 		id: string;
 		requireOtp?: boolean;
@@ -18,6 +24,7 @@
 	let loadError = $state<string | null>(null);
 	let doc = $state<PublicDocument | null>(null);
 	let packet = $state<PublicPacket | null>(null);
+	let resolvedPacketId = $state("");
 
 	let signerName = $state("");
 	let signerEmail = $state("");
@@ -32,6 +39,8 @@
 
 	const documentId = $derived($page.params.id);
 	const packetId = $derived($page.url.searchParams.get("packet") || "");
+	const effectivePacketId = $derived(packetId || resolvedPacketId);
+	const requireOtp = $derived(packet?.requireOtp ?? doc?.requireOtp ?? false);
 	const requestedRole = $derived($page.url.searchParams.get("role") || "");
 
 	$effect(() => {
@@ -63,7 +72,10 @@
 				const data = await res.json();
 				if (!res.ok || data.error) throw new Error(data.error || "Document not found");
 				if (pId) packet = data as PublicPacket;
-				else doc = data as PublicDocument;
+				else {
+					doc = data as PublicDocument;
+					resolvedPacketId = data.packetId || "";
+				}
 			})
 			.catch((error) => {
 				loadError = error instanceof Error ? error.message : "Document not found";
@@ -94,11 +106,11 @@
 			toast.error("Enter your email address");
 			return;
 		}
-		if (!packetId) return;
+		if (!effectivePacketId) return;
 
 		otpBusy = true;
 		try {
-			const res = await fetch(`/api/public-packets/${packetId}/otp`, {
+			const res = await fetch(`/api/public-packets/${effectivePacketId}/otp`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -124,11 +136,11 @@
 			toast.error("Enter the verification code");
 			return;
 		}
-		if (!packetId || !pendingPacketUrl) return;
+		if (!effectivePacketId || !pendingPacketUrl) return;
 
 		otpBusy = true;
 		try {
-			const res = await fetch(`/api/public-packets/${packetId}/otp`, {
+			const res = await fetch(`/api/public-packets/${effectivePacketId}/otp`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -174,12 +186,12 @@
 				}),
 			);
 
-			if (packetId) {
+			if (effectivePacketId) {
 				const copyRes = await fetch("/api/public-packet-copies", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
-						packetId,
+						packetId: effectivePacketId,
 						roleName: effectiveSignerRole,
 						signerName: signerName.trim(),
 						signerEmail: signerEmail.trim(),
@@ -189,11 +201,11 @@
 				if (!copyRes.ok) {
 					throw new Error(copyData.error || "Failed to prepare signing copy");
 				}
-				const nextUrl = `/sign/packet/${packetId}?role=${encodeURIComponent(effectiveSignerRole)}${
+				const nextUrl = `/sign/packet/${effectivePacketId}?role=${encodeURIComponent(effectiveSignerRole)}${
 					copyData.copyId ? `&copyId=${encodeURIComponent(copyData.copyId)}` : ""
 				}`;
 
-				if (packet?.requireOtp) {
+				if (requireOtp) {
 					if (!signerEmail.trim()) {
 						toast.error("Email is required for verification");
 						isCreating = false;
@@ -213,19 +225,7 @@
 				return;
 			}
 
-			const res = await fetch("/api/sessions", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					documentId,
-					signerName: signerName.trim(),
-					signerEmail: signerEmail.trim(),
-					signerRole: effectiveSignerRole,
-				}),
-			});
-			const data = await res.json();
-			if (!res.ok || !data.sessionId) throw new Error(data.error || "No session created");
-			await goto(`/sign/${data.sessionId}`);
+			throw new Error("Signing link is no longer active");
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Failed to initialize signing session");
 			isCreating = false;

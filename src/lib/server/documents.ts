@@ -35,11 +35,12 @@ export async function listDocuments(
 		),
 		orderBy: [desc(documents.createdAt)],
 		with: {
-			sessions: true,
 			fields: true,
+			verifications: true,
 			packets: {
 				with: {
 					copies: true,
+					values: true,
 				},
 			},
 		},
@@ -72,7 +73,10 @@ export async function getDocument(
 		where: eq(documents.id, documentId),
 		with: {
 			fields: true,
-			sessions: true,
+			verifications: true,
+			packets: {
+				with: { copies: true, values: true },
+			},
 		},
 	});
 

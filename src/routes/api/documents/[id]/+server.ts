@@ -42,7 +42,10 @@ export const GET: RequestHandler = async ({ request: req, params }) => {
       where: eq(documents.id, id),
       with: {
         fields: true,
-        sessions: true,
+        verifications: true,
+        packets: {
+          with: { copies: true, values: true },
+        },
       },
     });
 

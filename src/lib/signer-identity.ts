@@ -60,10 +60,19 @@ export async function establishSignerIdentity(input: {
   const packet = await getPacket(input.packetId);
   const role = packet.roleConfigs.find((item) => item.name === input.roleName);
   if (!role) throw new Error("Signer role not found");
+  const privateRole =
+    packet.mode === "individual" ||
+    (packet.mode !== "collaborative" && role.scope === "private");
+  if (privateRole && !input.copyId) {
+    throw new Error("Signing invitation not found");
+  }
 
   if (input.copyId) {
     const copy = await db.query.signingPacketCopies.findFirst({
-      where: eq(signingPacketCopies.id, input.copyId),
+      where: and(
+        eq(signingPacketCopies.id, input.copyId),
+        isNull(signingPacketCopies.deletedAt),
+      ),
     });
     if (
       !copy ||
@@ -174,7 +183,10 @@ export async function resolvePacketSignerIdentity(input: {
 }) {
   if (input.copyId) {
     const copy = await db.query.signingPacketCopies.findFirst({
-      where: eq(signingPacketCopies.id, input.copyId),
+      where: and(
+        eq(signingPacketCopies.id, input.copyId),
+        isNull(signingPacketCopies.deletedAt),
+      ),
     });
     if (
       !copy ||

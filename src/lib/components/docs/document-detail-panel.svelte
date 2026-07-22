@@ -1123,7 +1123,7 @@
                   <AuditTimeline logs={auditLogs} />
                 </div>
                 <div class="w-full shrink-0 pl-1">
-                  <SignerTimeline sessions={doc.sessions || []} />
+                  <SignerTimeline entries={doc.signingEntries || []} />
                 </div>
               </div>
             </div>

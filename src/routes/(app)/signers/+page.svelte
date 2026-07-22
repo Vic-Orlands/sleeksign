@@ -4,7 +4,7 @@
 	import { toast } from "svelte-sonner";
 	import { MagnifyingGlassIcon } from "phosphor-svelte";
 	import StatusBadge from "$lib/components/docs/status-badge.svelte";
-	import type { DocumentRecord, SessionRecord } from "$lib/components/docs/types";
+	import type { DocumentRecord, SigningEntryRecord } from "$lib/components/docs/types";
 	import Button from "$lib/components/ui/button.svelte";
 	import Dialog from "$lib/components/ui/dialog.svelte";
 	import DialogContent from "$lib/components/ui/dialog-content.svelte";
@@ -55,7 +55,7 @@
 	let selectedGroupMemberIds = $state<string[]>([]);
 	let groupToDelete = $state<SignerGroup | null>(null);
 	let directorySignerToDelete = $state<DirectorySigner | null>(null);
-	let signerToDelete = $state<(SessionRecord & { documentName: string }) | null>(null);
+	let signerToDelete = $state<(SigningEntryRecord & { documentName: string }) | null>(null);
 	let selectedGroup = $state<SignerGroup | null>(null);
 	let editGroupName = $state("");
 	let editGroupDescription = $state("");
@@ -75,7 +75,7 @@
 	);
 	const activityRows = $derived(
 		documents.flatMap((doc) =>
-			(doc.sessions || []).map((session) => ({ ...session, documentName: doc.name })),
+			(doc.signingEntries || []).map((entry) => ({ ...entry, documentName: doc.name })),
 		),
 	);
 	const filteredActivity = $derived(
@@ -727,7 +727,9 @@
 				signerToDelete = null;
 			})}
 		>
-			<input type="hidden" name="sessionId" value={signerToDelete?.id || ""} />
+			<input type="hidden" name="entryId" value={signerToDelete?.id || ""} />
+			<input type="hidden" name="packetId" value={signerToDelete?.packetId || ""} />
+			<input type="hidden" name="artifactKind" value={signerToDelete?.artifactKind || ""} />
 			<DialogHeader>
 				<DialogTitle>Delete session record?</DialogTitle>
 				<DialogDescription>This removes the signing activity record.</DialogDescription>
