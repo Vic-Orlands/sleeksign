@@ -4,8 +4,4 @@
 	let { data } = $props();
 </script>
 
-<svelte:head>
-	<title>Choose workspace — SleekSign</title>
-</svelte:head>
-
 <WorkspaceSelector nextPath={data.next} />

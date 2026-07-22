@@ -4,8 +4,4 @@
 	let { data } = $props();
 </script>
 
-<svelte:head>
-	<title>Accept invitation — SleekSign</title>
-</svelte:head>
-
 <AcceptInvitationPanel invitationId={data.invitationId} />

@@ -137,10 +137,6 @@
   });
 </script>
 
-<svelte:head>
-  <title>SleekSign — Document signing workspace</title>
-</svelte:head>
-
 <main
   class="relative min-h-screen overflow-hidden bg-(--paper) font-sans text-foreground"
 >

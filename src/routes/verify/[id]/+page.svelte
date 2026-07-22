@@ -42,14 +42,6 @@
   const receiptActive = $derived(data.found && data.status === "active");
 </script>
 
-<svelte:head>
-  <title>Document verification - SleekSign</title>
-  <meta
-    name="description"
-    content="Verify the integrity of a finalized SleekSign PDF."
-  />
-</svelte:head>
-
 <SiteShell>
   <section class="mx-auto w-[90%] max-w-lg pt-28 pb-16 sm:pb-20">
     <div class="flex flex-col items-center text-center">
