@@ -1,6 +1,7 @@
 import {
   Body,
   Button,
+  Column,
   Container,
   Font,
   Head,
@@ -9,6 +10,7 @@ import {
   Html,
   Link,
   Preview,
+  Row,
   Section,
   Text,
 } from "@react-email/components";
@@ -38,9 +40,9 @@ const appWordmark: CSSProperties = {
   margin: 0,
   color: "#242424",
   fontFamily: "Ruthie, 'Brush Script MT', cursive",
-  fontSize: "28px",
-  fontWeight: 600,
-  lineHeight: "42px",
+  fontSize: "30px",
+  fontWeight: 400,
+  lineHeight: 1,
 };
 
 function AppHead() {
@@ -52,6 +54,16 @@ function AppHead() {
         webFont={{
           url: "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2",
           format: "woff2",
+        }}
+        fontWeight={400}
+        fontStyle="normal"
+      />
+      <Font
+        fontFamily="Ruthie"
+        fallbackFontFamily="cursive"
+        webFont={{
+          url: "https://fonts.gstatic.com/s/ruthie/v28/gokvH63sGkdqXuU9lA.ttf",
+          format: "truetype",
         }}
         fontWeight={400}
         fontStyle="normal"
@@ -386,38 +398,46 @@ function WelcomeEmail({
               </Section>
               <Section
                 style={{
-                  alignItems: "baseline",
                   borderTop: "1px solid #d8e1d4",
-                  display: "flex",
-                  justifyContent: "space-between",
                   padding: "64px 40px",
                 }}
               >
-                <Text
-                  style={{
-                    color: "#869c7f",
-                    fontFamily: "Inter,Arial,sans-serif",
-                    fontSize: "13px",
-                    fontWeight: 300,
-                    lineHeight: 1.5,
-                    margin: 0,
-                    maxWidth: "320px",
-                  }}
-                >
-                  {supportNote}
-                </Text>
-                <Text
-                  style={{
-                    color: "#103b05",
-                    fontFamily: "Ruthie, 'Brush Script MT', cursive",
-                    fontSize: "30px",
-                    fontWeight: 600,
-                    lineHeight: 1,
-                    margin: 0,
-                  }}
-                >
-                  SleekSign
-                </Text>
+                <Row style={{ width: "100%" }}>
+                  <Column style={{ verticalAlign: "bottom", width: "70%" }}>
+                    <Text
+                      style={{
+                        color: "#869c7f",
+                        fontFamily: "Inter,Arial,sans-serif",
+                        fontSize: "13px",
+                        fontWeight: 300,
+                        lineHeight: 1.5,
+                        margin: 0,
+                        maxWidth: "320px",
+                      }}
+                    >
+                      {supportNote}
+                    </Text>
+                  </Column>
+                  <Column
+                    align="right"
+                    style={{
+                      paddingLeft: "24px",
+                      verticalAlign: "bottom",
+                      whiteSpace: "nowrap",
+                      width: "30%",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        ...appWordmark,
+                        color: "#103b05",
+                        textAlign: "right",
+                      }}
+                    >
+                      SleekSign
+                    </Text>
+                  </Column>
+                </Row>
               </Section>
             </Section>
           </Section>

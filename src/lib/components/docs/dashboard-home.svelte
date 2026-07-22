@@ -28,6 +28,8 @@
     ArrowCounterClockwiseIcon,
     TrashIcon,
     ArchiveIcon,
+    ArrowRightIcon,
+    BuildingOfficeIcon,
   } from "phosphor-svelte";
 
   export type DashboardFilter =
@@ -431,11 +433,15 @@
 </main>
 
 {#if workspaceAccess}
-  <Dialog open dismissible={false} class="w-[min(92vw,32rem)]">
-    <DialogContent class="gap-0 p-0">
+  <Dialog
+    open
+    dismissible={false}
+    class="w-[min(92vw,22rem)] border-0 bg-background p-0 outline-none"
+  >
+    <DialogContent class="gap-0 border-0 p-0">
       {#if workspaceAccess.state === "loading"}
         <div
-          class="flex items-center gap-3 px-5 py-4"
+          class="flex items-center justify-center gap-2"
           aria-busy="true"
           aria-live="polite"
         >
@@ -464,14 +470,9 @@
           </p>
         </div>
       {:else}
-        <div class="border-b border-border px-5 py-4">
-          <p
-            class="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"
-          >
-            Workspace Access
-          </p>
-          <DialogHeader class="mt-2">
-            <DialogTitle>Choose the workspace you want to open</DialogTitle>
+        <div class="bg-background">
+          <DialogHeader>
+            <DialogTitle>Select a workspace</DialogTitle>
             <DialogDescription>
               We'll remember this workspace and log you into it automatically
               the next time you sign in.
@@ -479,20 +480,17 @@
           </DialogHeader>
         </div>
 
-        <div class="space-y-3 px-5 py-4">
+        <div class="space-y-3 py-4">
           {#if workspaceAccess.workspaces.length === 0}
-            <div class="border border-dashed border-border bg-background p-4">
+            <div
+              class="border-y border-dashed border-border bg-background py-4"
+            >
               <div class="mb-2 flex items-center gap-1">
-                <svg
+                <BuildingOfficeIcon
                   class="size-4"
-                  viewBox="0 0 24 24"
                   fill="currentColor"
                   aria-hidden="true"
-                >
-                  <path
-                    d="M3 21V9l9-6 9 6v12H3zm2-2h14V10.2l-7-4.67-7 4.67V19zm4-2h6v-6H9v6z"
-                  />
-                </svg>
+                />
                 <p class="text-sm font-medium text-foreground">
                   No workspaces yet
                 </p>
@@ -508,14 +506,11 @@
                 loading={workspaceAccess.isContinuingWithoutWorkspace}
               >
                 Continue
-                <svg
+                <ArrowRightIcon
                   class="size-4"
-                  viewBox="0 0 24 24"
                   fill="currentColor"
                   aria-hidden="true"
-                >
-                  <path d="M13 5l7 7-7 7v-4H4v-6h9V5z" />
-                </svg>
+                />
               </Button>
             </div>
           {:else}
@@ -524,7 +519,7 @@
                 type="button"
                 onclick={() => workspaceAccess?.onSelectWorkspace(workspace.id)}
                 disabled={workspaceAccess.busyWorkspaceId === workspace.id}
-                class="flex w-full items-center justify-between gap-3 border border-border bg-background px-4 py-3 text-left transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+                class="flex w-full items-center justify-between gap-3 bg-background px-4 py-3 text-left transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
               >
                 <div class="min-w-0">
                   <p class="truncate text-sm font-medium text-foreground">
