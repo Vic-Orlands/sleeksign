@@ -40,6 +40,10 @@ export const auth = betterAuth({
   appName: "SleekSign",
   secret: getRequiredEnv("BETTER_AUTH_SECRET"),
   baseURL: getBaseUrl(),
+  trustedOrigins: [
+    "https://sleeksign.vercel.app",
+    "https://sign.mezie.dev",
+  ],
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
