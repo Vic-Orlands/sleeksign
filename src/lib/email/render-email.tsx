@@ -68,7 +68,10 @@ function EmailParagraphs({
   style: CSSProperties;
 }) {
   return body.map((line, index) => (
-    <Text key={`${index}-${line}`} style={{ ...style, marginTop: index === 0 ? 0 : "15px" }}>
+    <Text
+      key={`${index}-${line}`}
+      style={{ ...style, marginTop: index === 0 ? 0 : "15px" }}
+    >
       {line}
     </Text>
   ));
@@ -86,9 +89,21 @@ function OtpEmail({
   return (
     <Html lang="en" dir="ltr">
       <AppHead />
-      <Body style={{ backgroundColor: "#ffffff", fontFamily: systemFont, margin: 0 }}>
+      <Body
+        style={{
+          backgroundColor: "#ffffff",
+          fontFamily: systemFont,
+          margin: 0,
+        }}
+      >
         <Preview>{preheader}</Preview>
-        <Container style={{ margin: "0 auto", maxWidth: "560px", padding: "20px 0 48px" }}>
+        <Container
+          style={{
+            margin: "0 auto",
+            maxWidth: "560px",
+            padding: "20px 0 48px",
+          }}
+        >
           <Text className="font-cursive font-semibold" style={appWordmark}>
             SleekSign
           </Text>
@@ -144,7 +159,8 @@ function OtpEmail({
                 backgroundColor: "#dfe1e4",
                 borderRadius: "4px",
                 color: "#3c4149",
-                fontFamily: "ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace",
+                fontFamily:
+                  "ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace",
                 fontSize: "21px",
                 fontWeight: 700,
                 letterSpacing: "-0.3px",
@@ -155,7 +171,14 @@ function OtpEmail({
             </code>
           ) : null}
           {supportNote ? (
-            <Text style={{ color: "#71717a", fontSize: "15px", lineHeight: 1.4, margin: "15px 0 0" }}>
+            <Text
+              style={{
+                color: "#71717a",
+                fontSize: "15px",
+                lineHeight: 1.4,
+                margin: "15px 0 0",
+              }}
+            >
               {supportNote}
             </Text>
           ) : null}
@@ -177,13 +200,33 @@ function InvitationEmail({
   return (
     <Html lang="en" dir="ltr">
       <AppHead />
-      <Body style={{ backgroundColor: "#ffffff", color: "#24292e", fontFamily: systemFont, margin: 0 }}>
+      <Body
+        style={{
+          backgroundColor: "#ffffff",
+          color: "#24292e",
+          fontFamily: systemFont,
+          margin: 0,
+        }}
+      >
         <Preview>{preheader}</Preview>
-        <Container style={{ margin: "0 auto", maxWidth: "480px", padding: "20px 0 48px" }}>
+        <Container
+          style={{
+            margin: "0 auto",
+            maxWidth: "480px",
+            padding: "20px 0 48px",
+          }}
+        >
           <Text className="font-cursive font-semibold" style={appWordmark}>
             SleekSign
           </Text>
-          <Text style={{ fontSize: "24px", fontWeight: 600, lineHeight: 1.25, margin: "16px 0" }}>
+          <Text
+            style={{
+              fontSize: "24px",
+              fontWeight: 600,
+              lineHeight: 1.25,
+              margin: "16px 0",
+            }}
+          >
             {headline}
           </Text>
           <Section
@@ -228,7 +271,15 @@ function InvitationEmail({
             </Button>
           </Section>
           {supportNote ? (
-            <Text style={{ color: "#6a737d", fontSize: "12px", lineHeight: "24px", margin: "24px 0 0", textAlign: "center" }}>
+            <Text
+              style={{
+                color: "#6a737d",
+                fontSize: "12px",
+                lineHeight: "24px",
+                margin: "24px 0 0",
+                textAlign: "center",
+              }}
+            >
               {supportNote}
             </Text>
           ) : null}
@@ -249,31 +300,123 @@ function WelcomeEmail({
   return (
     <Html lang="en" dir="ltr">
       <AppHead />
-      <Body style={{ backgroundColor: "#fbfcfb", color: "#103b05", fontFamily: "Inter,Arial,sans-serif", margin: 0, padding: 0 }}>
+      <Body
+        style={{
+          backgroundColor: "#fbfcfb",
+          color: "#103b05",
+          fontFamily: "Inter,Arial,sans-serif",
+          margin: 0,
+          padding: 0,
+        }}
+      >
         <Preview>{preheader}</Preview>
-        <Container style={{ margin: "0 auto", maxWidth: "640px", padding: "64px 16px 24px" }}>
-          <Section style={{ borderRadius: "8px", boxShadow: "0 3px 7px rgba(193,195,193,0.1)" }}>
-            <Section style={{ backgroundColor: "#ffffff", border: "1px solid #d8e1d4", borderRadius: "8px" }}>
+        <Container
+          style={{
+            margin: "0 auto",
+            maxWidth: "640px",
+            padding: "64px 16px 24px",
+          }}
+        >
+          <Section
+            style={{
+              borderRadius: "8px",
+              boxShadow: "0 3px 7px rgba(193,195,193,0.1)",
+            }}
+          >
+            <Section
+              style={{
+                backgroundColor: "#ffffff",
+                border: "1px solid #d8e1d4",
+                borderRadius: "8px",
+              }}
+            >
               <Section style={{ padding: "64px 40px 56px" }}>
-                <Text style={{ color: "#103b05", fontFamily: "Arial,Helvetica,sans-serif", fontSize: "48px", letterSpacing: "-1.44px", lineHeight: 1, margin: 0 }}>
+                <Text
+                  style={{
+                    color: "#103b05",
+                    fontFamily: "Arial,Helvetica,sans-serif",
+                    fontSize: "48px",
+                    letterSpacing: "-1.44px",
+                    lineHeight: 1,
+                    margin: 0,
+                  }}
+                >
                   {headline}
                 </Text>
-                <Section align="left" style={{ marginTop: "18px", maxWidth: "480px", textAlign: "left", width: "100%" }}>
+                <Section
+                  align="left"
+                  style={{
+                    marginTop: "18px",
+                    maxWidth: "480px",
+                    textAlign: "left",
+                    width: "100%",
+                  }}
+                >
                   {body.map((line, index) => (
-                    <Text key={`${index}-${line}`} style={{ color: "#194a07", fontFamily: "Inter,Arial,sans-serif", fontSize: "14px", lineHeight: 1.5, margin: index === 0 ? 0 : "18px 0 0" }}>
+                    <Text
+                      key={`${index}-${line}`}
+                      style={{
+                        color: "#194a07",
+                        fontFamily: "Inter,Arial,sans-serif",
+                        fontSize: "14px",
+                        lineHeight: 1.5,
+                        margin: index === 0 ? 0 : "18px 0 0",
+                      }}
+                    >
                       {line}
                     </Text>
                   ))}
-                  <Text style={{ color: "#194a07", fontFamily: "Inter,Arial,sans-serif", fontSize: "14px", lineHeight: 1.5, margin: "18px 0 0" }}>
-                    <Link href={ctaUrl} style={{ color: "#103b05", textDecoration: "none" }}>
+                  <Text
+                    style={{
+                      color: "#194a07",
+                      fontFamily: "Inter,Arial,sans-serif",
+                      fontSize: "14px",
+                      lineHeight: 1.5,
+                      margin: "18px 0 0",
+                    }}
+                  >
+                    <Link
+                      href={ctaUrl}
+                      style={{ color: "#103b05", textDecoration: "none" }}
+                    >
                       {ctaLabel}
                     </Link>
                   </Text>
                 </Section>
               </Section>
-              <Section style={{ borderTop: "1px solid #d8e1d4", padding: "64px 40px" }}>
-                <Text style={{ color: "#869c7f", fontFamily: "Inter,Arial,sans-serif", fontSize: "13px", fontWeight: 300, lineHeight: 1.5, margin: 0, maxWidth: "320px" }}>
+              <Section
+                style={{
+                  alignItems: "baseline",
+                  borderTop: "1px solid #d8e1d4",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "64px 40px",
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#869c7f",
+                    fontFamily: "Inter,Arial,sans-serif",
+                    fontSize: "13px",
+                    fontWeight: 300,
+                    lineHeight: 1.5,
+                    margin: 0,
+                    maxWidth: "320px",
+                  }}
+                >
                   {supportNote}
+                </Text>
+                <Text
+                  style={{
+                    color: "#103b05",
+                    fontFamily: "Ruthie, 'Brush Script MT', cursive",
+                    fontSize: "30px",
+                    fontWeight: 600,
+                    lineHeight: 1,
+                    margin: 0,
+                  }}
+                >
+                  SleekSign
                 </Text>
               </Section>
             </Section>

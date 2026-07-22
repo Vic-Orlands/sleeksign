@@ -324,102 +324,102 @@
                   class="group cursor-pointer border-b border-border/50 transition-colors hover:bg-accent/50"
                   onclick={() => onSelectDocument(document)}
                 >
-                <td class="py-2.5">
-                  <p class="truncate text-[13px] font-medium text-foreground">
-                    {document.name}
-                  </p>
-                </td>
-
-                {#if variant === "documents"}
-                  <td class="py-2.5 text-[13px] text-muted-foreground">
-                    {getDocumentType(document.name)}
+                  <td class="py-2.5">
+                    <p class="truncate text-[13px] font-medium text-foreground">
+                      {document.name}
+                    </p>
                   </td>
-                {/if}
 
-                <td class="py-2.5">
-                  <StatusBadge {status} />
-                </td>
-
-                {#if variant === "documents"}
-                  <td
-                    class="py-2.5 text-[13px] tabular-nums text-muted-foreground"
-                  >
-                    {counts.fields}
-                  </td>
-                {:else}
-                  <td
-                    class="py-2.5 text-[13px] tabular-nums text-muted-foreground"
-                  >
-                    {counts.completed}/{Math.max(counts.total, 1)}
-                  </td>
-                {/if}
-
-                <td class="py-2.5 text-[13px] text-muted-foreground">
-                  {format(new Date(document.createdAt), "MMM d, yyyy")}
-                </td>
-
-                <td
-                  class="py-2.5 text-right"
-                  onclick={(event) => event.stopPropagation()}
-                >
-                  {#if showActions}
-                    <div class="inline-flex items-center justify-end gap-0.5">
-                      {#if onOverviewDocument}
-                        <button
-                          type="button"
-                          class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-foreground"
-                          aria-label={`Overview ${document.name}`}
-                          title="Overview"
-                          onclick={() => onOverviewDocument(document)}
-                        >
-                          <svg
-                            class="size-3.5"
-                            viewBox="0 0 256 256"
-                            fill="currentColor"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM116,84a12,12,0,1,1,12,12A12,12,0,0,1,116,84Z"
-                            />
-                          </svg>
-                        </button>
-                      {/if}
-                      {#if onRestoreDocument}
-                        <button
-                          type="button"
-                          class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-foreground"
-                          aria-label={`Restore ${document.name}`}
-                          title="Restore"
-                          onclick={() => onRestoreDocument(document)}
-                        >
-                          <ArrowCounterClockwiseIcon class="size-3.5" />
-                        </button>
-                      {/if}
-                      {#if onArchiveDocument}
-                        <button
-                          type="button"
-                          class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-foreground"
-                          aria-label={`Archive ${document.name}`}
-                          title="Archive"
-                          onclick={() => onArchiveDocument(document)}
-                        >
-                          <ArchiveIcon class="size-3.5 text-emerald-600" />
-                        </button>
-                      {/if}
-                      {#if onDeleteDocument}
-                        <button
-                          type="button"
-                          class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-red-600"
-                          aria-label={`Delete ${document.name}`}
-                          title="Delete"
-                          onclick={() => onDeleteDocument(document)}
-                        >
-                          <TrashIcon class="size-3.5 text-red-600" />
-                        </button>
-                      {/if}
-                    </div>
+                  {#if variant === "documents"}
+                    <td class="py-2.5 text-[13px] text-muted-foreground">
+                      {getDocumentType(document.name)}
+                    </td>
                   {/if}
-                </td>
+
+                  <td class="py-2.5">
+                    <StatusBadge {status} />
+                  </td>
+
+                  {#if variant === "documents"}
+                    <td
+                      class="py-2.5 text-[13px] tabular-nums text-muted-foreground"
+                    >
+                      {counts.fields}
+                    </td>
+                  {:else}
+                    <td
+                      class="py-2.5 text-[13px] tabular-nums text-muted-foreground"
+                    >
+                      {counts.completed}/{Math.max(counts.total, 1)}
+                    </td>
+                  {/if}
+
+                  <td class="py-2.5 text-[13px] text-muted-foreground">
+                    {format(new Date(document.createdAt), "MMM d, yyyy")}
+                  </td>
+
+                  <td
+                    class="py-2.5 text-right"
+                    onclick={(event) => event.stopPropagation()}
+                  >
+                    {#if showActions}
+                      <div class="inline-flex items-center justify-end gap-0.5">
+                        {#if onOverviewDocument}
+                          <button
+                            type="button"
+                            class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-foreground"
+                            aria-label={`Overview ${document.name}`}
+                            title="Overview"
+                            onclick={() => onOverviewDocument(document)}
+                          >
+                            <svg
+                              class="size-3.5"
+                              viewBox="0 0 256 256"
+                              fill="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path
+                                d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm16-40a8,8,0,0,1-8,8,16,16,0,0,1-16-16V128a8,8,0,0,1,0-16,16,16,0,0,1,16,16v40A8,8,0,0,1,144,176ZM116,84a12,12,0,1,1,12,12A12,12,0,0,1,116,84Z"
+                              />
+                            </svg>
+                          </button>
+                        {/if}
+                        {#if onRestoreDocument}
+                          <button
+                            type="button"
+                            class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-foreground"
+                            aria-label={`Restore ${document.name}`}
+                            title="Restore"
+                            onclick={() => onRestoreDocument(document)}
+                          >
+                            <ArrowCounterClockwiseIcon class="size-3.5" />
+                          </button>
+                        {/if}
+                        {#if onArchiveDocument}
+                          <button
+                            type="button"
+                            class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-foreground"
+                            aria-label={`Archive ${document.name}`}
+                            title="Archive"
+                            onclick={() => onArchiveDocument(document)}
+                          >
+                            <ArchiveIcon class="size-3.5 text-emerald-600" />
+                          </button>
+                        {/if}
+                        {#if onDeleteDocument}
+                          <button
+                            type="button"
+                            class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-red-600"
+                            aria-label={`Delete ${document.name}`}
+                            title="Delete"
+                            onclick={() => onDeleteDocument(document)}
+                          >
+                            <TrashIcon class="size-3.5 text-red-600" />
+                          </button>
+                        {/if}
+                      </div>
+                    {/if}
+                  </td>
                 </tr>
               {/if}
             {/each}
