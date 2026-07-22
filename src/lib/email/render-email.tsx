@@ -39,9 +39,9 @@ const systemFont =
 const appWordmark: CSSProperties = {
   margin: 0,
   color: "#242424",
-  fontFamily: "Ruthie, 'Brush Script MT', cursive",
-  fontSize: "30px",
-  fontWeight: 400,
+  fontFamily: "Ruthie, cursive",
+  fontSize: "26px",
+  fontWeight: 300,
   lineHeight: 1,
 };
 
@@ -116,7 +116,7 @@ function OtpEmail({
             padding: "20px 0 48px",
           }}
         >
-          <Text className="font-cursive font-semibold" style={appWordmark}>
+          <Text className="font-cursive" style={appWordmark}>
             SleekSign
           </Text>
           <Heading
@@ -228,7 +228,7 @@ function InvitationEmail({
             padding: "20px 0 48px",
           }}
         >
-          <Text className="font-cursive font-semibold" style={appWordmark}>
+          <Text className="font-cursive" style={appWordmark}>
             SleekSign
           </Text>
           <Text
