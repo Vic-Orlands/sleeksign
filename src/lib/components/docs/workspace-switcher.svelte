@@ -108,7 +108,10 @@
 
     try {
       workspaceBusy = true;
-      const result = await postFormAction<{ workspaceId?: string }>(
+      const result = await postFormAction<{
+        workspaceId?: string;
+        defaultTeamId?: string;
+      }>(
         "createWorkspace",
         {
           name,
@@ -116,7 +119,7 @@
       );
       if (result.workspaceId) {
         setCurrentWorkspaceId(result.workspaceId);
-        setCurrentTeamId("");
+        setCurrentTeamId(result.defaultTeamId || "");
       }
       toast.success("Workspace created");
       createWorkspaceOpen = false;

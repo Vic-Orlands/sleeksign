@@ -10,9 +10,9 @@ export const authContent: Record<
 		copy: "Continue managing uploads, signer activity, and completed documents.",
 	},
 	signup: {
-		eyebrow: "Create Workspace",
-		title: "Start your signing workspace",
-		copy: "Set up your account and continue into the document dashboard.",
+		eyebrow: "Create Account",
+		title: "Start with your account",
+		copy: "Create your account, then set up the workspace where your team will work.",
 	},
 	forgot: {
 		eyebrow: "Password Recovery",
@@ -70,8 +70,4 @@ export function getLastWorkspaceId(user: unknown) {
 	if (!user || typeof user !== "object") return "";
 	const value = (user as { lastWorkspaceId?: unknown }).lastWorkspaceId;
 	return typeof value === "string" ? value : "";
-}
-
-export function appUrl(path: string, base = "") {
-	return `${base}${path}`;
 }

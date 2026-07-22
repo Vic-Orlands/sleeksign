@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { db } from "@/db";
@@ -81,7 +81,10 @@ export async function ensureWorkspaceSetup(
       where: eq(authOrganization.id, workspaceId),
     }),
     db.query.teams.findFirst({
-      where: and(eq(teams.organizationId, workspaceId), eq(teams.isDefault, true)),
+      where: and(
+        eq(teams.organizationId, workspaceId),
+        or(eq(teams.isDefault, true), eq(teams.slug, "general")),
+      ),
     }),
     db.query.organizationBranding.findFirst({
       where: eq(organizationBranding.organizationId, workspaceId),
@@ -103,6 +106,11 @@ export async function ensureWorkspaceSetup(
       description: "Default team",
       isDefault: true,
     });
+  } else if (!defaultTeam.isDefault) {
+    await db
+      .update(teams)
+      .set({ isDefault: true, updatedAt: new Date() })
+      .where(eq(teams.id, defaultTeam.id));
   }
 
   if (!branding) {

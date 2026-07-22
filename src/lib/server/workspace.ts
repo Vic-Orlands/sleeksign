@@ -1,14 +1,21 @@
 import { getRequestEvent } from "$app/server";
-import { fail, redirect, type Actions, type RequestEvent } from "@sveltejs/kit";
+import {
+	fail,
+	redirect,
+	type Action,
+	type Actions,
+	type RequestEvent,
+} from "@sveltejs/kit";
 import { eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { authMember, authOrganization, teams } from "@/db/schema";
+import { authMember, authOrganization, authUser, teams } from "@/db/schema";
 import { AccessError, requireDocsSession } from "$lib/server-access";
 import {
 	hasAppPermission,
+	ensureWorkspaceSetup,
 	resolveWorkspaceAccess,
 	type AppPermission,
 	type ResolvedAccess,
@@ -122,11 +129,16 @@ export async function loadAppLayoutData() {
 	const session = await requireDocsSession();
 	const workspaceId = session.session.activeOrganizationId || "";
 	const workspaces = await listUserWorkspaces(session.user.id);
+	if (workspaces.length === 0) {
+		redirect(303, "/auth/workspace");
+	}
 
 	let access: AppAccess | null = null;
 
 	if (workspaceId) {
-		const resolved = await resolveWorkspaceAccess(session.user.id, workspaceId);
+		const resolved = await resolveWorkspaceAccess(session.user.id, workspaceId, {
+			ensureSetup: true,
+		});
 		if (resolved) {
 			access = toAppAccess(workspaceId, session.user.id, resolved);
 		}
@@ -210,6 +222,69 @@ export function asHeaders(headers: HeadersInit): Headers {
 	return headers instanceof Headers ? headers : new Headers(headers);
 }
 
+export const createWorkspaceAction: Action = async ({ request }) => {
+	const data = await request.formData();
+	const name = formString(data, "name");
+	if (!name) return fail(400, { error: "Workspace name required" });
+
+	try {
+		const event = getRequestEvent();
+		const session = event.locals.authSession;
+		if (!session) redirect(303, "/signin");
+
+		const slug = name
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/(^-|-$)/g, "");
+
+		if (!slug) return fail(400, { error: "Enter a valid workspace name" });
+
+		const organization = await auth.api.createOrganization({
+			headers: event.request.headers,
+			body: { name, slug },
+		});
+
+		const organizationId =
+			organization && typeof organization === "object" && "id" in organization
+				? String((organization as { id: string }).id)
+				: "";
+
+		if (!organizationId) {
+			throw new Error("Workspace creation did not return an ID");
+		}
+
+		const membership = await db.query.authMember.findFirst({
+			where: eq(authMember.organizationId, organizationId),
+		});
+		if (!membership || membership.userId !== session.user.id) {
+			throw new Error("Workspace owner membership was not created");
+		}
+
+		const { defaultTeamId } = await ensureWorkspaceSetup(
+			organizationId,
+			membership.id,
+		);
+		await db
+			.update(authUser)
+			.set({ lastWorkspaceId: organizationId })
+			.where(eq(authUser.id, session.user.id));
+
+		await auth.api.setActiveOrganization({
+			headers: event.request.headers,
+			body: { organizationId },
+		});
+
+		return {
+			success: true,
+			workspaceId: organizationId,
+			defaultTeamId,
+			message: "Workspace created",
+		};
+	} catch (error) {
+		return actionError(error, "Unable to create workspace");
+	}
+};
+
 /** Shared workspace chrome actions — merge into each app page's `actions`. */
 export const workspaceActions: Actions = {
 	switchWorkspace: async ({ request }) => {
@@ -233,38 +308,7 @@ export const workspaceActions: Actions = {
 		};
 	},
 
-	createWorkspace: async ({ request }) => {
-		const data = await request.formData();
-		const name = formString(data, "name");
-		if (!name) return fail(400, { error: "Workspace name required" });
-
-		const event = getRequestEvent();
-		if (!event.locals.authSession) redirect(303, "/signin");
-
-		const slug = name
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, "-")
-			.replace(/(^-|-$)/g, "");
-
-		const organization = await auth.api.createOrganization({
-			headers: event.request.headers,
-			body: { name, slug },
-		});
-
-		const organizationId =
-			organization && typeof organization === "object" && "id" in organization
-				? String((organization as { id: string }).id)
-				: "";
-
-		if (organizationId) {
-			await auth.api.setActiveOrganization({
-				headers: event.request.headers,
-				body: { organizationId },
-			});
-		}
-
-		return { success: true, workspaceId: organizationId, message: "Workspace created" };
-	},
+	createWorkspace: createWorkspaceAction,
 
 	createTeam: async ({ request }) => {
 		const data = await request.formData();

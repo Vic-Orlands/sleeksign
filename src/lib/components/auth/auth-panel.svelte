@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { goto } from "$app/navigation";
-	import { base, resolve } from "$app/paths";
+	import { resolve } from "$app/paths";
 	import Buildings from "phosphor-svelte/lib/Buildings";
 	import CheckCircle from "phosphor-svelte/lib/CheckCircle";
 	import Envelope from "phosphor-svelte/lib/Envelope";
@@ -12,11 +12,9 @@
 
 	import Button from "$lib/components/ui/button.svelte";
 	import Input from "$lib/components/ui/input.svelte";
-	import { authClient, saveLastWorkspaceId } from "$lib/auth-client";
-	import { setCurrentWorkspaceId } from "$lib/workspace-store";
+	import { authClient } from "$lib/auth-client";
 	import {
 		type AuthMode,
-		appUrl,
 		authContent,
 		getSubmitLabel,
 		getSubmitLoadingLabel,
@@ -47,15 +45,11 @@
 	let email = $state("");
 	let password = $state("");
 	let newPassword = $state("");
-	let workspace = $state("");
 
 	const isSignUp = $derived(mode === "signup");
 	const isSignIn = $derived(mode === "signin");
 	const isForgot = $derived(mode === "forgot");
 	const isReset = $derived(mode === "reset");
-	const isInvitationFlow = $derived(
-		Boolean(nextPath?.startsWith("/accept-invitation/")),
-	);
 	const content = $derived(authContent[mode]);
 
 	function navigate(href: "/signin" | "/signup" | "/forgot-password") {
@@ -63,22 +57,7 @@
 		goto(`${resolve(href)}${query}`, { noScroll: true });
 	}
 
-	async function redirectAfterAuth(
-		isSignUpFlow: boolean,
-		workspaceName: string,
-	) {
-		if (isSignUpFlow && workspaceName && nextPath) {
-			if (nextPath.startsWith("/accept-invitation/")) {
-				const id = nextPath.split("/").pop();
-				if (id) {
-					await goto(resolve("/accept-invitation/[id]", { id }));
-					return;
-				}
-			}
-			await goto(appUrl(nextPath, base));
-			return;
-		}
-
+	async function redirectAfterAuth() {
 		const query = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
 		await goto(`${resolve("/auth/workspace")}${query}`);
 	}
@@ -92,7 +71,6 @@
 		const formName = String(
 			formData.get("name") || name || formEmail.split("@")[0] || "SleekSign User",
 		);
-		const workspaceName = String(formData.get("workspace") || workspace).trim();
 
 		authBusy = true;
 		try {
@@ -123,23 +101,6 @@
 					password: formPassword,
 					callbackURL: getWorkspaceRedirectPath(nextPath),
 				});
-				if (workspaceName) {
-					const organization = await authClient.organization.create({
-						name: workspaceName,
-						slug: workspaceName
-							.toLowerCase()
-							.replace(/[^a-z0-9]+/g, "-")
-							.replace(/(^-|-$)/g, ""),
-					});
-					if (organization?.data?.id) {
-						setCurrentWorkspaceId(organization.data.id);
-						await authClient.$fetch("/organization/set-active", {
-							method: "POST",
-							body: { organizationId: organization.data.id },
-						});
-						await saveLastWorkspaceId(organization.data.id);
-					}
-				}
 			} else {
 				await authClient.signIn.email({
 					email: formEmail,
@@ -148,18 +109,7 @@
 				});
 			}
 
-			const redirectPath =
-				isSignUp && workspaceName
-					? nextPath || "/docs"
-					: getWorkspaceRedirectPath(nextPath);
-
-			if (isSignUp && workspaceName && !nextPath) {
-				await goto(resolve("/docs"));
-			} else if (redirectPath.startsWith("/docs")) {
-				await goto(resolve("/docs"));
-			} else {
-				await redirectAfterAuth(isSignUp, workspaceName);
-			}
+			await redirectAfterAuth();
 		} catch {
 			toast.error(isSignUp ? "Sign up failed" : "Sign in failed");
 		} finally {
@@ -378,33 +328,6 @@
 					>
 						Forgot Password?
 					</button>
-				{/if}
-
-				{#if isSignUp}
-					<label class="grid gap-1.5" style="view-transition-name: auth-workspace">
-						<span
-							class="font-mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground"
-						>
-							Workspace
-						</span>
-						<span class="relative block">
-							<Buildings
-								class="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-								weight="regular"
-							/>
-							<Input
-								class="h-9 pl-9"
-								type="text"
-								name="workspace"
-								autocomplete="organization"
-								placeholder={isInvitationFlow
-									? "Optional workspace name"
-									: "Any Workspace"}
-								bind:value={workspace}
-								required={!isInvitationFlow}
-							/>
-						</span>
-					</label>
 				{/if}
 
 				<div class="mt-2" style="view-transition-name: auth-submit">
