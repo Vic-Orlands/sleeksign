@@ -20,14 +20,6 @@
   };
 </script>
 
-<svelte:head>
-  <title>Verify a signed document - SleekSign</title>
-  <meta
-    name="description"
-    content="Check the integrity of a document finalized by SleekSign."
-  />
-</svelte:head>
-
 <SiteShell>
   <section
     class="mx-auto w-full max-w-4xl h-[80vh] flex flex-col justify-center"
