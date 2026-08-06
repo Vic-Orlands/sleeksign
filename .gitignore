@@ -47,3 +47,4 @@ PLATFORM_BUILD_BRIEF.md
 
 # typescript
 *.tsbuildinfo
+.vercel
